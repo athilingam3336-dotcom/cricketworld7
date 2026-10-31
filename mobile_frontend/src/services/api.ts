@@ -198,8 +198,9 @@ async function request(endpoint: string, options: RequestInit = {}) {
     clearTimeout(timeoutId);
     console.warn(`API Error on ${endpoint}:`, err?.message || err);
     if (err.name === 'AbortError' || err.message?.includes('aborted')) {
+      const targetHost = API_URL.startsWith('http') ? API_URL : `${getBackendHost()}:5000`;
       const timeoutErr = new Error(
-        `Connection timed out (${getBackendHost()}:5000). Please check if your mobile and computer are on the same Wi-Fi network.`
+        `Connection timed out (${targetHost}). Please check if your network connection is stable.`
       );
       (timeoutErr as any).isNetworkError = true;
       throw timeoutErr;
@@ -210,8 +211,9 @@ async function request(endpoint: string, options: RequestInit = {}) {
       err.message?.includes('ERR_CONNECTION_REFUSED') ||
       err.message?.includes('ECONNREFUSED')
     ) {
+      const targetHost = API_URL.startsWith('http') ? API_URL : `${getBackendHost()}:5000`;
       const friendly = new Error(
-        `Cannot connect to backend (${getBackendHost()}:5000). Ensure the backend server is running and your mobile is on the same Wi-Fi.`
+        `Cannot connect to backend (${targetHost}). Ensure the backend server is running and accessible.`
       );
       (friendly as any).isNetworkError = true;
       throw friendly;
