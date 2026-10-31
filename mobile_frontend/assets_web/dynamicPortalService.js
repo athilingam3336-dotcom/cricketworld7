@@ -7,10 +7,13 @@
 
 (function () {
   const API_BASE = (function () {
-    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    if (typeof window !== 'undefined' && window.location) {
+      if (window.location.protocol === 'https:' || (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
+        return 'https://cricket-backend-dqdm.onrender.com/api';
+      }
       return `http://${window.location.hostname}:5000/api`;
     }
-    return 'http://localhost:5000/api';
+    return 'https://cricket-backend-dqdm.onrender.com/api';
   })();
 
   async function loadDynamicPortalData() {

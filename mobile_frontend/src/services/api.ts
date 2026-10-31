@@ -35,19 +35,33 @@ export const getBackendHost = () => {
 const PROD_BACKEND_URL = 'https://cricket-backend-dqdm.onrender.com';
 const getBaseUrl = () => {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (window.location.protocol === 'https:') {
+      return `${PROD_BACKEND_URL}/api`;
+    }
     const host = window.location.hostname;
     if (host && host !== 'localhost' && host !== '127.0.0.1' && !host.startsWith('192.168.') && !host.startsWith('10.')) {
       return `${PROD_BACKEND_URL}/api`;
     }
   }
+  // Standalone production builds (APK / iOS release)
+  if (!__DEV__) {
+    return `${PROD_BACKEND_URL}/api`;
+  }
   return `http://${getBackendHost()}:5000/api`;
 };
 const getSocketUrl = () => {
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (window.location.protocol === 'https:') {
+      return PROD_BACKEND_URL;
+    }
     const host = window.location.hostname;
     if (host && host !== 'localhost' && host !== '127.0.0.1' && !host.startsWith('192.168.') && !host.startsWith('10.')) {
       return PROD_BACKEND_URL;
     }
+  }
+  // Standalone production builds
+  if (!__DEV__) {
+    return PROD_BACKEND_URL;
   }
   return `http://${getBackendHost()}:5000`;
 };
