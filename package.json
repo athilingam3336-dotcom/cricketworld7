@@ -16,6 +16,7 @@
     "react-native-webview": "13.16.1"
   },
   "scripts": {
+    "build": "npm --prefix mobile_frontend run build",
     "dev": "concurrently -n \"backend,frontend\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "npm --prefix backend run dev",
     "dev:frontend": "npm --prefix mobile_frontend run dev",

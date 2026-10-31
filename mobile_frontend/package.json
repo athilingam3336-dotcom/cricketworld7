@@ -27,6 +27,7 @@
     "typescript": "~6.0.3"
   },
   "scripts": {
+    "build": "expo export -p web",
     "dev": "expo start --web",
     "start": "expo start",
     "android": "expo start --android",
