@@ -152,7 +152,7 @@ export default function LoginScreen({ onExit }: LoginScreenProps = {}) {
       newErrors.identifier = emailResult.error;
     }
 
-    // 2. Password validation: 1 uppercase, 2 special characters, min 8 characters
+    // 2. Password validation: min 8 characters, 1 uppercase, 1 special character, 2 numbers
     const passwordResult = validatePassword(pass);
     if (!passwordResult.isValid) {
       newErrors.password = passwordResult.error;

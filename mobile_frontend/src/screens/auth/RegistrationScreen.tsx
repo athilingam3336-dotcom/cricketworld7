@@ -1578,7 +1578,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
             </View>
 
             {/* Password Validation Requirements Pill Box */}
-            {/* <View style={{ marginTop: 8, padding: 8, backgroundColor: '#f8fafc', borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' }}>
+            <View style={{ marginTop: 8, padding: 8, backgroundColor: '#f8fafc', borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' }}>
               <Text style={{ fontSize: 11, fontWeight: '700', color: '#334155', marginBottom: 4 }}>
                 🔒 Password Rules (Required for Login & Register):
               </Text>
@@ -1593,13 +1593,25 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     {/[A-Z]/.test(password) ? '✓' : '○'} 1 Uppercase (A-Z)
                   </Text>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 2) ? '#dcfce7' : '#ffffff', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 2) ? '#86efac' : '#cbd5e1' }}>
-                  <Text style={{ fontSize: 10.5, fontWeight: '700', color: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 2) ? '#15803d' : '#64748b' }}>
-                    {((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 2) ? '✓' : '○'} 2 Special Chars (e.g. !@#$)
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 1) ? '#dcfce7' : '#ffffff', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 1) ? '#86efac' : '#cbd5e1' }}>
+                  <Text style={{ fontSize: 10.5, fontWeight: '700', color: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 1) ? '#15803d' : '#64748b' }}>
+                    {((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 1) ? '✓' : '○'} 1 Special Char (e.g. !@#$)
                   </Text>
                 </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: ((password.match(/[0-9]/g) || []).length >= 2) ? '#dcfce7' : '#ffffff', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: ((password.match(/[0-9]/g) || []).length >= 2) ? '#86efac' : '#cbd5e1' }}>
+                  <Text style={{ fontSize: 10.5, fontWeight: '700', color: ((password.match(/[0-9]/g) || []).length >= 2) ? '#15803d' : '#64748b' }}>
+                    {((password.match(/[0-9]/g) || []).length >= 2) ? '✓' : '○'} 2 Numbers (0-9)
+                  </Text>
+                </View>
+                {confirmPassword ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: (password && password === confirmPassword) ? '#dcfce7' : '#fef2f2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: (password && password === confirmPassword) ? '#86efac' : '#fca5a5' }}>
+                    <Text style={{ fontSize: 10.5, fontWeight: '700', color: (password && password === confirmPassword) ? '#15803d' : '#dc2626' }}>
+                      {(password && password === confirmPassword) ? '✓' : '✗'} Passwords Match
+                    </Text>
+                  </View>
+                ) : null}
               </View>
-            </View> */}
+            </View>
           </View>
         )}
       </View>
