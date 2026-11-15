@@ -352,8 +352,12 @@ class AuthService {
       throw { status: 400, message: 'New password must contain at least 1 uppercase letter (A-Z).' };
     }
     const specialMatches = cleanPass.match(/[^A-Za-z0-9\s]/g) || [];
-    if (specialMatches.length < 2) {
-      throw { status: 400, message: 'New password must contain at least 2 special characters.' };
+    if (specialMatches.length < 1) {
+      throw { status: 400, message: 'New password must contain at least 1 special character (e.g. !@#$%).' };
+    }
+    const digitMatches = cleanPass.match(/[0-9]/g) || [];
+    if (digitMatches.length < 2) {
+      throw { status: 400, message: `New password must contain at least 2 numbers (0-9). Currently found: ${digitMatches.length}.` };
     }
 
     const cleanOtp = String(otp || '').trim();

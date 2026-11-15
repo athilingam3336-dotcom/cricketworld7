@@ -7,12 +7,44 @@
  * 2. Password:
  *    - Minimum 8 characters
  *    - At least 1 uppercase letter (A-Z)
- *    - At least 2 special characters (e.g. !@#$%^&*()_+-=[]{};':"|,.<>/?)
+ *    - At least 1 special character (e.g. !@#$%^&*()_+-=[]{};':"|,.<>/?)
+ *    - At least 2 numbers (0-9)
  */
 
 export interface ValidationResult {
   isValid: boolean;
   error?: string;
+}
+
+export interface PasswordCriteriaStatus {
+  minLength: boolean;
+  hasUppercase: boolean;
+  hasSpecialChar: boolean;
+  hasTwoNumbers: boolean;
+  digitCount: number;
+  allValid: boolean;
+}
+
+/**
+ * Returns breakdown of password criteria for real-time validation badges.
+ */
+export function getPasswordCriteria(password: string): PasswordCriteriaStatus {
+  const clean = password || '';
+  const minLength = clean.length >= 8;
+  const hasUppercase = /[A-Z]/.test(clean);
+  const hasSpecialChar = (clean.match(/[^A-Za-z0-9\s]/g) || []).length >= 1;
+  const digitCount = (clean.match(/[0-9]/g) || []).length;
+  const hasTwoNumbers = digitCount >= 2;
+  const allValid = minLength && hasUppercase && hasSpecialChar && hasTwoNumbers;
+
+  return {
+    minLength,
+    hasUppercase,
+    hasSpecialChar,
+    hasTwoNumbers,
+    digitCount,
+    allValid
+  };
 }
 
 /**
