@@ -9038,27 +9038,52 @@ export default function LiveScoringScreen() {
 
                 {editWicket && (
                   <>
-                    <View style={styles.editWicketTypeGrid}>
-                      {['BOWLED', 'CAUGHT', 'LBW', 'RUN_OUT', 'STUMPED', 'HIT_WICKET'].map((wt) => (
-                        <TouchableOpacity
-                          key={`wt-${wt}`}
-                          style={[
-                            styles.editWicketTypeChip,
-                            editWicketType === wt && styles.editWicketTypeChipActive
-                          ]}
-                          onPress={() => setEditWicketType(wt)}
-                          activeOpacity={0.7}
-                        >
-                          <Text
-                            style={[
-                              styles.editWicketTypeChipText,
-                              editWicketType === wt && styles.editWicketTypeChipTextActive
-                            ]}
+                    {/* DISMISSAL METHOD SELECTION */}
+                    <Text style={[styles.editSectionLabel, { marginTop: 6 }]}>How did the Wicket Fall?</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                      {[
+                        { id: 'BOWLED', label: 'Bowled', desc: 'b Bowler' },
+                        { id: 'CAUGHT', label: 'Caught', desc: 'c Fielder b Bowler' },
+                        { id: 'CAUGHT_BEHIND', label: 'Caught Behind', desc: 'c †Keeper b Bowler' },
+                        { id: 'CAUGHT_AND_BOWLED', label: 'Caught & Bowled', desc: 'c & b Bowler' },
+                        { id: 'LBW', label: 'LBW', desc: 'lbw b Bowler' },
+                        { id: 'RUN_OUT', label: 'Run Out', desc: 'run out (Fielder)' },
+                        { id: 'STUMPED', label: 'Stumped', desc: 'st †Keeper b Bowler' },
+                        { id: 'HIT_WICKET', label: 'Hit Wicket', desc: 'hit wicket b Bowler' },
+                        { id: 'RETIRED_HURT', label: 'Retired Hurt', desc: 'injury (not out)' },
+                        { id: 'RETIRED_OUT', label: 'Retired Out', desc: 'retired out' }
+                      ].map((wt) => {
+                        const isSelected = editWicketType === wt.id;
+                        return (
+                          <TouchableOpacity
+                            key={`wt-${wt.id}`}
+                            style={{
+                              flex: 1,
+                              minWidth: '47%',
+                              paddingVertical: 7,
+                              paddingHorizontal: 8,
+                              borderRadius: 8,
+                              backgroundColor: isSelected ? '#fee2e2' : '#f8fafc',
+                              borderWidth: 1.5,
+                              borderColor: isSelected ? '#dc2626' : '#e2e8f0'
+                            }}
+                            onPress={() => {
+                              setEditWicketType(wt.id);
+                              if (wt.id === 'CAUGHT_AND_BOWLED') {
+                                setEditFielderName(editingDelivery?.bowlerName || bowler?.name || '');
+                              }
+                            }}
+                            activeOpacity={0.7}
                           >
-                            {wt.replace('_', ' ')}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
+                            <Text style={{ fontSize: 12, fontWeight: isSelected ? '900' : '700', color: isSelected ? '#b91c1c' : '#1e293b' }}>
+                              {wt.label}
+                            </Text>
+                            <Text style={{ fontSize: 10, color: isSelected ? '#dc2626' : '#64748b', fontWeight: '500' }}>
+                              {wt.desc}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
 
                     {/* DISMISSED BATTER SELECTION */}
@@ -9084,15 +9109,45 @@ export default function LiveScoringScreen() {
                       </TouchableOpacity>
                     </View>
 
-                    {/* FIELDER / CATCHER / KEEPER NAME INPUT */}
-                    <Text style={[styles.editSectionLabel, { marginTop: 6 }]}>Fielder / Catcher / Keeper:</Text>
-                    <TextInput
-                      style={styles.editFielderInput}
-                      value={editFielderName}
-                      onChangeText={setEditFielderName}
-                      placeholder="e.g. Fielder who caught, threw or kept"
-                      placeholderTextColor="#94a3b8"
-                    />
+                    {/* FIELDER / CATCHER / KEEPER SELECTOR */}
+                    {['CAUGHT', 'CAUGHT_BEHIND', 'RUN_OUT', 'STUMPED'].includes(editWicketType) && (
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={[styles.editSectionLabel, { marginBottom: 6 }]}>
+                          {editWicketType.includes('CAUGHT') ? '🤲 Select Catcher from Fielding Squad:' : editWicketType === 'STUMPED' ? '🧤 Select Wicketkeeper:' : '⚡ Select Fielder (Run Out):'}
+                        </Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                          {((bowlingSquad && bowlingSquad.length > 0 ? bowlingSquad : (matchInfo?.teamBPlayers || matchInfo?.teamAPlayers || [])) as any[]).map((fld: any) => {
+                            const fldName = fld.name || fld.player_name || `Player ${fld.id}`;
+                            const isChosen = editFielderName.trim() === fldName.trim();
+                            return (
+                              <TouchableOpacity
+                                key={`edit-fld-${fld.id || fldName}`}
+                                style={{
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 5,
+                                  borderRadius: 14,
+                                  backgroundColor: isChosen ? '#dbeafe' : '#f1f5f9',
+                                  borderColor: isChosen ? '#2563eb' : '#cbd5e1',
+                                  borderWidth: 1.2
+                                }}
+                                onPress={() => setEditFielderName(fldName)}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: isChosen ? '900' : '600', color: isChosen ? '#1d4ed8' : '#334155' }}>
+                                  {isChosen ? '✓ ' : ''}{fldName}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                        <TextInput
+                          style={styles.editFielderInput}
+                          value={editFielderName}
+                          onChangeText={setEditFielderName}
+                          placeholder="Or type custom fielder name"
+                          placeholderTextColor="#94a3b8"
+                        />
+                      </View>
+                    )}
                   </>
                 )}
 
