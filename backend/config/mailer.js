@@ -32,6 +32,9 @@ if (SMTP_USER && SMTP_PASSWORD) {
 }
 
 async function sendOtpEmail({ toEmail, userName, otp }) {
+  if (process.env.NODE_ENV === 'test') {
+    return { success: true, message: `[TEST MODE] OTP dispatched to ${toEmail}`, otp };
+  }
   const subject = 'Cricket Association - Your Verification OTP';
   const textContent = `Hello ${userName || 'User'},\n\nYour One-Time Password (OTP) for verification is: ${otp}\n\nThis OTP is valid for 5 minutes.\n\nCricket Association`;
   const htmlContent = `
@@ -72,6 +75,9 @@ async function sendOtpEmail({ toEmail, userName, otp }) {
 }
 
 async function sendPlayerTeamEmail({ toEmail, playerName, teamNames }) {
+  if (process.env.NODE_ENV === 'test') {
+    return { success: true, message: `[TEST MODE] Team details dispatched to ${toEmail}` };
+  }
   const teamList = Array.isArray(teamNames) ? teamNames : [teamNames];
   const primaryTeam = teamList[0] || 'Unknown Team';
   const teamListText = teamList.join(', ');
