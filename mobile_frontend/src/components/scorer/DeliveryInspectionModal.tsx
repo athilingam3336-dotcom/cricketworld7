@@ -85,11 +85,11 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     ? delivery.runsBatter
     : (typeof delivery.runs === 'number' ? delivery.runs : 0);
   const extraType = String(delivery.extraType || delivery.extra_type || delivery.extra || '').toUpperCase();
-  const isNoBall = extraType === 'NO_BALL' || dt === 'NB' || dt.includes('NB');
-  const isWide = extraType === 'WIDE' || dt === 'WD' || dt.includes('WD');
-  const isWicket = Boolean(delivery.wicket) || dt === 'W' || dt.includes('W');
-  const isSix = runs === 6 || dt === '6';
-  const isFour = runs === 4 || dt === '4';
+  const isNoBall = extraType === 'NO_BALL' || dt === 'NB' || dt.startsWith('NB') || dt.includes('NO BALL');
+  const isWide = extraType === 'WIDE' || dt === 'WD' || dt.startsWith('WD') || dt.includes('WIDE');
+  const isWicket = Boolean(delivery.wicket) || (!isWide && !isNoBall && (dt === 'W' || dt === 'OUT' || (dt.includes('W') && !dt.includes('WD'))));
+  const isSix = !isWide && !isNoBall && !isWicket && (runs === 6 || dt === '6');
+  const isFour = !isWide && !isNoBall && !isWicket && (runs === 4 || dt === '4');
   const commentaryLower = (delivery.commentary || '').toLowerCase();
   const isOverthrow = Boolean(delivery.isOverthrow || delivery.is_overthrow || commentaryLower.includes('overthrow'));
 
@@ -100,11 +100,11 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   const isDotBall = !isWicket && !isWide && !isNoBall && runs === 0 && (delivery.runsExtras || 0) === 0;
 
   const wicketTypeRaw = String(delivery.wicketType || delivery.wicket_type || '').toUpperCase();
-  const isCaught = isWicket && (wicketTypeRaw.includes('CAUGHT') || commentaryLower.includes('caught') || wicketTypeRaw.includes('CT'));
+  const isCaught = isWicket && !isWide && (wicketTypeRaw.includes('CAUGHT') || commentaryLower.includes('caught') || wicketTypeRaw.includes('CT'));
   const isRunOut = isWicket && (wicketTypeRaw.includes('RUN_OUT') || wicketTypeRaw.includes('RUN OUT') || commentaryLower.includes('run out'));
   const isStumped = isWicket && (wicketTypeRaw.includes('STUMP') || commentaryLower.includes('stump'));
-  const isLBW = isWicket && (wicketTypeRaw.includes('LBW') || commentaryLower.includes('lbw'));
-  const isBowled = isWicket && !isCaught && !isRunOut && !isStumped && !isLBW;
+  const isLBW = isWicket && !isWide && (wicketTypeRaw.includes('LBW') || commentaryLower.includes('lbw'));
+  const isBowled = isWicket && !isWide && !isNoBall && !isCaught && !isRunOut && !isStumped && !isLBW;
 
   // Shot zone / Wagon Wheel side
   const sector = delivery.shotZone || delivery.shot_zone || delivery.wagonSector || (
