@@ -4636,21 +4636,34 @@ export default function AdminDashboardScreen({ onExit, initialParams }: AdminDas
             <ScrollView style={styles.modalBodyScroll} showsVerticalScrollIndicator={true}>
               <View style={styles.squadTableContainer}>
                 <View style={styles.squadTableHeader}>
-                  <Text style={[styles.thCell, { width: 50 }]}>#</Text>
-                  <Text style={[styles.thCell, { flex: 2.2 }]}>Player Name</Text>
-                  <Text style={[styles.thCell, { flex: 2 }]}>Player Email</Text>
-                  <Text style={[styles.thCell, { flex: 1.5 }]}>Playing Role</Text>
+                  <Text style={[styles.thCell, { width: 45 }]}>#</Text>
+                  <Text style={[styles.thCell, { flex: 2 }]}>Player Details</Text>
+                  <Text style={[styles.thCell, { flex: 1.8 }]}>Phone & Aadhaar</Text>
+                  <Text style={[styles.thCell, { flex: 1.2 }]}>Playing Role</Text>
                 </View>
 
                 {selectedSquadModal?.members && selectedSquadModal.members.length > 0 ? (
                   selectedSquadModal.members.map((m: any, idx: number) => (
                     <View key={m.playerId || m._id || idx} style={[styles.squadTableRow, idx % 2 === 1 && styles.rowAlt]}>
-                      <Text style={[styles.tdCell, { width: 50, fontWeight: '700' }]}>{m.jersey_number || m.jerseyNumber || idx + 1}</Text>
-                      <Text style={[styles.tdCell, { flex: 2.2, fontWeight: '700', color: '#0f172a' }]}>{m.name || m.playerName || 'Player'}</Text>
-                      <Text style={[styles.tdCell, { flex: 2, color: '#475569', fontSize: 13 }]}>{m.email || m.playerEmail || m.playerId || '—'}</Text>
-                      <View style={{ flex: 1.5, justifyContent: 'center' }}>
-                        <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' }}>
-                          <Text style={{ color: '#b45309', fontWeight: '700', fontSize: 12 }}>{m.role || 'Player'}</Text>
+                      <Text style={[styles.tdCell, { width: 45, fontWeight: '700' }]}>{m.jersey_number || m.jerseyNumber || idx + 1}</Text>
+                      <View style={{ flex: 2, paddingVertical: 4 }}>
+                        <Text style={{ fontWeight: '700', color: '#0f172a', fontSize: 13 }}>{m.name || m.playerName || 'Player'}</Text>
+                        <Text style={{ color: '#475569', fontSize: 12 }}>{m.email || m.playerEmail || m.playerId || '—'}</Text>
+                      </View>
+                      <View style={{ flex: 1.8, paddingVertical: 4, justifyContent: 'center' }}>
+                        {(m.phone || m.mobile) && (
+                          <Text style={{ color: '#166534', fontSize: 11, fontWeight: '700' }}>📞 +91 {m.phone || m.mobile}</Text>
+                        )}
+                        {m.aadhaar && (
+                          <Text style={{ color: '#991b1b', fontSize: 11, fontWeight: '700', marginTop: 2 }}>🆔 UIDAI: {m.aadhaar}</Text>
+                        )}
+                        {!m.phone && !m.mobile && !m.aadhaar && (
+                          <Text style={{ color: '#94a3b8', fontSize: 11 }}>—</Text>
+                        )}
+                      </View>
+                      <View style={{ flex: 1.2, justifyContent: 'center' }}>
+                        <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, alignSelf: 'flex-start' }}>
+                          <Text style={{ color: '#b45309', fontWeight: '700', fontSize: 11 }}>{m.role || 'Player'}</Text>
                         </View>
                       </View>
                     </View>
