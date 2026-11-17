@@ -716,6 +716,8 @@ class ScorerService {
         wicketType: d.wicket_type,
         strikerId: d.striker_id,
         bowlerId: d.bowler_id,
+        strikerName: (d.striker_id && playerMap[d.striker_id]?.name) || '',
+        bowlerName: (d.bowler_id && playerMap[d.bowler_id]?.name) || '',
         text: d.wicket ? 'W' : (d.extra_type === 'WIDE' ? 'WD' : (d.extra_type === 'NO_BALL' ? 'NB' : d.runs_batter)),
         dismissalText: d.dismissal_text,
         commentary: d.commentary

@@ -31,6 +31,7 @@ import BroadcastLiveBallAction from '../../components/common/BroadcastLiveBallAc
 import { VPLEventBanner, VPLSoundControls } from '../../components/common/VPLEventBanner';
 import { mapBallToEvents, normalizeExtraType, normalizeDismissal } from '../../utils/vplEventMapper';
 import CalculationSettingsManagement from '../../admin/components/CalculationSettingsManagement';
+import { DeliveryInspectionModal } from '../../components/scorer/DeliveryInspectionModal';
 
 const IMG_LOGO = require('../../../assets/logo_transparent.png');
 const IMG_CHAMPIONS = require('../../../assets/cricket_champions.png');
@@ -533,6 +534,7 @@ export default function LiveScoringScreen() {
   const [editWicketType, setEditWicketType] = useState<string>('BOWLED');
   const [isSubmittingEditDelivery, setIsSubmittingEditDelivery] = useState<boolean>(false);
   const [offlineQueueCount, setOfflineQueueCount] = useState<number>(0);
+  const [inspectingDelivery, setInspectingDelivery] = useState<any | null>(null);
 
   // 9. Revised Overs & Revised Target Modal State
   const [showRevisedOversModal, setShowRevisedOversModal] = useState<boolean>(false);
@@ -6413,31 +6415,7 @@ export default function LiveScoringScreen() {
                             if (isEditMode) {
                               handleOpenEditDelivery(del);
                             } else {
-                              // Check if delivery matches an official umpire signal
-                              const dt = String(del.text ?? '').toUpperCase();
-                              let sigType: UmpireSignalType | null = null;
-                              if (isWicket || (dt.includes('W') && !dt.includes('WD'))) sigType = 'OUT';
-                              else if (dt.includes('WD')) sigType = 'WIDE';
-                              else if (dt.includes('NB')) sigType = 'NO_BALL';
-                              else if (dt.includes('DEAD')) sigType = 'DEAD_BALL';
-                              else if (dt.includes('LB')) sigType = 'LEG_BYE';
-                              else if (dt.includes('B') && !dt.includes('NB')) sigType = 'BYE';
-                              else if (isSix || dt === '6') sigType = 'SIX';
-                              else if (isFour || dt === '4') sigType = 'FOUR';
-
-                              if (sigType) {
-                                setActiveUmpireSignal({
-                                  type: sigType,
-                                  batterName: del.strikerName || striker?.name,
-                                  bowlerName: del.bowlerName || bowler?.name,
-                                  runs: del.runs,
-                                  overText: `Ball ${del.ball}`,
-                                  extraDetails: del.commentary || `Delivery ${del.ball}: ${del.text} • Click 'Edit Mode' to alter historical ball`
-                                });
-                              } else {
-                                const info = `Ball ${del.ball}: ${del.text} • ${del.commentary || 'Recorded delivery'}\n\nTip: Activate 'Edit Mode' in the sidebar or top banner to modify past deliveries directly.`;
-                                Platform.OS === 'web' ? window.alert(info) : Alert.alert('Delivery Details', info);
-                              }
+                              setInspectingDelivery(del);
                             }
                           }}
                           activeOpacity={0.7}
@@ -8187,6 +8165,19 @@ export default function LiveScoringScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* DELIVERY INSPECTION & SHOT DETAILS MODAL (Ball Click Visual Breakdown) */}
+      <DeliveryInspectionModal
+        visible={Boolean(inspectingDelivery)}
+        delivery={inspectingDelivery}
+        onClose={() => setInspectingDelivery(null)}
+        onEdit={(del) => {
+          setInspectingDelivery(null);
+          handleOpenEditDelivery(del);
+        }}
+        strikerName={striker?.name}
+        bowlerName={bowler?.name}
+      />
 
       {/* RETROACTIVE DELIVERY CORRECTION MODAL (Edit Mode Direct Ball Edit) */}
       <Modal
