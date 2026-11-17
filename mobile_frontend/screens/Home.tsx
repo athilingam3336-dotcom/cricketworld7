@@ -22,6 +22,7 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
+  Linking,
   useWindowDimensions
 } from 'react-native';
 import { io } from 'socket.io-client';
@@ -433,6 +434,27 @@ export default function HomeScreen() {
   const handleOpenScorecard = (matchItem: any) => {
     if (!matchItem?.id) return;
     navigate('Scorecard', { matchId: matchItem.id, returnTo: 'Home' });
+  };
+
+  const handleOpenGoogleMaps = (venueMapsUrl?: string, venueName?: string) => {
+    const v = (venueName || 'Kamarajar District Stadium, Virudhunagar').trim();
+    let url = venueMapsUrl && venueMapsUrl.startsWith('http') ? venueMapsUrl : '';
+    if (!url) {
+      const query = encodeURIComponent(
+        v.toLowerCase().includes('virudhunagar') || v.toLowerCase().includes('tamil nadu')
+          ? v
+          : `${v}, Virudhunagar, Tamil Nadu`
+      );
+      url = `https://www.google.com/maps/search/?api=1&query=${query}`;
+    }
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      Linking.openURL(url).catch((err) => {
+        console.warn('Failed to open maps URL:', err);
+        Alert.alert('Location Map', `Location: ${v}`);
+      });
+    }
   };
 
   const getTeamBadgeColor = (short: string, index: number) => {
@@ -1393,10 +1415,30 @@ export default function HomeScreen() {
                                 <Text style={[styles.logisticsValueText, isSmallMobile && { fontSize: 10 }]}>{cleanTime}</Text>
                               </View>
                             ) : null}
-                            <View style={[styles.logisticsChip, { flex: 1, minWidth: isSmallMobile ? '100%' : 'auto' }]}>
+                            <TouchableOpacity
+                              activeOpacity={0.7}
+                              onPress={() => handleOpenGoogleMaps(m.venue_maps_url, cleanVenue)}
+                              style={[
+                                styles.logisticsChip,
+                                styles.logisticsVenueChip,
+                                { flex: 1, minWidth: isSmallMobile ? '100%' : 'auto' }
+                              ]}
+                              accessibilityRole="link"
+                              accessibilityLabel={`Open ${cleanVenue} in Google Maps`}
+                            >
                               <Text style={styles.logisticsEmoji}>📍</Text>
-                              <Text style={[styles.logisticsValueText, isSmallMobile && { fontSize: 10 }]} numberOfLines={1}>{cleanVenue}</Text>
-                            </View>
+                              <Text
+                                style={[
+                                  styles.logisticsValueText,
+                                  styles.venueTextLink,
+                                  isSmallMobile && { fontSize: 10 }
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {cleanVenue}
+                              </Text>
+                              <Text style={[styles.venueMapIcon, isSmallMobile && { fontSize: 9.5 }]}>↗</Text>
+                            </TouchableOpacity>
                           </View>
                           <View style={styles.logisticsOfficialsBottomRow}>
                             <Text style={styles.logisticsEmoji}>⚖️</Text>
@@ -2311,7 +2353,13 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.groundInfo}>
                   <Text style={styles.groundTitle}>District Sports Complex Stadium</Text>
-                  <Text style={styles.groundLoc}>📍 Collectorate Road, Virudhunagar</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => handleOpenGoogleMaps('', 'District Sports Complex Stadium, Collectorate Road, Virudhunagar')}
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                  >
+                    <Text style={[styles.groundLoc, { color: '#0284c7', textDecorationLine: 'underline' }]}>📍 Collectorate Road, Virudhunagar ↗</Text>
+                  </TouchableOpacity>
                   <Text style={styles.groundDesc}>
                     Featuring 3 professional tournament-grade red-soil turf wickets, modern dressing rooms, electronic scoreboard, and 4 turf practice nets.
                   </Text>
@@ -2331,7 +2379,13 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.groundInfo}>
                   <Text style={styles.groundTitle}>Sivakasi Turf Cricket Ground</Text>
-                  <Text style={styles.groundLoc}>📍 PSR College Sports Enclave, Sivakasi</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => handleOpenGoogleMaps('', 'Sivakasi Turf Cricket Ground, PSR College Sports Enclave, Sivakasi')}
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                  >
+                    <Text style={[styles.groundLoc, { color: '#0284c7', textDecorationLine: 'underline' }]}>📍 PSR College Sports Enclave, Sivakasi ↗</Text>
+                  </TouchableOpacity>
                   <Text style={styles.groundDesc}>
                     Host to District First Division and Premier Invitational Qualifiers with natural green outfield and fast-paced pitch.
                   </Text>
@@ -2350,7 +2404,13 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.groundInfo}>
                   <Text style={styles.groundTitle}>Rajapalayam Cricket Academy Ground</Text>
-                  <Text style={styles.groundLoc}>📍 PACM Campus, Rajapalayam</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => handleOpenGoogleMaps('', 'Rajapalayam Cricket Academy Ground, PACM Campus, Rajapalayam')}
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                  >
+                    <Text style={[styles.groundLoc, { color: '#0284c7', textDecorationLine: 'underline' }]}>📍 PACM Campus, Rajapalayam ↗</Text>
+                  </TouchableOpacity>
                   <Text style={styles.groundDesc}>
                     Center for the district high-performance coaching camp and junior age-group tournaments.
                   </Text>
@@ -2577,9 +2637,14 @@ export default function HomeScreen() {
             <View style={[styles.grid2Col, isMobile && { flexDirection: 'column' }]}>
               <View style={[styles.contactInfoCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }, isSmallMobile && { padding: 12 }]}>
                 <Text style={styles.contactCardTitle}>Administrative Office</Text>
-                <Text style={styles.contactLine}>
-                  📍 District Sports Complex Stadium, Collectorate Road, Virudhunagar – 626002, Tamil Nadu
-                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => handleOpenGoogleMaps('', 'District Sports Complex Stadium, Collectorate Road, Virudhunagar – 626002, Tamil Nadu')}
+                >
+                  <Text style={[styles.contactLine, { color: '#0284c7', textDecorationLine: 'underline' }]}>
+                    📍 District Sports Complex Stadium, Collectorate Road, Virudhunagar – 626002, Tamil Nadu ↗
+                  </Text>
+                </TouchableOpacity>
                 <Text style={styles.contactLine}>📞 +91 94430 12345 / 04562 245678</Text>
                 <Text style={styles.contactLine}>✉️ info@cfvd-cricket.org / secretary@cfvd-cricket.org</Text>
               </View>
@@ -5152,6 +5217,20 @@ const styles = StyleSheet.create({
     color: '#334155',
     fontSize: 11,
     fontWeight: '700'
+  },
+  logisticsVenueChip: {
+    cursor: Platform.OS === 'web' ? ('pointer' as any) : undefined,
+  },
+  venueTextLink: {
+    color: '#0284c7',
+    textDecorationLine: 'underline',
+    fontWeight: '700'
+  },
+  venueMapIcon: {
+    color: '#0284c7',
+    fontSize: 10,
+    fontWeight: '800',
+    marginLeft: 1
   },
   logisticsOfficialsBottomRow: {
     flexDirection: 'row',

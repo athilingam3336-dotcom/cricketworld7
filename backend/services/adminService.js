@@ -477,7 +477,7 @@ async function scheduleMatch(fixtureData, adminEmail) {
     team_a_name: resolvedTeamAName || team_a_name || team_a_id,
     team_b_name: resolvedTeamBName || team_b_name || team_b_id,
     venue: venue || 'Kamarajar District Stadium',
-    venue_maps_url: venue_maps_url || (venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue)}` : ''),
+    venue_maps_url: venue_maps_url || (venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(venue + (venue.toLowerCase().includes('virudhunagar') ? '' : ', Virudhunagar'))}` : 'https://www.google.com/maps/search/?api=1&query=Kamarajar+District+Stadium+Virudhunagar'),
     match_date: cleanDate,
     match_time: cleanTime,
     match_type: match_type || 'T20',
@@ -548,8 +548,14 @@ async function updateMatch(matchId, fixtureData, adminEmail) {
   if (!isLive && fixtureData.team_b_id) match.team_b_id = fixtureData.team_b_id;
   if (fixtureData.team_a_name) match.team_a_name = fixtureData.team_a_name;
   if (fixtureData.team_b_name) match.team_b_name = fixtureData.team_b_name;
-  if (fixtureData.venue) match.venue = fixtureData.venue;
+  if (fixtureData.venue) {
+    match.venue = fixtureData.venue;
+    if (!fixtureData.venue_maps_url && !fixtureData.venueMapsUrl) {
+      match.venue_maps_url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fixtureData.venue + (fixtureData.venue.toLowerCase().includes('virudhunagar') ? '' : ', Virudhunagar'))}`;
+    }
+  }
   if (fixtureData.venue_maps_url !== undefined) match.venue_maps_url = fixtureData.venue_maps_url;
+  if (fixtureData.venueMapsUrl !== undefined) match.venue_maps_url = fixtureData.venueMapsUrl;
 
   // Validate and update match date / time if provided
   const rawUpdateDate = fixtureData.match_date !== undefined ? fixtureData.match_date : (fixtureData.date !== undefined ? fixtureData.date : (fixtureData.scheduled_date !== undefined ? fixtureData.scheduled_date : fixtureData.scheduledDate));
