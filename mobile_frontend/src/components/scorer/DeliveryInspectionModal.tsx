@@ -3,15 +3,20 @@
  *
  * Professional CricHeroes/TNCA Delivery Inspection & Breakdown Modal.
  * Displays dedicated visual popups for:
- * - Wickets: Bowled, Caught (with who caught the ball), LBW, Run Out, Stumped with reasons why out
- * - Overthrow: Extra runs conceded on stray throws
- * - Dot Ball: No runs scored breakdown
- * - Wide: Tramline extra penalty
- * - No Ball: Overstep / height reasons
- * - Boundaries (4s & 6s): Wagon wheel sectors / sides
- * - 1, 2, 3 Runs: Running between wickets
+ * - 🎯 Bowled: BOWLED OUT!
+ * - 🤲 Caught: CAUGHT OUT! (with who caught the ball)
+ * - ⚡ Run Out: RUN OUT! (direct throw, batter short of crease)
+ * - 🧤 Stumping: STUMPED! (wicketkeeper whipping bails off)
+ * - 🔥 LBW: LBW Out – LBW! (ball tracking, pad impact in line)
+ * - 🏃 Three Runs: 3 RUNS! (running between wickets)
+ * - ⚡ Overthrow: Extra runs conceded on stray throws
+ * - 🛡️ Dot Ball: No runs scored breakdown
+ * - ↔️ Wide: Tramline extra penalty
+ * - 🚫 No Ball: Overstep / height reasons
+ * - 💥 Boundaries (4s & 6s): Wagon wheel sectors / sides
+ * - 1 & 2 Runs: Quick singles and doubles
  *
- * All popups maintain strict visual size consistency with identical 16:9 banner dimensions,
+ * All popups maintain strict visual size consistency with identical 200px 16:9 banner dimensions,
  * ball badges, why-out/reason breakdowns, and direct '✏️ Edit Ball' retroactive action buttons.
  */
 
@@ -24,12 +29,15 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
-  Platform,
-  ScrollView
+  Platform
 } from 'react-native';
 
 const POPUP_BOWLED = require('../../../assets/popups/popup_bowled.jpg');
 const POPUP_CAUGHT = require('../../../assets/popups/popup_caught.jpg');
+const POPUP_RUNOUT = require('../../../assets/popups/popup_runout.jpg');
+const POPUP_STUMPED = require('../../../assets/popups/popup_stumped.jpg');
+const POPUP_LBW = require('../../../assets/popups/popup_lbw.jpg');
+const POPUP_3RUNS = require('../../../assets/popups/popup_3runs.jpg');
 const POPUP_OVERTHROW = require('../../../assets/popups/popup_overthrow.jpg');
 const POPUP_DOTBALL = require('../../../assets/popups/popup_dotball.jpg');
 const POPUP_WIDE = require('../../../assets/popups/popup_wide.jpg');
@@ -77,28 +85,37 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
 
   const wicketTypeRaw = String(delivery.wicketType || delivery.wicket_type || '').toUpperCase();
   const isCaught = isWicket && (wicketTypeRaw.includes('CAUGHT') || commentaryLower.includes('caught') || wicketTypeRaw.includes('CT'));
-  const isBowled = isWicket && (wicketTypeRaw.includes('BOWLED') || commentaryLower.includes('bowled') || (!isCaught && !wicketTypeRaw.includes('RUN') && !wicketTypeRaw.includes('LBW') && !wicketTypeRaw.includes('STUMP')));
-  const isLBW = isWicket && (wicketTypeRaw.includes('LBW') || commentaryLower.includes('lbw'));
   const isRunOut = isWicket && (wicketTypeRaw.includes('RUN_OUT') || wicketTypeRaw.includes('RUN OUT') || commentaryLower.includes('run out'));
   const isStumped = isWicket && (wicketTypeRaw.includes('STUMP') || commentaryLower.includes('stump'));
+  const isLBW = isWicket && (wicketTypeRaw.includes('LBW') || commentaryLower.includes('lbw'));
+  const isBowled = isWicket && !isCaught && !isRunOut && !isStumped && !isLBW;
 
   const isDotBall = !isWicket && !isWide && !isNoBall && runs === 0 && (delivery.runsExtras || 0) === 0;
+  const isThreeRuns = !isWicket && !isWide && !isNoBall && !isOverthrow && runs === 3;
 
   const sector = delivery.shotZone || delivery.shot_zone || delivery.wagonSector || (isSix ? 'Long-On' : 'Extra Cover');
   const batter = delivery.strikerName || strikerName || 'Batter';
   const bowler = delivery.bowlerName || bowlerName || 'Bowler';
   const catcher = delivery.fielderName || fielderName || (isCaught ? (delivery.dismissalText?.match(/c\s+([^b]+)\s+b/i)?.[1]?.trim() || 'Deep Fielder') : '');
 
-  // Select matching image for exact 200px uniform banner
+  // Select matching image for exact uniform 200px banner
   let bannerImageSource: any = null;
   let bannerBadgeBg = '#f59e0b';
   let bannerBadgeText = `Ball ${ballText}`;
-  let bannerType: 'CAUGHT' | 'BOWLED' | 'OTHER_WICKET' | 'OVERTHROW' | 'DOT' | 'WIDE' | 'SIX' | 'FOUR' | 'NO_BALL' | 'RUNS' = 'RUNS';
+  let bannerType: 'CAUGHT' | 'BOWLED' | 'RUN_OUT' | 'STUMPED' | 'LBW' | 'OVERTHROW' | 'DOT' | 'WIDE' | 'SIX' | 'FOUR' | 'NO_BALL' | 'THREE_RUNS' | 'RUNS' = 'RUNS';
 
-  if (isOverthrow) {
-    bannerType = 'OVERTHROW';
-    bannerImageSource = POPUP_OVERTHROW;
-    bannerBadgeBg = '#2563eb';
+  if (isRunOut) {
+    bannerType = 'RUN_OUT';
+    bannerImageSource = POPUP_RUNOUT;
+    bannerBadgeBg = '#dc2626';
+  } else if (isStumped) {
+    bannerType = 'STUMPED';
+    bannerImageSource = POPUP_STUMPED;
+    bannerBadgeBg = '#7c3aed';
+  } else if (isLBW) {
+    bannerType = 'LBW';
+    bannerImageSource = POPUP_LBW;
+    bannerBadgeBg = '#ea580c';
   } else if (isCaught) {
     bannerType = 'CAUGHT';
     bannerImageSource = POPUP_CAUGHT;
@@ -107,10 +124,10 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     bannerType = 'BOWLED';
     bannerImageSource = POPUP_BOWLED;
     bannerBadgeBg = '#b91c1c';
-  } else if (isWicket) {
-    bannerType = 'OTHER_WICKET';
-    bannerImageSource = POPUP_BOWLED;
-    bannerBadgeBg = '#b91c1c';
+  } else if (isOverthrow) {
+    bannerType = 'OVERTHROW';
+    bannerImageSource = POPUP_OVERTHROW;
+    bannerBadgeBg = '#2563eb';
   } else if (isNoBall) {
     bannerType = 'NO_BALL';
     bannerImageSource = IMG_UMPIRE_NOBALL;
@@ -127,6 +144,10 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     bannerType = 'FOUR';
     bannerImageSource = IMG_UMPIRE_FOUR;
     bannerBadgeBg = '#059669';
+  } else if (isThreeRuns) {
+    bannerType = 'THREE_RUNS';
+    bannerImageSource = POPUP_3RUNS;
+    bannerBadgeBg = '#0284c7';
   } else if (isDotBall) {
     bannerType = 'DOT';
     bannerImageSource = POPUP_DOTBALL;
@@ -144,7 +165,25 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   let tipText = '';
   let iconEmoji = '🏏';
 
-  if (bannerType === 'CAUGHT') {
+  if (bannerType === 'RUN_OUT') {
+    iconEmoji = '⚡';
+    titleText = 'RUN OUT!';
+    subtitleText = `run out (${catcher || 'Fielder'})`;
+    whyOutReason = `Why Out: Direct throw hit the stumps while ${batter} was stranded short of the popping crease. Decision confirmed out.`;
+    tipText = "Tip: Run outs do not credit the bowler on official bowling figures.";
+  } else if (bannerType === 'STUMPED') {
+    iconEmoji = '🧤';
+    titleText = '🧤 Stumping – STUMPED!';
+    subtitleText = `st †${catcher || 'Wicketkeeper'} b ${bowler}`;
+    whyOutReason = `Why Out: Batter dragged foot out of crease while attacking the delivery. Wicketkeeper collected cleanly and whipped off the bails in a flash.`;
+    tipText = "Tip: Stumping is credited as a bowler wicket and keeper dismissal.";
+  } else if (bannerType === 'LBW') {
+    iconEmoji = '🔥';
+    titleText = '🔥 LBW Out – LBW!';
+    subtitleText = `lbw b ${bowler}`;
+    whyOutReason = `Why Out: Struck on the front pad in line with middle and off stumps. Ball pitched in line, impact in line, and would have hit the stumps. Plumb in front!`;
+    tipText = "Tip: LBW wickets are credited to the bowler's official bowling analysis.";
+  } else if (bannerType === 'CAUGHT') {
     iconEmoji = '🤲';
     titleText = 'CAUGHT OUT!';
     subtitleText = `c ${catcher || 'Fielder'} b ${bowler}`;
@@ -156,26 +195,12 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     subtitleText = `b ${bowler}`;
     whyOutReason = `Why Out: Clean bowled! Beat the defensive stroke and shattered the stumps, dislodging the bails.`;
     tipText = "Tip: Use 'Edit Ball' if the delivery was called a no-ball or decision was reversed.";
-  } else if (bannerType === 'OTHER_WICKET') {
-    iconEmoji = '☝️';
-    if (isLBW) {
-      titleText = 'LBW DISMISSAL!';
-      subtitleText = `lbw b ${bowler}`;
-      whyOutReason = `Why Out: Struck in front of middle stump. Ball pitched in line and would have hit the stumps.`;
-    } else if (isRunOut) {
-      titleText = 'RUN OUT!';
-      subtitleText = `run out (${catcher || 'Fielder'})`;
-      whyOutReason = `Why Out: Direct throw hit the stumps while ${batter} was stranded short of the popping crease.`;
-    } else if (isStumped) {
-      titleText = 'STUMPED!';
-      subtitleText = `st †Keeper b ${bowler}`;
-      whyOutReason = `Why Out: Batter dragged foot out of crease, wicketkeeper whipped off bails cleanly.`;
-    } else {
-      titleText = 'BATTER DISMISSED!';
-      subtitleText = `${batter} is OUT`;
-      whyOutReason = delivery.dismissalText || `Why Out: Batter dismissed by official umpire decision.`;
-    }
-    tipText = "Tip: Use 'Edit Ball' to modify dismissal type or reverse wicket.";
+  } else if (bannerType === 'THREE_RUNS') {
+    iconEmoji = '🏃';
+    titleText = '🏃 Three Runs – 3 RUNS!';
+    subtitleText = `Running between wickets by ${batter}`;
+    whyOutReason = `Pushed into the deep towards ${sector || 'Long-Off'}. Superb running between the wickets by both batsmen to complete 3 runs safely.`;
+    tipText = "Tip: 3 runs completed off the bat; strike rotates to the non-striker.";
   } else if (bannerType === 'OVERTHROW') {
     iconEmoji = '⚡';
     titleText = `OVERTHROW! +${runs} RUNS`;
@@ -290,7 +315,7 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
               </Text>
             </View>
 
-            {/* 3. Match Logistics Strip: Batter & Bowler & Catcher */}
+            {/* 3. Match Logistics Strip: Batter & Bowler & Catcher/Keeper/Fielder */}
             <View style={styles.playerStripRow}>
               <View style={styles.playerStripCol}>
                 <Text style={styles.playerStripLabel}>🏏 BATTER</Text>
@@ -305,7 +330,9 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
                 <>
                   <View style={styles.playerStripDivider} />
                   <View style={styles.playerStripCol}>
-                    <Text style={styles.playerStripLabel}>🤲 CAUGHT BY</Text>
+                    <Text style={styles.playerStripLabel}>
+                      {isCaught ? '🤲 CAUGHT BY' : isStumped ? '🧤 KEEPER' : '⚡ FIELDER'}
+                    </Text>
                     <Text style={[styles.playerStripValue, { color: '#dc2626' }]} numberOfLines={1}>
                       {catcher}
                     </Text>
