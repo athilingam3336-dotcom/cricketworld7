@@ -66,6 +66,8 @@ export interface DeliveryInspectionModalProps {
   nonStrikerName?: string;
   bowlerName?: string;
   fielderName?: string;
+  currentScore?: string;
+  battingTeamName?: string;
 }
 
 export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = ({
@@ -76,30 +78,38 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   strikerName,
   nonStrikerName,
   bowlerName,
-  fielderName
+  fielderName,
+  currentScore,
+  battingTeamName
 }) => {
   if (!visible || !delivery) return null;
 
   const ballText = String(delivery.ball || '12.5');
   const dt = String(delivery.text ?? '').toUpperCase();
-  const runs = typeof delivery.runsBatter === 'number'
+  const runsBatterNum = typeof delivery.runsBatter === 'number'
     ? delivery.runsBatter
     : (typeof delivery.runs === 'number' ? delivery.runs : 0);
+  const runsExtrasNum = Number(delivery.runsExtras || delivery.runs_extras || 0);
+  const totalRunsScored = typeof delivery.totalRuns === 'number'
+    ? delivery.totalRuns
+    : (typeof delivery.total_runs === 'number' ? delivery.total_runs : (runsBatterNum + runsExtrasNum));
+  const runs = runsBatterNum;
+
   const extraType = String(delivery.extraType || delivery.extra_type || delivery.extra || '').toUpperCase();
   const isNoBall = extraType === 'NO_BALL' || dt === 'NB' || dt.startsWith('NB') || dt.includes('NO BALL');
   const isWide = extraType === 'WIDE' || dt === 'WD' || dt.startsWith('WD') || dt.includes('WIDE');
   const isWicket = Boolean(delivery.wicket) || (!isWide && !isNoBall && (dt === 'W' || dt === 'OUT' || (dt.includes('W') && !dt.includes('WD'))));
-  const isSix = !isWide && !isNoBall && !isWicket && (runs === 6 || dt === '6');
-  const isFour = !isWide && !isNoBall && !isWicket && (runs === 4 || dt === '4');
   const commentaryLower = (delivery.commentary || '').toLowerCase();
   const isOverthrow = Boolean(delivery.isOverthrow || delivery.is_overthrow || commentaryLower.includes('overthrow'));
-
-  const isMoreRuns = !isWicket && !isWide && !isNoBall && !isOverthrow && runs >= 5 && runs !== 6;
-  const isThreeRuns = !isWicket && !isWide && !isNoBall && runs === 3;
-  const isTwoRuns = !isWicket && !isWide && !isNoBall && runs === 2;
-  const isOneRun = !isWicket && !isWide && !isNoBall && runs === 1;
-  const isDotBall = !isWicket && !isWide && !isNoBall && runs === 0 && (delivery.runsExtras || 0) === 0;
   const isDeadBall = extraType === 'DEAD_BALL' || dt === 'DB' || commentaryLower.includes('dead ball');
+
+  const isDotBall = !isWicket && !isWide && !isNoBall && !isDeadBall && totalRunsScored === 0;
+  const isSix = !isWide && !isNoBall && !isWicket && (totalRunsScored === 6 || runs === 6 || dt === '6');
+  const isFour = !isWide && !isNoBall && !isWicket && (totalRunsScored === 4 || runs === 4 || dt === '4');
+  const isThreeRuns = !isWicket && !isWide && !isNoBall && totalRunsScored === 3;
+  const isTwoRuns = !isWicket && !isWide && !isNoBall && totalRunsScored === 2;
+  const isOneRun = !isWicket && !isWide && !isNoBall && totalRunsScored === 1;
+  const isMoreRuns = !isWicket && !isWide && !isNoBall && !isOverthrow && totalRunsScored >= 5 && totalRunsScored !== 6;
 
   const wicketTypeRaw = String(delivery.wicketType || delivery.wicket_type || '').toUpperCase();
   const isCaught = isWicket && !isWide && (wicketTypeRaw.includes('CAUGHT') || commentaryLower.includes('caught') || wicketTypeRaw.includes('CT'));
@@ -197,9 +207,35 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     bannerImageSource = POPUP_DOTBALL;
     bannerBadgeBg = '#475569';
   } else {
-    bannerType = 'RUNS';
-    bannerImageSource = POPUP_EXTRA;
-    bannerBadgeBg = '#0284c7';
+    if (totalRunsScored === 0) {
+      bannerType = 'DOT';
+      bannerImageSource = POPUP_DOTBALL;
+      bannerBadgeBg = '#475569';
+    } else if (totalRunsScored === 1) {
+      bannerType = 'ONE_RUN';
+      bannerImageSource = POPUP_1RUN;
+      bannerBadgeBg = '#0284c7';
+    } else if (totalRunsScored === 2) {
+      bannerType = 'TWO_RUNS';
+      bannerImageSource = POPUP_2RUNS;
+      bannerBadgeBg = '#0284c7';
+    } else if (totalRunsScored === 3) {
+      bannerType = 'THREE_RUNS';
+      bannerImageSource = POPUP_3RUNS;
+      bannerBadgeBg = '#0284c7';
+    } else if (totalRunsScored === 4) {
+      bannerType = 'FOUR';
+      bannerImageSource = POPUP_4RUNS;
+      bannerBadgeBg = '#059669';
+    } else if (totalRunsScored === 6) {
+      bannerType = 'SIX';
+      bannerImageSource = POPUP_SIX;
+      bannerBadgeBg = '#2563eb';
+    } else {
+      bannerType = 'MORE_RUNS';
+      bannerImageSource = POPUP_1RUN;
+      bannerBadgeBg = '#7c3aed';
+    }
   }
 
   // Generate detailed professional breakdown of reasons and wagon wheel details
@@ -371,6 +407,93 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
               CARD CONTENT BODY (PROFESSIONAL DETAILS: STRIKER, NON-STRIKER, BOWLER, WAGON WHEEL)
              ═════════════════════════════════════════════════════════════════════ */}
           <ScrollView style={styles.contentBody} bounces={false}>
+            {/* ═════════════════════════════════════════════════════════════════════
+                OFFICIAL MATCH DELIVERY HUD CARD (Directly below image)
+                1. Ball Details: Over & Ball Number, Total Runs – 3
+                2. Batting Details: Striker Name, Non-Striker Name
+                3. Bowling Details: Bowler Name, Fielder / Wagon Wheel Sector
+                4. Match Details: Current Score, Batting Team
+               ═════════════════════════════════════════════════════════════════════ */}
+            <View style={styles.hudCardContainer}>
+              <View style={styles.hudCardHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={styles.hudLivePulse} />
+                  <Text style={styles.hudCardHeaderTitle}>MATCH DELIVERY HUD BREAKDOWN</Text>
+                </View>
+                <View style={styles.hudBallBadge}>
+                  <Text style={styles.hudBallBadgeText}>BALL {ballText}</Text>
+                </View>
+              </View>
+
+              <View style={styles.hudGrid}>
+                {/* 1. BALL DETAILS */}
+                <View style={styles.hudGridItem}>
+                  <View style={styles.hudItemHeader}>
+                    <Text style={styles.hudItemIcon}>📊</Text>
+                    <Text style={styles.hudItemTitle}>1. BALL DETAILS</Text>
+                  </View>
+                  <View style={styles.hudRow}>
+                    <Text style={styles.hudLabel}>Over & Ball:</Text>
+                    <Text style={styles.hudValueBold}>Over {ballText}</Text>
+                  </View>
+                  <View style={styles.hudRow}>
+                    <Text style={styles.hudLabel}>Total Runs:</Text>
+                    <View style={styles.hudRunsBadge}>
+                      <Text style={styles.hudRunsBadgeText}>Total Runs – {totalRunsScored}</Text>
+                    </View>
+                  </View>
+                </View>
+
+                {/* 2. BATTING DETAILS */}
+                <View style={styles.hudGridItem}>
+                  <View style={styles.hudItemHeader}>
+                    <Text style={styles.hudItemIcon}>🏏</Text>
+                    <Text style={styles.hudItemTitle}>2. BATTING DETAILS</Text>
+                  </View>
+                  <View style={styles.hudRow}>
+                    <Text style={styles.hudLabel}>Striker:</Text>
+                    <Text style={styles.hudValueStriker} numberOfLines={1}>★ {batter}</Text>
+                  </View>
+                  <View style={styles.hudRow}>
+                    <Text style={styles.hudLabel}>Non-Striker:</Text>
+                    <Text style={styles.hudValue} numberOfLines={1}>{nonStriker}</Text>
+                  </View>
+                </View>
+
+                {/* 3. BOWLING DETAILS */}
+                <View style={styles.hudGridItem}>
+                  <View style={styles.hudItemHeader}>
+                    <Text style={styles.hudItemIcon}>🎳</Text>
+                    <Text style={styles.hudItemTitle}>3. BOWLING DETAILS</Text>
+                  </View>
+                  <View style={styles.hudRow}>
+                    <Text style={styles.hudLabel}>Bowler:</Text>
+                    <Text style={styles.hudValueBowler} numberOfLines={1}>🎳 {bowler}</Text>
+                  </View>
+                  <View style={styles.hudRow}>
+                    <Text style={styles.hudLabel}>Shot / Field:</Text>
+                    <Text style={styles.hudValue} numberOfLines={1}>{catcher ? `Fld: ${catcher}` : sector}</Text>
+                  </View>
+                </View>
+
+                {/* 4. MATCH DETAILS */}
+                <View style={styles.hudGridItem}>
+                  <View style={styles.hudItemHeader}>
+                    <Text style={styles.hudItemIcon}>🏆</Text>
+                    <Text style={styles.hudItemTitle}>4. MATCH DETAILS</Text>
+                  </View>
+                  <View style={styles.hudRow}>
+                    <Text style={styles.hudLabel}>Score:</Text>
+                    <Text style={styles.hudValueScore}>{currentScore || 'Live Score'}</Text>
+                  </View>
+                  <View style={styles.hudRow}>
+                    <Text style={styles.hudLabel}>Team:</Text>
+                    <Text style={styles.hudValue} numberOfLines={1}>{battingTeamName || 'Batting Team'}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
             {/* 1. Headline Row */}
             <View style={styles.headlineRow}>
               <View style={styles.iconCircleBadge}>
@@ -779,6 +902,137 @@ const styles = StyleSheet.create({
     fontSize: 13.5,
     fontWeight: '900',
     letterSpacing: 0.5
+  },
+
+  // OFFICIAL MATCH DELIVERY HUD STYLES
+  hudCardContainer: {
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#334155',
+    padding: 10,
+    marginBottom: 12,
+    ...Platform.select({
+      web: { boxShadow: '0 2px 8px rgba(0,0,0,0.25)' },
+      default: { elevation: 3 }
+    })
+  },
+  hudCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e293b',
+    marginBottom: 8
+  },
+  hudLivePulse: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22c55e'
+  },
+  hudCardHeaderTitle: {
+    color: '#94a3b8',
+    fontSize: 10.5,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase'
+  },
+  hudBallBadge: {
+    backgroundColor: '#1e293b',
+    borderColor: '#475569',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 6
+  },
+  hudBallBadgeText: {
+    color: '#f8fafc',
+    fontSize: 10.5,
+    fontWeight: '800'
+  },
+  hudGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8
+  },
+  hudGridItem: {
+    flex: 1,
+    minWidth: '47%',
+    backgroundColor: '#1e293b',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    padding: 8
+  },
+  hudItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginBottom: 6,
+    paddingBottom: 4,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#475569'
+  },
+  hudItemIcon: {
+    fontSize: 12
+  },
+  hudItemTitle: {
+    fontSize: 10,
+    fontWeight: '900',
+    color: '#fbbf24',
+    letterSpacing: 0.4
+  },
+  hudRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 3
+  },
+  hudLabel: {
+    fontSize: 10,
+    color: '#94a3b8',
+    fontWeight: '600'
+  },
+  hudValue: {
+    fontSize: 11,
+    color: '#e2e8f0',
+    fontWeight: '700',
+    maxWidth: '65%'
+  },
+  hudValueBold: {
+    fontSize: 11.5,
+    color: '#ffffff',
+    fontWeight: '900'
+  },
+  hudValueStriker: {
+    fontSize: 11,
+    color: '#38bdf8',
+    fontWeight: '800',
+    maxWidth: '65%'
+  },
+  hudValueBowler: {
+    fontSize: 11,
+    color: '#fb923c',
+    fontWeight: '800',
+    maxWidth: '65%'
+  },
+  hudValueScore: {
+    fontSize: 11.5,
+    color: '#4ade80',
+    fontWeight: '900'
+  },
+  hudRunsBadge: {
+    backgroundColor: '#0284c7',
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    borderRadius: 4
+  },
+  hudRunsBadgeText: {
+    color: '#ffffff',
+    fontSize: 10.5,
+    fontWeight: '900'
   }
 });
 

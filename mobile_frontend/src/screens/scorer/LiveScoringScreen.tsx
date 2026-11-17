@@ -505,6 +505,24 @@ export default function LiveScoringScreen() {
 
   // Keypad Popups
   const [showMoreRunsModal, setShowMoreRunsModal] = useState<boolean>(false);
+  const [moreRunsSelected, setMoreRunsSelected] = useState<number>(5);
+  const [moreRunsReason, setMoreRunsReason] = useState<string>('Wide + 4 (Overthrow/Boundary)');
+  const [customMoreRunsReason, setCustomMoreRunsReason] = useState<string>('');
+  const [isMoreRunsReasonDropdownOpen, setIsMoreRunsReasonDropdownOpen] = useState<boolean>(false);
+
+  // Bowler Substitution Dedicated Modal
+  const [showBowlerSubstitutedModal, setShowBowlerSubstitutedModal] = useState<boolean>(false);
+  const [bowlerSubstitutedData, setBowlerSubstitutedData] = useState<{
+    oldBowlerName: string;
+    newBowlerName: string;
+    reason: string;
+    ballsBowledByOldBowler: number;
+    oversBowledByOldBowler: string;
+    remainingBallsInOver: number;
+    currentOverNumber: number;
+    ballToBowlNext: number;
+  } | null>(null);
+
   const [showOverThrowModal, setShowOverThrowModal] = useState<boolean>(false);
   const [customOverthrowInput, setCustomOverthrowInput] = useState<string>('');
   const [selectedOverthrowFielders, setSelectedOverthrowFielders] = useState<string[]>([]);
@@ -1691,9 +1709,38 @@ export default function LiveScoringScreen() {
     }
   };
 
-  const handleMoreRunsSelect = async (r: number) => {
+  const handleMoreRunsSelect = (r: number) => {
+    setMoreRunsSelected(r);
+  };
+
+  const handleAwardMoreRuns = async () => {
     setShowMoreRunsModal(false);
-    await handleScore(r, 'normal');
+    const totalR = moreRunsSelected;
+    const finalReason = customMoreRunsReason.trim() || moreRunsReason;
+    
+    if (finalReason.includes('Wide')) {
+      await handleScore(1, 'wide', {
+        runsExtras: totalR,
+        extraType: 'WIDE',
+        remarks: finalReason
+      });
+    } else if (finalReason.includes('No Ball')) {
+      await handleScore(Math.max(0, totalR - 1), 'noball', {
+        extraType: 'NO_BALL',
+        remarks: finalReason
+      });
+    } else if (finalReason.includes('Penalty')) {
+      await handleScore(0, 'normal', {
+        runsExtras: totalR,
+        extraType: 'PENALTY',
+        remarks: finalReason
+      });
+    } else {
+      await handleScore(totalR, 'normal', {
+        remarks: finalReason
+      });
+    }
+    setCustomMoreRunsReason('');
   };
 
   const toggleOverthrowFielder = (playerName: string) => {
@@ -2265,6 +2312,15 @@ export default function LiveScoringScreen() {
       if (f) bwlName = f.name;
     }
 
+    const oldBwlName = bowler?.name || 'Previous Bowler';
+    const oldBwlBalls = Number(bowler?.balls || 0);
+    const oldBwlOvers = `${Math.floor(oldBwlBalls / 6)}.${oldBwlBalls % 6}`;
+    const ballsInCurrentOver = balls % 6;
+    const remainingBalls = ballsInCurrentOver > 0 ? (6 - ballsInCurrentOver) : 6;
+    const nextBallNum = ballsInCurrentOver + 1;
+    const currOverNum = Math.floor(balls / 6) + 1;
+    const reasonTag = bowlerSituation.trim() || changeBowlerReason || 'Bowler Injured';
+
     setIsUpdatingBowler(true);
     try {
       const res = await ScorerApi.changeBowler(matchId, {
@@ -2281,12 +2337,18 @@ export default function LiveScoringScreen() {
       }
       setShowChangeBowlerModal(false);
       await loadLiveState(false);
-      const ballsInCurrentOver = balls % 6;
-      const sitTag = bowlerSituation.trim() ? ` [${bowlerSituation.trim()}]` : '';
-      const succMsg = ballsInCurrentOver > 0
-        ? `Bowler substituted! ${bwlName || 'New bowler'} will bowl the remaining ${6 - ballsInCurrentOver} ball(s)${sitTag}.`
-        : (res?.message || `Bowler updated to ${bwlName || 'new bowler'}${sitTag}.`);
-      Platform.OS === 'web' ? window.alert(succMsg) : Alert.alert('Bowler Changed', succMsg);
+
+      setBowlerSubstitutedData({
+        oldBowlerName: oldBwlName,
+        newBowlerName: bwlName || 'New Bowler',
+        reason: reasonTag,
+        ballsBowledByOldBowler: ballsInCurrentOver,
+        oversBowledByOldBowler: oldBwlOvers,
+        remainingBallsInOver: remainingBalls,
+        currentOverNumber: currOverNum,
+        ballToBowlNext: nextBallNum
+      });
+      setShowBowlerSubstitutedModal(true);
     } catch (err: any) {
       const msg = err.message || 'Failed to change bowler.';
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
@@ -2743,7 +2805,22 @@ export default function LiveScoringScreen() {
     if (!editingDelivery) return;
     setIsSubmittingEditDelivery(true);
     try {
-      const extraRuns = (editExtraType === 'WIDE' || editExtraType === 'NO_BALL') ? 1 : 0;
+      let rBat = 0;
+      let rExt = 0;
+      if (editExtraType === 'WIDE') {
+        rBat = 0;
+        rExt = editRunsInput > 0 ? editRunsInput : 1;
+      } else if (editExtraType === 'NO_BALL') {
+        rBat = editRunsInput;
+        rExt = 1;
+      } else if (editExtraType === 'BYE' || editExtraType === 'LEG_BYE') {
+        rBat = 0;
+        rExt = editRunsInput;
+      } else {
+        rBat = editRunsInput;
+        rExt = 0;
+      }
+
       const dismissedId = editWicket ? (
         editDismissedPlayer === 'NON_STRIKER'
           ? (editingDelivery.nonStrikerId || nonStriker?.id)
@@ -2751,8 +2828,8 @@ export default function LiveScoringScreen() {
       ) : null;
 
       const payload = {
-        runsBatter: editRunsInput,
-        runsExtras: extraRuns,
+        runsBatter: rBat,
+        runsExtras: rExt,
         extraType: editExtraType,
         wicket: editWicket,
         wicketType: editWicket ? editWicketType : null,
@@ -5082,7 +5159,7 @@ export default function LiveScoringScreen() {
       })()}
 
 
-      {/* 15. MORE RUNS MODAL (Image 2 Slide 3) */}
+      {/* 15. MORE RUNS MODAL (Enhanced with Reason Selector & Custom Input) */}
       <Modal
         visible={showMoreRunsModal}
         transparent
@@ -5090,26 +5167,236 @@ export default function LiveScoringScreen() {
         onRequestClose={() => setShowMoreRunsModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 360 }]}>
+          <View style={[styles.modalContent, { maxWidth: 440, width: '92%', borderRadius: 16, borderWidth: 1.5, borderColor: '#3b82f6', padding: 18 }]}>
             <View style={styles.revisedModalHeader}>
-              <Text style={styles.revisedModalTitle}>MORE RUNS</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 18 }}>🏃</Text>
+                <Text style={[styles.revisedModalTitle, { color: '#1e40af' }]}>MORE RUNS OFF DELIVERY</Text>
+              </View>
               <TouchableOpacity style={styles.redCloseBtn} onPress={() => setShowMoreRunsModal(false)}>
                 <Text style={styles.redCloseBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.revisedModalInfo}>
-              Select higher run value to award off the delivery:
+
+            <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 12, fontWeight: '500' }}>
+              Select run value and specific delivery reason (e.g. Wide + 4 boundary, overthrows, penalties):
             </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14, justifyContent: 'center' }}>
-              {[5, 7, 8, 9, 10, 11].map((r) => (
-                <TouchableOpacity
-                  key={`more-${r}`}
-                  style={[styles.scoreBtn, styles.scoreBtnNormal, { width: 90, height: 60, margin: 4 }]}
-                  onPress={() => handleMoreRunsSelect(r)}
-                >
-                  <Text style={[styles.scoreBtnText, styles.scoreBtnTextNormal]}>{r}</Text>
-                </TouchableOpacity>
-              ))}
+
+            {/* Quick Run Selection Buttons */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#1e293b', textTransform: 'uppercase', marginBottom: 6 }}>
+              1. SELECT RUNS TO AWARD:
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              {[5, 7, 8, 9, 10, 11].map((r) => {
+                const isSelected = moreRunsSelected === r;
+                return (
+                  <TouchableOpacity
+                    key={`more-${r}`}
+                    style={{
+                      width: 54,
+                      height: 42,
+                      borderRadius: 8,
+                      backgroundColor: isSelected ? '#2563eb' : '#f1f5f9',
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? '#1d4ed8' : '#cbd5e1',
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}
+                    onPress={() => handleMoreRunsSelect(r)}
+                  >
+                    <Text style={{ fontSize: 17, fontWeight: '900', color: isSelected ? '#ffffff' : '#1e293b' }}>{r}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Reason Selection Options */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#1e293b', textTransform: 'uppercase', marginBottom: 6 }}>
+              2. SELECT DELIVERY REASON:
+            </Text>
+            <View style={{ gap: 6, marginBottom: 12 }}>
+              {[
+                `Wide + ${moreRunsSelected - 1} (Overthrow/Boundary)`,
+                `No Ball + ${moreRunsSelected - 1} (Bat Boundary)`,
+                `${moreRunsSelected} Overthrow Runs (All Extras)`,
+                `${moreRunsSelected} Running Runs (Between Wickets)`,
+                `Penalty 5 Runs (Law 28 - Helmet Hit)`
+              ].map((reasonOption) => {
+                const isSelected = moreRunsReason === reasonOption;
+                return (
+                  <TouchableOpacity
+                    key={`reason-opt-${reasonOption}`}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingVertical: 7,
+                      paddingHorizontal: 10,
+                      borderRadius: 8,
+                      backgroundColor: isSelected ? '#eff6ff' : '#f8fafc',
+                      borderWidth: 1.2,
+                      borderColor: isSelected ? '#3b82f6' : '#e2e8f0'
+                    }}
+                    onPress={() => {
+                      setMoreRunsReason(reasonOption);
+                      setCustomMoreRunsReason('');
+                    }}
+                  >
+                    <View style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 8,
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? '#2563eb' : '#94a3b8',
+                      backgroundColor: isSelected ? '#2563eb' : '#ffffff',
+                      marginRight: 8,
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}>
+                      {isSelected && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#ffffff' }} />}
+                    </View>
+                    <Text style={{ fontSize: 12, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#1d4ed8' : '#334155' }}>
+                      {reasonOption}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Custom Reason Input (Last entry) */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>
+              ✍️ OR TYPE CUSTOM REASON:
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: '#ffffff',
+                borderWidth: 1.2,
+                borderColor: customMoreRunsReason ? '#2563eb' : '#cbd5e1',
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                fontSize: 12.5,
+                color: '#0f172a',
+                marginBottom: 14
+              }}
+              placeholder="e.g. Overthrow + boundary 4, short run, misfield..."
+              placeholderTextColor="#94a3b8"
+              value={customMoreRunsReason}
+              onChangeText={(text) => setCustomMoreRunsReason(text)}
+            />
+
+            {/* Confirm Submit Button */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#2563eb',
+                borderRadius: 10,
+                paddingVertical: 12,
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              onPress={handleAwardMoreRuns}
+              activeOpacity={0.85}
+            >
+              <Text style={{ color: '#ffffff', fontSize: 13.5, fontWeight: '900', letterSpacing: 0.5 }}>
+                Award {moreRunsSelected} Runs ✓
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* BOWLER SUBSTITUTED DEDICATED VISUAL MODAL (MCC LAW 2.3 & 17.8) */}
+      <Modal
+        visible={showBowlerSubstitutedModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBowlerSubstitutedModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 440, width: '92%', padding: 0, overflow: 'hidden', borderRadius: 16, borderWidth: 1.5, borderColor: '#f59e0b' }]}>
+            {/* 16:9 Banner Image */}
+            <View style={{ width: '100%', height: 180, position: 'relative', backgroundColor: '#0f172a' }}>
+              <Image
+                source={require('../../../assets/popups/popup_bowled.jpg')}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
+              />
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.45)' }} />
+              
+              {/* Top Left Badge */}
+              <View style={{ position: 'absolute', top: 12, left: 12, backgroundColor: '#dc2626', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#fca5a5' }}>
+                <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 }}>MCC LAW 2.3 & 17.8</Text>
+              </View>
+
+              {/* Close Button */}
+              <TouchableOpacity
+                style={{ position: 'absolute', top: 10, right: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}
+                onPress={() => setShowBowlerSubstitutedModal(false)}
+              >
+                <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
+
+              {/* Banner Floating Title */}
+              <View style={{ position: 'absolute', bottom: 12, left: 14, right: 14 }}>
+                <View style={{ backgroundColor: '#f59e0b', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 4 }}>
+                  <Text style={{ color: '#1e293b', fontSize: 10, fontWeight: '900' }}>⚡ {bowlerSubstitutedData?.reason || 'BOWLER INJURED'}</Text>
+                </View>
+                <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '900', textShadowColor: '#000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}>
+                  BOWLER SUBSTITUTED
+                </Text>
+              </View>
+            </View>
+
+            {/* Modal Body with Old Bowler & New Bowler Cards */}
+            <View style={{ padding: 16 }}>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                {/* Old Bowler Card */}
+                <View style={{ flex: 1, backgroundColor: '#fef2f2', borderColor: '#fecaca', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#b91c1c', marginBottom: 4 }}>OUTGOING BOWLER</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '900', color: '#1e293b', marginBottom: 6 }} numberOfLines={1}>
+                    {bowlerSubstitutedData?.oldBowlerName}
+                  </Text>
+                  <View style={{ gap: 2 }}>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Ov Bowled: <Text style={{ fontWeight: '800', color: '#0f172a' }}>{bowlerSubstitutedData?.oversBowledByOldBowler} Ov</Text>
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Over {bowlerSubstitutedData?.currentOverNumber}: <Text style={{ fontWeight: '800', color: '#dc2626' }}>{bowlerSubstitutedData?.ballsBowledByOldBowler} balls bowled</Text>
+                    </Text>
+                  </View>
+                </View>
+
+                {/* New Bowler Card */}
+                <View style={{ flex: 1, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#15803d', marginBottom: 4 }}>INCOMING BOWLER</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '900', color: '#1e293b', marginBottom: 6 }} numberOfLines={1}>
+                    {bowlerSubstitutedData?.newBowlerName}
+                  </Text>
+                  <View style={{ gap: 2 }}>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Next Ball: <Text style={{ fontWeight: '800', color: '#16a34a' }}>Ball {bowlerSubstitutedData?.ballToBowlNext} of Ov {bowlerSubstitutedData?.currentOverNumber}</Text>
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Remaining: <Text style={{ fontWeight: '800', color: '#0f172a' }}>{bowlerSubstitutedData?.remainingBallsInOver} balls to bowl</Text>
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Cricket Rule Explanatory Banner */}
+              <View style={{ backgroundColor: '#fffbeb', borderColor: '#fef3c7', borderWidth: 1, borderRadius: 8, padding: 9, marginBottom: 14 }}>
+                <Text style={{ fontSize: 11, color: '#92400e', lineHeight: 15, fontWeight: '500' }}>
+                  ⚖️ <Text style={{ fontWeight: '800' }}>Law 2.3 & 17.8:</Text> If a bowler is injured/unable to bowl, the substitute completes the over. Neither bowler may bowl the next consecutive over.
+                </Text>
+              </View>
+
+              {/* Confirm OK Button */}
+              <TouchableOpacity
+                style={{ backgroundColor: '#f59e0b', borderRadius: 10, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}
+                onPress={() => setShowBowlerSubstitutedModal(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={{ color: '#1e293b', fontSize: 13.5, fontWeight: '900', letterSpacing: 0.5 }}>Understood / Continue Scoring ✓</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -8575,6 +8862,8 @@ export default function LiveScoringScreen() {
         nonStrikerName={inspectingDelivery?.nonStrikerName || nonStriker?.name}
         bowlerName={inspectingDelivery?.bowlerName || bowler?.name}
         fielderName={inspectingDelivery?.fielderName}
+        currentScore={`${runs}/${wickets} (${getOvers(balls)} Ov)`}
+        battingTeamName={matchInfo?.battingTeam || matchInfo?.teamA || 'Batting Team'}
       />
 
       {/* RETROACTIVE DELIVERY CORRECTION MODAL (Edit Mode Direct Ball Edit) */}
