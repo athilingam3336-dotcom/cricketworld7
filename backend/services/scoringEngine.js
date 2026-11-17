@@ -232,6 +232,16 @@ class ScoringEngine {
       note = null
     } = deliveryData;
 
+    const isOverthrow = Boolean(
+      deliveryData.is_overthrow ||
+      deliveryData.isOverthrow ||
+      (deliveryData.remarks && deliveryData.remarks.toLowerCase().includes('overthrow'))
+    );
+    const overthrowFielders = Array.isArray(deliveryData.overthrowFielders)
+      ? deliveryData.overthrowFielders
+      : (Array.isArray(deliveryData.overthrow_fielders) ? deliveryData.overthrow_fielders : []);
+    const resolvedFielderName = fielderName || (overthrowFielders.length ? overthrowFielders.join(', ') : null);
+
     // Delivery legality: Wide & No Ball are illegal deliveries
     const isLegal = extraType === 'NONE' || extraType === 'BYE' || extraType === 'LEG_BYE';
     const totalRuns = Number(runsBatter) + Number(runsExtras);
@@ -285,7 +295,7 @@ class ScoringEngine {
 
     const strikerName = (activeStrikerId && playerMap[activeStrikerId]?.name) || 'Batter';
     const bowlerName = (activeBowlerId && playerMap[activeBowlerId]?.name) || 'Bowler';
-    const actualFielderName = fielderName || (fielderId && playerMap[fielderId]?.name) || null;
+    const actualFielderName = resolvedFielderName || (fielderId && playerMap[fielderId]?.name) || null;
 
     const dismissalText = wicket ? this.buildDismissalText(wicketType, bowlerName, actualFielderName) : null;
 
@@ -301,6 +311,11 @@ class ScoringEngine {
       actualFielderName,
       dismissedBatterName
     );
+
+    if (isOverthrow) {
+      const fNames = actualFielderName || (overthrowFielders.length ? overthrowFielders.join(', ') : 'fielding side');
+      commentary = `Overthrow! Stray throw by ${fNames} conceded ${Number(runsBatter) || totalRuns} extra runs.`;
+    }
 
     const runReason = (reason || note || deliveryData.customReason || '').trim();
     if (runReason) {
@@ -345,7 +360,10 @@ class ScoringEngine {
       shot_y: shotY !== null && shotY !== undefined ? Number(shotY) : (deliveryData.shot_y !== undefined && deliveryData.shot_y !== null ? Number(deliveryData.shot_y) : null),
       fielder_id: fielderId,
       fielder_name: actualFielderName,
-      fielding_action: fieldingAction || deliveryData.fielding_action || deliveryData.fieldingAction || null,
+      fielding_action: fieldingAction || deliveryData.fielding_action || deliveryData.fieldingAction || (isOverthrow ? 'Overthrow' : null),
+      is_overthrow: isOverthrow,
+      overthrow_fielders: overthrowFielders,
+      remarks: deliveryData.remarks || null,
       commentary,
       created_by: scorerId || 'SCR-101',
       timestamp: new Date()
@@ -998,6 +1016,8 @@ class ScoringEngine {
     if (updateData.fielderName) delivery.fielder_name = updateData.fielderName;
     if (updateData.dismissedPlayerId) delivery.dismissed_player_id = updateData.dismissedPlayerId;
     if (typeof updateData.isOverthrow === 'boolean') delivery.is_overthrow = updateData.isOverthrow;
+    if (Array.isArray(updateData.overthrowFielders)) delivery.overthrow_fielders = updateData.overthrowFielders;
+    if (updateData.remarks) delivery.remarks = updateData.remarks;
 
     delivery.boundary_type = (newRunsBatter === 4 ? 'FOUR' : (newRunsBatter === 6 ? 'SIX' : null));
 
@@ -1026,7 +1046,10 @@ class ScoringEngine {
       }
     } else {
       delivery.dismissal_text = null;
-      if (newExtraType === 'WIDE') {
+      if (delivery.is_overthrow || updateData.isOverthrow) {
+        const fld = delivery.fielder_name || (delivery.overthrow_fielders?.length ? delivery.overthrow_fielders.join(', ') : 'fielding side');
+        newCommentary = `Overthrow! Stray throw by ${fld} conceded ${newRunsBatter} extra runs.`;
+      } else if (newExtraType === 'WIDE') {
         newCommentary = `Wide ball! Bowled outside the tramline. +1 extra run.`;
       } else if (newExtraType === 'NO_BALL') {
         newCommentary = `No Ball! Overstepped front foot. +1 extra run and Free Hit awarded!`;

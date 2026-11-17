@@ -506,6 +506,8 @@ export default function LiveScoringScreen() {
   const [showMoreRunsModal, setShowMoreRunsModal] = useState<boolean>(false);
   const [showOverThrowModal, setShowOverThrowModal] = useState<boolean>(false);
   const [customOverthrowInput, setCustomOverthrowInput] = useState<string>('');
+  const [selectedOverthrowFielders, setSelectedOverthrowFielders] = useState<string[]>([]);
+  const [isOverthrowFielderDropdownOpen, setIsOverthrowFielderDropdownOpen] = useState<boolean>(false);
   const [showExtrasModal, setShowExtrasModal] = useState<boolean>(false);
   const [showFieldingModal, setShowFieldingModal] = useState<boolean>(false);
   const [selectedFieldingAction, setSelectedFieldingAction] = useState<string>('Clean Collect');
@@ -1478,7 +1480,10 @@ export default function LiveScoringScreen() {
       shotX: customOpts.shotX ?? undefined,
       shotY: customOpts.shotY ?? undefined,
       fielderId: selectedFielderId || undefined,
-      fieldingAction: selectedFieldingAction || undefined,
+      fielderName: customOpts.fielderName || undefined,
+      isOverthrow: customOpts.isOverthrow ?? undefined,
+      overthrowFielders: customOpts.overthrowFielders ?? undefined,
+      fieldingAction: selectedFieldingAction || (customOpts.isOverthrow ? 'Overthrow' : undefined),
       remarks: customOpts.remarks || deliveryRemarks || undefined
     };
 
@@ -1688,23 +1693,41 @@ export default function LiveScoringScreen() {
     await handleScore(r, 'normal');
   };
 
+  const toggleOverthrowFielder = (playerName: string) => {
+    setSelectedOverthrowFielders((prev) =>
+      prev.includes(playerName) ? prev.filter((p) => p !== playerName) : [...prev, playerName]
+    );
+  };
+
   const handleOverThrowSelect = async (r: number) => {
     setShowOverThrowModal(false);
     setCustomOverthrowInput('');
+    setIsOverthrowFielderDropdownOpen(false);
+
+    const fldNames = selectedOverthrowFielders.length > 0
+      ? selectedOverthrowFielders.join(', ')
+      : (bowler?.name || 'Fielding Side');
 
     // Trigger instant broadcast animation with Overthrow illustration
     setActiveFieldingEvent({
       type: 'OVERTHROW',
-      fielderName: bowler?.name || 'Fielding Side',
+      fielderName: fldNames,
       teamName: matchInfo?.bowlingTeam || 'Bowling Team',
       title: `OVERTHROW: +${r} EXTRA RUNS! ⚡`,
       badge: `+${r} RUNS CONCEDED`,
       stats: `MCC Law 19.8 • ${r} Extra Run${r > 1 ? 's' : ''}`,
-      details: `Stray throw missed stumps and keeper, allowing batters to complete ${r} overthrow run${r > 1 ? 's' : ''}!`,
+      details: `Stray throw by ${fldNames} missed stumps and keeper, allowing batters to complete ${r} overthrow run${r > 1 ? 's' : ''}!`,
       durationMs: 3500
     });
 
-    await handleScore(r, 'normal', { remarks: `Overthrow: ${r} runs` });
+    await handleScore(r, 'normal', {
+      remarks: `Overthrow: +${r} runs (throw by ${fldNames})`,
+      isOverthrow: true,
+      overthrowFielders: selectedOverthrowFielders,
+      fielderName: fldNames
+    });
+
+    setSelectedOverthrowFielders([]);
   };
 
   const handleExtrasSelect = async (extraTypeKey: string) => {
@@ -5090,7 +5113,7 @@ export default function LiveScoringScreen() {
         </View>
       </Modal>
 
-      {/* 16. OVER THROW RUNS MODAL (1 to 5 buttons + Custom Input for 6+) */}
+      {/* 16. OVER THROW RUNS MODAL (1 to 5 buttons + Custom Input for 6+ with Multi-Fielder Checkbox Selector) */}
       <Modal
         visible={showOverThrowModal}
         transparent
@@ -5098,10 +5121,11 @@ export default function LiveScoringScreen() {
         onRequestClose={() => {
           setShowOverThrowModal(false);
           setCustomOverthrowInput('');
+          setIsOverthrowFielderDropdownOpen(false);
         }}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 440, width: '92%', borderRadius: 16, borderWidth: 1.5, borderColor: '#f59e0b', padding: 18 }]}>
+          <View style={[styles.modalContent, { maxWidth: 460, width: '94%', maxHeight: '90%', borderRadius: 16, borderWidth: 1.5, borderColor: '#f59e0b', padding: 18 }]}>
             <View style={styles.revisedModalHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.revisedModalTitle}>OVER THROW RUNS</Text>
@@ -5114,147 +5138,307 @@ export default function LiveScoringScreen() {
                 onPress={() => {
                   setShowOverThrowModal(false);
                   setCustomOverthrowInput('');
+                  setIsOverthrowFielderDropdownOpen(false);
                 }}
               >
                 <Text style={styles.redCloseBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Overthrow Broadcast Illustration Card */}
-            <View style={{
-              marginTop: 10,
-              marginBottom: 12,
-              borderRadius: 12,
-              overflow: 'hidden',
-              backgroundColor: '#fffbeb',
-              borderWidth: 1.5,
-              borderColor: '#fde68a',
-              shadowColor: '#d97706',
-              shadowOffset: { width: 0, height: 3 },
-              shadowOpacity: 0.15,
-              shadowRadius: 6,
-              elevation: 3
-            }}>
-              <Image
-                source={overthrowImage}
-                style={{
-                  width: '100%',
-                  height: 145,
-                  resizeMode: 'cover'
-                }}
-              />
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
+              {/* Overthrow Broadcast Illustration Card */}
               <View style={{
-                position: 'absolute',
-                top: 8,
-                left: 8,
-                backgroundColor: 'rgba(217, 119, 6, 0.92)',
-                paddingHorizontal: 8,
-                paddingVertical: 3,
-                borderRadius: 6
+                marginTop: 10,
+                marginBottom: 12,
+                borderRadius: 12,
+                overflow: 'hidden',
+                backgroundColor: '#fffbeb',
+                borderWidth: 1.5,
+                borderColor: '#fde68a',
+                shadowColor: '#d97706',
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: 0.15,
+                shadowRadius: 6,
+                elevation: 3
               }}>
-                <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 }}>
-                  ⚡ MCC LAW 19.8 • OVERTHROW
-                </Text>
-              </View>
-              <View style={{
-                position: 'absolute',
-                bottom: 0,
-                left: 0,
-                right: 0,
-                backgroundColor: 'rgba(15, 23, 42, 0.78)',
-                paddingVertical: 5,
-                paddingHorizontal: 10
-              }}>
-                <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700', textAlign: 'center' }}>
-                  🏃 Batters sprinting extra runs on missed throw to stumps / keeper
-                </Text>
-              </View>
-            </View>
-
-            {/* Quick 1 to 5 Buttons */}
-            <Text style={{ fontSize: 11, fontWeight: '800', color: '#854d0e', textTransform: 'uppercase', marginBottom: 6 }}>
-              QUICK OVERTHROW RUNS:
-            </Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6 }}>
-              {[1, 2, 3, 4, 5].map((r) => (
-                <TouchableOpacity
-                  key={`ot-${r}`}
-                  style={[
-                    styles.scoreBtn,
-                    {
-                      backgroundColor: '#fef3c7',
-                      borderColor: '#f59e0b',
-                      borderWidth: 1.5,
-                      flex: 1,
-                      height: 50,
-                      marginHorizontal: 2,
-                      borderRadius: 10,
-                      shadowColor: '#d97706',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.15,
-                      shadowRadius: 3,
-                      elevation: 2
-                    }
-                  ]}
-                  onPress={() => handleOverThrowSelect(r)}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[styles.scoreBtnText, { color: '#b45309', fontSize: 17, fontWeight: '900' }]}>+{r}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* Custom Input Box for 6 or more runs */}
-            <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 12 }}>
-              <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>
-                Or Type Custom Overthrow Runs (6+ or more):
-              </Text>
-              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-                <TextInput
+                <Image
+                  source={overthrowImage}
                   style={{
-                    flex: 1,
-                    height: 48,
-                    fontSize: 16,
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    backgroundColor: '#ffffff',
-                    borderColor: customOverthrowInput ? '#d97706' : '#cbd5e1',
-                    borderWidth: 1.5,
-                    borderRadius: 8,
-                    paddingHorizontal: 10,
-                    color: '#0f172a'
+                    width: '100%',
+                    height: 140,
+                    resizeMode: 'cover'
                   }}
-                  value={customOverthrowInput}
-                  onChangeText={(val) => setCustomOverthrowInput(val.replace(/\D/g, ''))}
-                  placeholder="Enter runs (e.g. 6)"
-                  keyboardType="number-pad"
-                  placeholderTextColor="#94a3b8"
-                  maxLength={2}
                 />
+                <View style={{
+                  position: 'absolute',
+                  top: 8,
+                  left: 8,
+                  backgroundColor: 'rgba(217, 119, 6, 0.92)',
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 6
+                }}>
+                  <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 }}>
+                    ⚡ MCC LAW 19.8 • OVERTHROW
+                  </Text>
+                </View>
+                <View style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  backgroundColor: 'rgba(15, 23, 42, 0.78)',
+                  paddingVertical: 5,
+                  paddingHorizontal: 10
+                }}>
+                  <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700', textAlign: 'center' }}>
+                    🏃 Batters sprinting extra runs on missed throw to stumps / keeper
+                  </Text>
+                </View>
+              </View>
+
+              {/* OVERTHROW FIELDERS MULTI-SELECT DROPDOWN */}
+              <View style={{
+                marginBottom: 14,
+                backgroundColor: '#fffdf5',
+                borderColor: '#fef08a',
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 10
+              }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#854d0e', textTransform: 'uppercase' }}>
+                    🎯 FIELDER(S) INVOLVED IN OVERTHROW:
+                  </Text>
+                  {selectedOverthrowFielders.length > 0 && (
+                    <TouchableOpacity onPress={() => setSelectedOverthrowFielders([])}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: '#dc2626' }}>Clear all</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Dropdown Toggle Pill */}
                 <TouchableOpacity
                   style={{
-                    backgroundColor: customOverthrowInput.trim() ? '#d97706' : '#cbd5e1',
-                    paddingHorizontal: 18,
-                    height: 48,
-                    justifyContent: 'center',
+                    flexDirection: 'row',
                     alignItems: 'center',
-                    borderRadius: 8
+                    justifyContent: 'space-between',
+                    backgroundColor: '#ffffff',
+                    borderColor: '#f59e0b',
+                    borderWidth: 1.5,
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10
                   }}
-                  disabled={!customOverthrowInput.trim()}
-                  onPress={() => {
-                    const parsed = parseInt(customOverthrowInput.trim(), 10);
-                    if (!isNaN(parsed) && parsed > 0) {
-                      handleOverThrowSelect(parsed);
-                    }
-                  }}
+                  onPress={() => setIsOverthrowFielderDropdownOpen(!isOverthrowFielderDropdownOpen)}
                   activeOpacity={0.8}
                 >
-                  <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>
-                    Add Runs ↵
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                    <Text style={{ fontSize: 15, marginRight: 6 }}>🧤</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: selectedOverthrowFielders.length > 0 ? '#92400e' : '#64748b' }} numberOfLines={1}>
+                      {selectedOverthrowFielders.length === 0
+                        ? 'Select fielder(s) who made the throw...'
+                        : `${selectedOverthrowFielders.length} Fielder${selectedOverthrowFielders.length > 1 ? 's' : ''} Selected`}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {selectedOverthrowFielders.length > 0 && (
+                      <View style={{ backgroundColor: '#d97706', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 }}>
+                        <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '900' }}>{selectedOverthrowFielders.length}</Text>
+                      </View>
+                    )}
+                    <Text style={{ fontSize: 13, color: '#b45309', fontWeight: 'bold' }}>
+                      {isOverthrowFielderDropdownOpen ? '▲' : '▼'}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
+
+                {/* Selected Fielders Chip Badges */}
+                {selectedOverthrowFielders.length > 0 && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    {selectedOverthrowFielders.map((fName) => (
+                      <TouchableOpacity
+                        key={`ot-chip-${fName}`}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: '#fef3c7',
+                          borderColor: '#f59e0b',
+                          borderWidth: 1,
+                          borderRadius: 14,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          gap: 5
+                        }}
+                        onPress={() => toggleOverthrowFielder(fName)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>🧤 {fName}</Text>
+                        <Text style={{ fontSize: 11, fontWeight: '900', color: '#dc2626' }}>✕</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                {/* Expanded Dropdown List of Fielders with Checkboxes */}
+                {isOverthrowFielderDropdownOpen && (
+                  <View style={{
+                    marginTop: 8,
+                    maxHeight: 180,
+                    backgroundColor: '#ffffff',
+                    borderColor: '#fcd34d',
+                    borderWidth: 1.5,
+                    borderRadius: 10,
+                    padding: 6,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3
+                  }}>
+                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={true}>
+                      {((bowlingSquad && bowlingSquad.length > 0 ? bowlingSquad : (matchInfo?.teamBPlayers || matchInfo?.teamAPlayers || [])) as any[]).map((player: any) => {
+                        const playerName = player.name || player.player_name || `Player ${player.id || ''}`;
+                        const isSelected = selectedOverthrowFielders.includes(playerName);
+                        return (
+                          <TouchableOpacity
+                            key={`ot-fld-chk-${player.id || playerName}`}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              paddingVertical: 8,
+                              paddingHorizontal: 10,
+                              borderRadius: 6,
+                              backgroundColor: isSelected ? '#fef3c7' : 'transparent',
+                              borderBottomWidth: 0.5,
+                              borderBottomColor: '#f1f5f9'
+                            }}
+                            onPress={() => toggleOverthrowFielder(playerName)}
+                            activeOpacity={0.7}
+                          >
+                            {/* Checkbox Icon */}
+                            <View style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: 4,
+                              borderWidth: 1.8,
+                              borderColor: isSelected ? '#d97706' : '#94a3b8',
+                              backgroundColor: isSelected ? '#d97706' : '#ffffff',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              marginRight: 10
+                            }}>
+                              {isSelected && (
+                                <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '900', lineHeight: 14 }}>✓</Text>
+                              )}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{
+                                fontSize: 13,
+                                fontWeight: isSelected ? '800' : '600',
+                                color: isSelected ? '#92400e' : '#1e293b'
+                              }}>
+                                {playerName}
+                              </Text>
+                              {player.role && (
+                                <Text style={{ fontSize: 10, color: '#64748b' }}>
+                                  {player.role}
+                                </Text>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
-            </View>
+
+              {/* Quick 1 to 5 Buttons */}
+              <Text style={{ fontSize: 11, fontWeight: '800', color: '#854d0e', textTransform: 'uppercase', marginBottom: 6 }}>
+                QUICK OVERTHROW RUNS:
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6 }}>
+                {[1, 2, 3, 4, 5].map((r) => (
+                  <TouchableOpacity
+                    key={`ot-${r}`}
+                    style={[
+                      styles.scoreBtn,
+                      {
+                        backgroundColor: '#fef3c7',
+                        borderColor: '#f59e0b',
+                        borderWidth: 1.5,
+                        flex: 1,
+                        height: 50,
+                        marginHorizontal: 2,
+                        borderRadius: 10,
+                        shadowColor: '#d97706',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.15,
+                        shadowRadius: 3,
+                        elevation: 2
+                      }
+                    ]}
+                    onPress={() => handleOverThrowSelect(r)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.scoreBtnText, { color: '#b45309', fontSize: 17, fontWeight: '900' }]}>+{r}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Custom Input Box for 6 or more runs */}
+              <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 12 }}>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Or Type Custom Overthrow Runs (6+ or more):
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                  <TextInput
+                    style={{
+                      flex: 1,
+                      height: 48,
+                      fontSize: 16,
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                      backgroundColor: '#ffffff',
+                      borderColor: customOverthrowInput ? '#d97706' : '#cbd5e1',
+                      borderWidth: 1.5,
+                      borderRadius: 8,
+                      paddingHorizontal: 10,
+                      color: '#0f172a'
+                    }}
+                    value={customOverthrowInput}
+                    onChangeText={(val) => setCustomOverthrowInput(val.replace(/\D/g, ''))}
+                    placeholder="Enter runs (e.g. 6)"
+                    keyboardType="number-pad"
+                    placeholderTextColor="#94a3b8"
+                    maxLength={2}
+                  />
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: customOverthrowInput.trim() ? '#d97706' : '#cbd5e1',
+                      paddingHorizontal: 18,
+                      height: 48,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      borderRadius: 8
+                    }}
+                    disabled={!customOverthrowInput.trim()}
+                    onPress={() => {
+                      const parsed = parseInt(customOverthrowInput.trim(), 10);
+                      if (!isNaN(parsed) && parsed > 0) {
+                        handleOverThrowSelect(parsed);
+                      }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>
+                      Add Runs ↵
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>

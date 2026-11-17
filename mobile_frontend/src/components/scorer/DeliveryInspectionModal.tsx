@@ -84,7 +84,7 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   const runs = typeof delivery.runsBatter === 'number'
     ? delivery.runsBatter
     : (typeof delivery.runs === 'number' ? delivery.runs : 0);
-  const extraType = (delivery.extraType || delivery.extra_type || delivery.extra || '').toUpperCase();
+  const extraType = String(delivery.extraType || delivery.extra_type || delivery.extra || '').toUpperCase();
   const isNoBall = extraType === 'NO_BALL' || dt === 'NB' || dt.includes('NB');
   const isWide = extraType === 'WIDE' || dt === 'WD' || dt.includes('WD');
   const isWicket = Boolean(delivery.wicket) || dt === 'W' || dt.includes('W');
@@ -270,11 +270,16 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     whyReason = `Tapped softly into ${sector} for a quick single. Good communication between wickets to rotate the strike safely.`;
     tipText = "Tip: 1 run scored off the bat; non-striker moves to the striker end.";
   } else if (bannerType === 'OVERTHROW') {
-    iconEmoji = '💫';
+    iconEmoji = '⚡';
     titleText = `Overthrow – OVERTHROW! +${runs} RUNS`;
-    subtitleText = `Wayward throw conceded extra runs`;
-    whyReason = `Fielder threw towards the stumps towards ${sector}, but backup was missed. Batsmen capitalized on the overthrow for extra runs.`;
-    tipText = "Tip: Overthrow runs count towards team total and batter score.";
+    const otFieldersList = Array.isArray(delivery.overthrowFielders) && delivery.overthrowFielders.length > 0
+      ? delivery.overthrowFielders.join(', ')
+      : (Array.isArray(delivery.overthrow_fielders) && delivery.overthrow_fielders.length > 0
+        ? delivery.overthrow_fielders.join(', ')
+        : (delivery.fielderName || delivery.fielder_name || catcher || 'Fielding Side'));
+    subtitleText = `Conceded by throw: ${otFieldersList}`;
+    whyReason = `Overthrow conceded by ${otFieldersList} towards ${sector}. Wayward throw missed stumps and backup fielder, allowing batters to complete +${runs} extra runs safely.`;
+    tipText = 'Tip: Overthrow runs count towards team total and batter score (MCC Law 19.8).';
   } else if (bannerType === 'NO_BALL') {
     iconEmoji = '🚫';
     titleText = 'No Ball – FREE HIT!';

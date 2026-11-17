@@ -720,6 +720,8 @@ class ScorerService {
         fielderId: d.fielder_id,
         fielderName: d.fielder_name || (d.fielder_id && playerMap[d.fielder_id]?.name) || '',
         isOverthrow: Boolean(d.is_overthrow || (d.commentary && d.commentary.toLowerCase().includes('overthrow'))),
+        overthrowFielders: d.overthrow_fielders || (d.is_overthrow ? (d.fielder_name ? d.fielder_name.split(', ') : []) : []),
+        overthrow_fielders: d.overthrow_fielders || (d.is_overthrow ? (d.fielder_name ? d.fielder_name.split(', ') : []) : []),
         strikerId: d.striker_id,
         nonStrikerId: d.non_striker_id,
         bowlerId: d.bowler_id,
