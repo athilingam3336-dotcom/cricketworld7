@@ -54,6 +54,7 @@ const POPUP_DOTBALL = require('../../../assets/popups/popup_dotball.jpg');
 const POPUP_WIDE = require('../../../assets/popups/popup_wide.jpg');
 const POPUP_NOBALL = require('../../../assets/popups/popup_noball.jpg');
 const POPUP_OVERTHROW = require('../../../assets/popups/popup_overthrow.jpg');
+const POPUP_DEADBALL = require('../../../assets/popups/popup_deadball.jpg');
 const POPUP_EXTRA = require('../../../assets/popups/popup_extra.jpg');
 
 export interface DeliveryInspectionModalProps {
@@ -98,6 +99,7 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   const isTwoRuns = !isWicket && !isWide && !isNoBall && runs === 2;
   const isOneRun = !isWicket && !isWide && !isNoBall && runs === 1;
   const isDotBall = !isWicket && !isWide && !isNoBall && runs === 0 && (delivery.runsExtras || 0) === 0;
+  const isDeadBall = extraType === 'DEAD_BALL' || dt === 'DB' || commentaryLower.includes('dead ball');
 
   const wicketTypeRaw = String(delivery.wicketType || delivery.wicket_type || '').toUpperCase();
   const isCaught = isWicket && !isWide && (wicketTypeRaw.includes('CAUGHT') || commentaryLower.includes('caught') || wicketTypeRaw.includes('CT'));
@@ -128,7 +130,7 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   let bannerImageSource: any = null;
   let bannerBadgeBg = '#f59e0b';
   let bannerBadgeText = `Ball ${ballText}`;
-  let bannerType: 'CAUGHT' | 'BOWLED' | 'RUN_OUT' | 'STUMPED' | 'LBW' | 'OVERTHROW' | 'DOT' | 'WIDE' | 'SIX' | 'FOUR' | 'NO_BALL' | 'THREE_RUNS' | 'TWO_RUNS' | 'ONE_RUN' | 'MORE_RUNS' | 'RUNS' = 'RUNS';
+  let bannerType: 'CAUGHT' | 'BOWLED' | 'RUN_OUT' | 'STUMPED' | 'LBW' | 'OVERTHROW' | 'DOT' | 'WIDE' | 'DEAD_BALL' | 'SIX' | 'FOUR' | 'NO_BALL' | 'THREE_RUNS' | 'TWO_RUNS' | 'ONE_RUN' | 'MORE_RUNS' | 'RUNS' = 'RUNS';
 
   if (isRunOut) {
     bannerType = 'RUN_OUT';
@@ -162,6 +164,10 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     bannerType = 'WIDE';
     bannerImageSource = POPUP_WIDE;
     bannerBadgeBg = '#ea580c';
+  } else if (isDeadBall) {
+    bannerType = 'DEAD_BALL';
+    bannerImageSource = POPUP_DEADBALL;
+    bannerBadgeBg = '#475569';
   } else if (isSix) {
     bannerType = 'SIX';
     bannerImageSource = POPUP_SIX;
@@ -292,6 +298,12 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     subtitleText = `Bowled by ${bowler}`;
     whyReason = `Delivery passed outside the tramline marking beyond batter's reach. 1 extra run added and delivery must be re-bowled.`;
     tipText = "Tip: Wide deliveries do not count towards the 6 legal balls in the over.";
+  } else if (bannerType === 'DEAD_BALL') {
+    iconEmoji = '🛑';
+    titleText = 'Dead Ball – MCC LAW 20';
+    subtitleText = `Signaled by on-field umpire (${bowler} to ${batter})`;
+    whyReason = `Play ceased immediately by the umpire (MCC Law 20). No runs can be scored, no wicket can fall, and the delivery does not count towards the over.`;
+    tipText = "Tip: Delivery must be re-bowled; legal ball count and bowler analysis remain unchanged.";
   } else if (bannerType === 'DOT') {
     iconEmoji = '🛡️';
     titleText = 'Dot Ball – NO RUN (0)';

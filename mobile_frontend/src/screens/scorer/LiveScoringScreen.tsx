@@ -42,6 +42,7 @@ const bestBowlerImage = require('../../../assets/best_bowler.png');
 const runOutMilestoneImage = require('../../../assets/run_out_milestone.png');
 const keeperDismissalImage = require('../../../assets/keeper_dismissal.png');
 const overthrowImage = require('../../../assets/overthrow.jpg');
+const deadBallImage = require('../../../assets/popups/popup_deadball.jpg');
 const doubleCenturyImage = require('../../../assets/double_century_200.jpg');
 const team50Image = require('../../../assets/team_50.jpg');
 const team100Image = require('../../../assets/team_100.jpg');
@@ -509,6 +510,8 @@ export default function LiveScoringScreen() {
   const [selectedOverthrowFielders, setSelectedOverthrowFielders] = useState<string[]>([]);
   const [isOverthrowFielderDropdownOpen, setIsOverthrowFielderDropdownOpen] = useState<boolean>(false);
   const [showExtrasModal, setShowExtrasModal] = useState<boolean>(false);
+  const [showDeadBallModal, setShowDeadBallModal] = useState<boolean>(false);
+  const [deadBallReason, setDeadBallReason] = useState<string>('Umpire intervention / Play stopped');
   const [showFieldingModal, setShowFieldingModal] = useState<boolean>(false);
   const [selectedFieldingAction, setSelectedFieldingAction] = useState<string>('Clean Collect');
   const [showWagonWheelModal, setShowWagonWheelModal] = useState<boolean>(false);
@@ -1741,8 +1744,7 @@ export default function LiveScoringScreen() {
     } else if (extraTypeKey === 'NO_BALL_BOUNCER') {
       await handleScore(0, 'noball', { noBallReason: 'BOUNCER', remarks: 'Bouncer limit exceeded (Law 41.6)' });
     } else if (extraTypeKey === 'DEAD_BALL') {
-      const msg = 'Dead Ball declared by Umpire (MCC Law 20). This delivery does not count and will be re-bowled.';
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Dead Ball (Law 20)', msg);
+      setShowDeadBallModal(true);
     } else if (extraTypeKey === 'BYE') {
       await handleScore(1, 'bye');
     } else if (extraTypeKey === 'LEG_BYE') {
@@ -5439,6 +5441,176 @@ export default function LiveScoringScreen() {
                 </View>
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 16B. DEAD BALL MODAL (MCC LAW 20) with Broadcast Illustration Card */}
+      <Modal
+        visible={showDeadBallModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDeadBallModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 440, width: '92%', borderRadius: 16, borderWidth: 1.5, borderColor: '#64748b', padding: 18 }]}>
+            <View style={styles.revisedModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.revisedModalTitle, { color: '#0f172a' }]}>DEAD BALL (MCC LAW 20)</Text>
+                <Text style={[styles.revisedModalInfo, { marginTop: 2, color: '#475569' }]}>
+                  Umpire Declares Dead Ball • Delivery Does Not Count
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.redCloseBtn}
+                onPress={() => setShowDeadBallModal(false)}
+              >
+                <Text style={styles.redCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Dead Ball Broadcast Illustration Card */}
+            <View style={{
+              marginTop: 10,
+              marginBottom: 12,
+              borderRadius: 12,
+              overflow: 'hidden',
+              backgroundColor: '#f8fafc',
+              borderWidth: 1.5,
+              borderColor: '#cbd5e1',
+              shadowColor: '#475569',
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.15,
+              shadowRadius: 6,
+              elevation: 3
+            }}>
+              <Image
+                source={deadBallImage}
+                style={{
+                  width: '100%',
+                  height: 145,
+                  resizeMode: 'cover'
+                }}
+              />
+              <View style={{
+                position: 'absolute',
+                top: 8,
+                left: 8,
+                backgroundColor: 'rgba(15, 23, 42, 0.88)',
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: 6
+              }}>
+                <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 }}>
+                  🛑 MCC LAW 20 • DEAD BALL
+                </Text>
+              </View>
+              <View style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                backgroundColor: 'rgba(15, 23, 42, 0.78)',
+                paddingVertical: 5,
+                paddingHorizontal: 10
+              }}>
+                <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700', textAlign: 'center' }}>
+                  🚫 Umpire crossed arms signal • Play ceased immediately
+                </Text>
+              </View>
+            </View>
+
+            {/* Context Info */}
+            <View style={{
+              backgroundColor: '#f1f5f9',
+              borderRadius: 10,
+              padding: 10,
+              marginBottom: 12,
+              borderLeftWidth: 4,
+              borderLeftColor: '#475569'
+            }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#0f172a' }}>
+                🛑 Dead Ball Called by On-Field Umpire
+              </Text>
+              <Text style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>
+                Bowler: <Text style={{ fontWeight: '700' }}>{bowler?.name || 'Bowler'}</Text> • Striker: <Text style={{ fontWeight: '700' }}>{striker?.name || 'Striker'}</Text>
+              </Text>
+              <Text style={{ fontSize: 11, color: '#334155', marginTop: 4, fontStyle: 'italic' }}>
+                Reason: {deadBallReason}
+              </Text>
+            </View>
+
+            {/* Quick Reason Selection */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: 6 }}>
+              SELECT DEAD BALL REASON:
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+              {[
+                'Bowler aborted run-up',
+                'Batter not ready',
+                'Foreign object on pitch',
+                'Player injury delay',
+                'Umpire intervention'
+              ].map((reason) => (
+                <TouchableOpacity
+                  key={`db-${reason}`}
+                  style={{
+                    backgroundColor: deadBallReason === reason ? '#0f172a' : '#f8fafc',
+                    borderColor: deadBallReason === reason ? '#0f172a' : '#cbd5e1',
+                    borderWidth: 1,
+                    borderRadius: 16,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5
+                  }}
+                  onPress={() => setDeadBallReason(reason)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{
+                    fontSize: 11,
+                    fontWeight: deadBallReason === reason ? '800' : '600',
+                    color: deadBallReason === reason ? '#ffffff' : '#334155'
+                  }}>
+                    {reason}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* Official Rule Tip */}
+            <View style={{
+              backgroundColor: '#fef3c7',
+              borderColor: '#fde68a',
+              borderWidth: 1,
+              borderRadius: 8,
+              padding: 8,
+              marginBottom: 14
+            }}>
+              <Text style={{ fontSize: 11, color: '#92400e', lineHeight: 15 }}>
+                💡 <Text style={{ fontWeight: '800' }}>MCC Law 20 Rule:</Text> No runs can be scored, no wicket can fall, and this ball does NOT count toward the 6 legal balls of the over. The ball will be re-bowled.
+              </Text>
+            </View>
+
+            {/* Primary Action Button */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#f59e0b',
+                borderRadius: 10,
+                paddingVertical: 13,
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#d97706',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+                elevation: 3
+              }}
+              onPress={() => setShowDeadBallModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: '#ffffff', fontWeight: '900', fontSize: 14, letterSpacing: 0.5 }}>
+                ✓ OK, RE-BOWL DELIVERY
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
