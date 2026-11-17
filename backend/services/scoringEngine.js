@@ -999,6 +999,55 @@ class ScoringEngine {
     if (updateData.dismissedPlayerId) delivery.dismissed_player_id = updateData.dismissedPlayerId;
     if (typeof updateData.isOverthrow === 'boolean') delivery.is_overthrow = updateData.isOverthrow;
 
+    delivery.boundary_type = (newRunsBatter === 4 ? 'FOUR' : (newRunsBatter === 6 ? 'SIX' : null));
+
+    // Auto-generate fresh commentary matching edited event
+    let newCommentary = '';
+    const shotZone = updateData.shotZone || delivery.shot_zone || 'covers';
+    if (newWicket) {
+      if (newWicketType === 'CAUGHT') {
+        newCommentary = `OUT! Caught by ${delivery.fielder_name || 'Fielder'} off ${delivery.bowler_name || 'Bowler'}.`;
+        delivery.dismissal_text = `c ${delivery.fielder_name || 'Fielder'} b ${delivery.bowler_name || 'Bowler'}`;
+      } else if (newWicketType === 'BOWLED') {
+        newCommentary = `OUT! Clean bowled by ${delivery.bowler_name || 'Bowler'}! Shattered the stumps.`;
+        delivery.dismissal_text = `b ${delivery.bowler_name || 'Bowler'}`;
+      } else if (newWicketType === 'LBW') {
+        newCommentary = `OUT! LBW! Struck on the pads in front of middle stump.`;
+        delivery.dismissal_text = `lbw b ${delivery.bowler_name || 'Bowler'}`;
+      } else if (newWicketType === 'RUN_OUT') {
+        newCommentary = `OUT! Run out (${delivery.fielder_name || 'Fielder'}). Stranded short of crease.`;
+        delivery.dismissal_text = `run out (${delivery.fielder_name || 'Fielder'})`;
+      } else if (newWicketType === 'STUMPED') {
+        newCommentary = `OUT! Stumped by †${delivery.fielder_name || 'Wicketkeeper'} off ${delivery.bowler_name || 'Bowler'}.`;
+        delivery.dismissal_text = `st †${delivery.fielder_name || 'Wicketkeeper'} b ${delivery.bowler_name || 'Bowler'}`;
+      } else {
+        newCommentary = `OUT! Dismissed (${newWicketType}).`;
+        delivery.dismissal_text = `${newWicketType}`;
+      }
+    } else {
+      delivery.dismissal_text = null;
+      if (newExtraType === 'WIDE') {
+        newCommentary = `Wide ball! Bowled outside the tramline. +1 extra run.`;
+      } else if (newExtraType === 'NO_BALL') {
+        newCommentary = `No Ball! Overstepped front foot. +1 extra run and Free Hit awarded!`;
+      } else if (newRunsBatter === 4) {
+        newCommentary = `FOUR! Smacked through ${shotZone} to the boundary rope!`;
+      } else if (newRunsBatter === 6) {
+        newCommentary = `SIX! Massive hit sailing over ${shotZone} deep into the stands!`;
+      } else if (newRunsBatter === 3) {
+        newCommentary = `3 runs. Driven into the deep towards ${shotZone}, great running.`;
+      } else if (newRunsBatter === 2) {
+        newCommentary = `2 runs. Placed into the gap at ${shotZone}, returning quickly for two.`;
+      } else if (newRunsBatter === 1) {
+        newCommentary = `1 run. Tapped towards ${shotZone}, rotating the strike.`;
+      } else if (newRunsBatter === 0) {
+        newCommentary = `Dot ball. Solid block towards ${shotZone}, no run taken.`;
+      } else {
+        newCommentary = `${newTotalRuns} runs taken! Excellent running between the wickets.`;
+      }
+    }
+    delivery.commentary = newCommentary;
+
     // Recalculate legal delivery count and overs if extra type changed
     const oldIsLegal = delivery.extra_type !== 'WIDE' && delivery.extra_type !== 'NO_BALL';
     const newIsLegal = newExtraType !== 'WIDE' && newExtraType !== 'NO_BALL';

@@ -90,13 +90,14 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   const isWicket = Boolean(delivery.wicket) || dt === 'W' || dt.includes('W');
   const isSix = runs === 6 || dt === '6';
   const isFour = runs === 4 || dt === '4';
+  const commentaryLower = (delivery.commentary || '').toLowerCase();
+  const isOverthrow = Boolean(delivery.isOverthrow || delivery.is_overthrow || commentaryLower.includes('overthrow'));
+
+  const isMoreRuns = !isWicket && !isWide && !isNoBall && !isOverthrow && runs >= 5 && runs !== 6;
   const isThreeRuns = !isWicket && !isWide && !isNoBall && runs === 3;
   const isTwoRuns = !isWicket && !isWide && !isNoBall && runs === 2;
   const isOneRun = !isWicket && !isWide && !isNoBall && runs === 1;
   const isDotBall = !isWicket && !isWide && !isNoBall && runs === 0 && (delivery.runsExtras || 0) === 0;
-
-  const commentaryLower = (delivery.commentary || '').toLowerCase();
-  const isOverthrow = Boolean(delivery.isOverthrow || delivery.is_overthrow || commentaryLower.includes('overthrow'));
 
   const wicketTypeRaw = String(delivery.wicketType || delivery.wicket_type || '').toUpperCase();
   const isCaught = isWicket && (wicketTypeRaw.includes('CAUGHT') || commentaryLower.includes('caught') || wicketTypeRaw.includes('CT'));
@@ -127,7 +128,7 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   let bannerImageSource: any = null;
   let bannerBadgeBg = '#f59e0b';
   let bannerBadgeText = `Ball ${ballText}`;
-  let bannerType: 'CAUGHT' | 'BOWLED' | 'RUN_OUT' | 'STUMPED' | 'LBW' | 'OVERTHROW' | 'DOT' | 'WIDE' | 'SIX' | 'FOUR' | 'NO_BALL' | 'THREE_RUNS' | 'TWO_RUNS' | 'ONE_RUN' | 'RUNS' = 'RUNS';
+  let bannerType: 'CAUGHT' | 'BOWLED' | 'RUN_OUT' | 'STUMPED' | 'LBW' | 'OVERTHROW' | 'DOT' | 'WIDE' | 'SIX' | 'FOUR' | 'NO_BALL' | 'THREE_RUNS' | 'TWO_RUNS' | 'ONE_RUN' | 'MORE_RUNS' | 'RUNS' = 'RUNS';
 
   if (isRunOut) {
     bannerType = 'RUN_OUT';
@@ -169,6 +170,10 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     bannerType = 'FOUR';
     bannerImageSource = POPUP_4RUNS;
     bannerBadgeBg = '#059669';
+  } else if (isMoreRuns) {
+    bannerType = 'MORE_RUNS';
+    bannerImageSource = POPUP_1RUN; // Base running image with dynamic overlay
+    bannerBadgeBg = '#7c3aed';
   } else if (isThreeRuns) {
     bannerType = 'THREE_RUNS';
     bannerImageSource = POPUP_3RUNS;
@@ -204,6 +209,12 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     subtitleText = `Hit by ${batter} off ${bowler}`;
     whyReason = `Punched past ${sector} with immaculate timing! The ball raced across the outfield and crossed the boundary rope for 4 runs.`;
     tipText = "Tip: 4 runs credited to batter's score; boundary count updated.";
+  } else if (bannerType === 'MORE_RUNS') {
+    iconEmoji = '🏃';
+    titleText = `${runs} Runs – ${runs} RUNS!`;
+    subtitleText = `Brilliant running: ${batter} & ${nonStriker}`;
+    whyReason = `Driven into the deep gap towards ${sector}. Incredible athletic running between the wickets to complete ${runs} runs off the delivery!`;
+    tipText = `Tip: ${runs} runs scored off the bat; strike rotated to ${runs % 2 === 1 ? nonStriker : batter}.`;
   } else if (bannerType === 'SIX') {
     iconEmoji = '🚀';
     titleText = 'Six Runs – MAXIMUM 6!';
@@ -315,6 +326,14 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
 
             {/* Top Fade Gradient for controls */}
             <View style={styles.bannerTopFadeGradient} />
+
+            {/* Dynamic Comic Ribbon Badge for More Runs (5, 7, 8, 9, 10, 11) */}
+            {isMoreRuns && (
+              <View style={styles.moreRunsComicBadge}>
+                <Text style={styles.moreRunsNumber}>{runs}</Text>
+                <Text style={styles.moreRunsLabel}>RUNS!</Text>
+              </View>
+            )}
 
             {/* Top Left Floating Pill: Ball X.Y */}
             <View style={[styles.headerPill, { backgroundColor: bannerBadgeBg }]}>
@@ -510,16 +529,59 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    backgroundColor: '#0f172a',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1.2,
-    borderColor: 'rgba(255, 255, 255, 0.4)'
+    borderWidth: 1.5,
+    borderColor: '#ffffff',
+    zIndex: 99,
+    elevation: 6
   },
   closeCircleBtnText: {
     color: '#ffffff',
     fontSize: 14,
-    fontWeight: '800'
+    fontWeight: '900'
+  },
+
+  // Dynamic Comic Badge for More Runs (5, 7, 8, 9, 10, 11)
+  moreRunsComicBadge: {
+    position: 'absolute',
+    right: 18,
+    bottom: 22,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    backgroundColor: '#ffffff',
+    borderColor: '#f59e0b',
+    borderWidth: 3.5,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    ...Platform.select({
+      web: {
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.45)'
+      },
+      default: {
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.45,
+        shadowRadius: 6
+      }
+    }),
+    transform: [{ rotate: '-3deg' }]
+  },
+  moreRunsNumber: {
+    fontSize: 40,
+    fontWeight: '900',
+    color: '#dc2626',
+    letterSpacing: -1,
+    marginRight: 6
+  },
+  moreRunsLabel: {
+    fontSize: 26,
+    fontWeight: '900',
+    color: '#0f172a',
+    letterSpacing: 0.5
   },
 
   // Content Body

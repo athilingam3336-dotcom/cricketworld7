@@ -2736,11 +2736,36 @@ export default function LiveScoringScreen() {
         dismissedPlayerId: dismissedId
       };
       await ScorerApi.editDelivery(matchId, editingDelivery.id, payload);
+      
+      const isWkt = Boolean(payload.wicket);
+      const isWd = payload.extraType === 'WIDE';
+      const isNb = payload.extraType === 'NO_BALL';
+      const textVal = isWkt ? 'W' : (isWd ? 'WD' : (isNb ? 'NB' : (payload.runsBatter + (payload.runsExtras || 0))));
+
+      const updatedDel = {
+        ...editingDelivery,
+        runs: payload.runsBatter,
+        runsBatter: payload.runsBatter,
+        runsExtras: payload.runsExtras,
+        totalRuns: payload.runsBatter + (payload.runsExtras || 0),
+        wicket: isWkt,
+        wicketType: payload.wicket ? payload.wicketType : null,
+        wicket_type: payload.wicket ? payload.wicketType : null,
+        extraType: payload.extraType,
+        extra_type: payload.extraType,
+        extra: payload.extraType !== 'NONE' ? payload.extraType : null,
+        shotZone: payload.shotZone,
+        shot_zone: payload.shotZone,
+        fielderName: payload.fielderName,
+        dismissedPlayerId: payload.dismissedPlayerId,
+        text: textVal
+      };
+
+      setRecentDeliveries(prev => prev.map(item => (item.id === editingDelivery.id ? updatedDel : item)));
       setShowEditDeliveryModal(false);
       setEditingDelivery(null);
       await loadLiveState(false);
-      const msg = `Delivery ${editingDelivery.ball} corrected successfully! Scores and figures updated.`;
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Ball Corrected', msg);
+      setInspectingDelivery(updatedDel);
     } catch (err: any) {
       const msg = err.message || 'Failed to update delivery.';
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
