@@ -1052,10 +1052,10 @@ export const ScorerApi = {
   // --- LIVE SCORING ENGINE ---
   getLiveState: async (matchId: string) => {
     try {
-      const res = await request(`/matches/${matchId}/live`);
+      const res = await request(`/scorer/matches/${matchId}/live`);
       if (res && res.data) return res;
     } catch (_e) {}
-    return request(`/scorer/matches/${matchId}/live`);
+    return request(`/matches/${matchId}/live`);
   },
 
   recordDelivery: async (matchId: string, delivery: any) => {

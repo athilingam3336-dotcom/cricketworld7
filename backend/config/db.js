@@ -695,9 +695,6 @@ const CricketLawSchema = new mongoose.Schema({
   display_order: { type: Number, default: 0 }
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
 
-CricketLawSchema.index({ law_number: 1 });
-CricketLawSchema.index({ category: 1 });
-
 const CricketLaw = mongoose.models.CricketLaw || mongoose.model('CricketLaw', CricketLawSchema);
 
 // 17. Cricket Law Sections Schema
@@ -1341,6 +1338,7 @@ async function seedDefaultData() {
           match_type: 'T20',
           overs_per_side: 20,
           status: 'SCHEDULED',
+          schedule_confirmation_status: 'CONFIRMED',
           assigned_scorer_id: 'SCR-101',
           umpire1_id: 'UMP-101',
           umpire2_id: 'UMP-102',
@@ -1359,6 +1357,7 @@ async function seedDefaultData() {
           match_type: 'T20',
           overs_per_side: 20,
           status: 'LIVE',
+          schedule_confirmation_status: 'CONFIRMED',
           toss_winner_id: 'TM-01',
           toss_decision: 'BAT',
           current_innings_number: 1,
@@ -1380,10 +1379,33 @@ async function seedDefaultData() {
           match_type: 'T20',
           overs_per_side: 20,
           status: 'COMPLETED',
+          schedule_confirmation_status: 'CONFIRMED',
           toss_winner_id: 'TM-01',
           toss_decision: 'BAT',
           result_summary: 'Virudhunagar Strikers won by 7 wickets',
           player_of_match: 'Dinesh Karthik',
+          assigned_scorer_id: 'SCR-101',
+          umpire1_id: 'UMP-101',
+          umpire2_id: 'UMP-102',
+          umpire1_name: 'Thiru. K. Sundaram',
+          umpire2_name: 'Thiru. M. Ramanathan'
+        },
+        {
+          id: 'M005',
+          tournament_id: 'T-2026-VPL',
+          tournament_name: 'Virudhunagar Premier League 2026',
+          team_a_id: 'TM-01',
+          team_b_id: 'TM-03',
+          venue: 'Kamarajar District Stadium',
+          match_date: '2026-10-06',
+          match_time: '02:30 PM',
+          match_type: 'T20',
+          overs_per_side: 20,
+          status: 'LIVE',
+          schedule_confirmation_status: 'CONFIRMED',
+          toss_winner_id: 'TM-03',
+          toss_decision: 'BAT',
+          current_innings_number: 1,
           assigned_scorer_id: 'SCR-101',
           umpire1_id: 'UMP-101',
           umpire2_id: 'UMP-102',

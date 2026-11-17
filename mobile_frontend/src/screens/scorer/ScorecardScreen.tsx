@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, useWindowDimensions, Platform, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, useWindowDimensions, Platform, Image, Modal, Linking } from 'react-native';
 
 import { useScorerNavigation } from '../../navigation/ScorerNavigationContext';
 import SharedFooter from '../../components/scorer/SharedFooter';
@@ -554,9 +554,20 @@ export default function ScorecardScreen({ onExit, initialMatchId, initialParams 
         <Text style={styles.title}>
           {match.teamA && match.teamB ? `${match.teamA} vs ${match.teamB}` : 'Match Scorecard & Statistics'}
         </Text>
-        <Text style={styles.subtitle}>
-          🏏 {match.tournament || 'Virudhunagar Premier League 2026'} • {match.venue || 'ANJAC Pavilion Ground, Sivakasi'}
-        </Text>
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => {
+            const v = match.venue || 'ANJAC Pavilion Ground, Sivakasi';
+            const url = match.venue_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v + (v.toLowerCase().includes('virudhunagar') || v.toLowerCase().includes('sivakasi') ? '' : ', Virudhunagar'))}`;
+            if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(url, '_blank');
+            else Linking.openURL(url).catch(() => {});
+          }}
+          style={{ flexDirection: 'row', alignItems: 'center' }}
+        >
+          <Text style={styles.subtitle}>
+            🏏 {match.tournament || 'Virudhunagar Premier League 2026'} • 📍 <Text style={{ textDecorationLine: 'underline', color: '#0284c7' }}>{match.venue || 'ANJAC Pavilion Ground, Sivakasi'} ↗</Text>
+          </Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>

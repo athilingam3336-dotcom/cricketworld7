@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Linking } from 'react-native';
 import { useScorerNavigation } from '../../navigation/ScorerNavigationContext';
 
 export interface MatchData {
@@ -14,6 +14,7 @@ export interface MatchData {
   match_date?: string;
   match_time?: string;
   venue?: string;
+  venue_maps_url?: string;
   format?: string;
   overs?: number;
   overs_per_side?: number;
@@ -293,9 +294,19 @@ export default function MatchCard({ match, variant = 'upcoming' }: Props) {
         )}
 
         <View style={styles.metaRow}>
-          <Text style={styles.metaText}>
-            📍 {match.venue || 'Virudhunagar Cricket Ground'} • 🏏 {match.format || 'T20'} ({isRevisedOvers ? `Curtailed to ${totalMatchOvers} Overs` : `${totalMatchOvers} Overs Match`}) {timeline.formattedDate ? `• 📅 Started ${timeline.formattedDate}` : ''}
-          </Text>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              const v = match.venue || 'Virudhunagar Cricket Ground';
+              const url = match.venue_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v + (v.toLowerCase().includes('virudhunagar') || v.toLowerCase().includes('sivakasi') ? '' : ', Virudhunagar'))}`;
+              if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(url, '_blank');
+              else Linking.openURL(url).catch(() => {});
+            }}
+          >
+            <Text style={styles.metaText}>
+              📍 <Text style={{ textDecorationLine: 'underline', color: '#0284c7' }}>{match.venue || 'Virudhunagar Cricket Ground'} ↗</Text> • 🏏 {match.format || 'T20'} ({isRevisedOvers ? `Curtailed to ${totalMatchOvers} Overs` : `${totalMatchOvers} Overs Match`}) {timeline.formattedDate ? `• 📅 Started ${timeline.formattedDate}` : ''}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Live Match Officials Strip */}
@@ -326,9 +337,19 @@ export default function MatchCard({ match, variant = 'upcoming' }: Props) {
             <Text style={styles.completedTournamentText} numberOfLines={1}>
               🏆 {(match.tournament || match.tournament_name || 'Association Championship').toUpperCase()}
             </Text>
-            <Text style={styles.completedVenueSub} numberOfLines={1}>
-              📍 {match.venue || 'Virudhunagar Cricket Ground'} • 🏏 {match.format || 'T20'} ({totalMatchOvers} Ov) {match.date ? `• 📅 ${match.date.split(' ')[0]}` : ''}
-            </Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                const v = match.venue || 'Virudhunagar Cricket Ground';
+                const url = match.venue_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v + (v.toLowerCase().includes('virudhunagar') || v.toLowerCase().includes('sivakasi') ? '' : ', Virudhunagar'))}`;
+                if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(url, '_blank');
+                else Linking.openURL(url).catch(() => {});
+              }}
+            >
+              <Text style={styles.completedVenueSub} numberOfLines={1}>
+                📍 <Text style={{ textDecorationLine: 'underline', color: '#0284c7' }}>{match.venue || 'Virudhunagar Cricket Ground'} ↗</Text> • 🏏 {match.format || 'T20'} ({totalMatchOvers} Ov) {match.date ? `• 📅 ${match.date.split(' ')[0]}` : ''}
+              </Text>
+            </TouchableOpacity>
           </View>
           <View style={styles.completedBadgeGreen}>
             <Text style={styles.completedBadgeGreenText}>✓ COMPLETED</Text>
@@ -472,12 +493,21 @@ export default function MatchCard({ match, variant = 'upcoming' }: Props) {
           </Text>
         </View>
         <View style={styles.metaInfoDivider} />
-        <View style={[styles.metaInfoItem, { flex: 1.2 }]}>
-          <Text style={styles.metaInfoLabel}>📍 VENUE &amp; GROUND</Text>
-          <Text style={styles.metaInfoVal} numberOfLines={1}>
+        <TouchableOpacity
+          style={[styles.metaInfoItem, { flex: 1.2 }]}
+          activeOpacity={0.7}
+          onPress={() => {
+            const v = match.venue || 'District Stadium, Virudhunagar';
+            const url = match.venue_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v + (v.toLowerCase().includes('virudhunagar') || v.toLowerCase().includes('sivakasi') ? '' : ', Virudhunagar'))}`;
+            if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(url, '_blank');
+            else Linking.openURL(url).catch(() => {});
+          }}
+        >
+          <Text style={styles.metaInfoLabel}>📍 VENUE &amp; GROUND ↗</Text>
+          <Text style={[styles.metaInfoVal, { color: '#0284c7', textDecorationLine: 'underline' }]} numberOfLines={1}>
             {match.venue || 'District Stadium, Virudhunagar'}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* 5. OFFICIAL MATCH GOVERNANCE (UMPIRES & SCORER) */}

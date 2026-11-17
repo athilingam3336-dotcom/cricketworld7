@@ -31,6 +31,7 @@ import BroadcastLiveBallAction from '../../components/common/BroadcastLiveBallAc
 import { VPLEventBanner, VPLSoundControls } from '../../components/common/VPLEventBanner';
 import { mapBallToEvents, normalizeExtraType, normalizeDismissal } from '../../utils/vplEventMapper';
 import CalculationSettingsManagement from '../../admin/components/CalculationSettingsManagement';
+import { DeliveryInspectionModal } from '../../components/scorer/DeliveryInspectionModal';
 
 const IMG_LOGO = require('../../../assets/logo_transparent.png');
 const IMG_CHAMPIONS = require('../../../assets/cricket_champions.png');
@@ -41,6 +42,7 @@ const bestBowlerImage = require('../../../assets/best_bowler.png');
 const runOutMilestoneImage = require('../../../assets/run_out_milestone.png');
 const keeperDismissalImage = require('../../../assets/keeper_dismissal.png');
 const overthrowImage = require('../../../assets/overthrow.jpg');
+const deadBallImage = require('../../../assets/popups/popup_deadball.jpg');
 const doubleCenturyImage = require('../../../assets/double_century_200.jpg');
 const team50Image = require('../../../assets/team_50.jpg');
 const team100Image = require('../../../assets/team_100.jpg');
@@ -503,9 +505,32 @@ export default function LiveScoringScreen() {
 
   // Keypad Popups
   const [showMoreRunsModal, setShowMoreRunsModal] = useState<boolean>(false);
+  const [moreRunsSelected, setMoreRunsSelected] = useState<number>(5);
+  const [moreRunsReasonKey, setMoreRunsReasonKey] = useState<string>('');
+  const [moreRunsReason, setMoreRunsReason] = useState<string>('');
+  const [customMoreRunsReason, setCustomMoreRunsReason] = useState<string>('');
+  const [isMoreRunsReasonDropdownOpen, setIsMoreRunsReasonDropdownOpen] = useState<boolean>(false);
+
+  // Bowler Substitution Dedicated Modal
+  const [showBowlerSubstitutedModal, setShowBowlerSubstitutedModal] = useState<boolean>(false);
+  const [bowlerSubstitutedData, setBowlerSubstitutedData] = useState<{
+    oldBowlerName: string;
+    newBowlerName: string;
+    reason: string;
+    ballsBowledByOldBowler: number;
+    oversBowledByOldBowler: string;
+    remainingBallsInOver: number;
+    currentOverNumber: number;
+    ballToBowlNext: number;
+  } | null>(null);
+
   const [showOverThrowModal, setShowOverThrowModal] = useState<boolean>(false);
   const [customOverthrowInput, setCustomOverthrowInput] = useState<string>('');
+  const [selectedOverthrowFielders, setSelectedOverthrowFielders] = useState<string[]>([]);
+  const [isOverthrowFielderDropdownOpen, setIsOverthrowFielderDropdownOpen] = useState<boolean>(false);
   const [showExtrasModal, setShowExtrasModal] = useState<boolean>(false);
+  const [showDeadBallModal, setShowDeadBallModal] = useState<boolean>(false);
+  const [deadBallReason, setDeadBallReason] = useState<string>('Umpire intervention / Play stopped');
   const [showFieldingModal, setShowFieldingModal] = useState<boolean>(false);
   const [selectedFieldingAction, setSelectedFieldingAction] = useState<string>('Clean Collect');
   const [showWagonWheelModal, setShowWagonWheelModal] = useState<boolean>(false);
@@ -531,8 +556,12 @@ export default function LiveScoringScreen() {
   const [editExtraType, setEditExtraType] = useState<'NONE' | 'WIDE' | 'NO_BALL' | 'BYE' | 'LEG_BYE'>('NONE');
   const [editWicket, setEditWicket] = useState<boolean>(false);
   const [editWicketType, setEditWicketType] = useState<string>('BOWLED');
+  const [editShotZone, setEditShotZone] = useState<string>('Cover');
+  const [editFielderName, setEditFielderName] = useState<string>('');
+  const [editDismissedPlayer, setEditDismissedPlayer] = useState<'STRIKER' | 'NON_STRIKER'>('STRIKER');
   const [isSubmittingEditDelivery, setIsSubmittingEditDelivery] = useState<boolean>(false);
   const [offlineQueueCount, setOfflineQueueCount] = useState<number>(0);
+  const [inspectingDelivery, setInspectingDelivery] = useState<any | null>(null);
 
   // 9. Revised Overs & Revised Target Modal State
   const [showRevisedOversModal, setShowRevisedOversModal] = useState<boolean>(false);
@@ -1473,7 +1502,10 @@ export default function LiveScoringScreen() {
       shotX: customOpts.shotX ?? undefined,
       shotY: customOpts.shotY ?? undefined,
       fielderId: selectedFielderId || undefined,
-      fieldingAction: selectedFieldingAction || undefined,
+      fielderName: customOpts.fielderName || undefined,
+      isOverthrow: customOpts.isOverthrow ?? undefined,
+      overthrowFielders: customOpts.overthrowFielders ?? undefined,
+      fieldingAction: selectedFieldingAction || (customOpts.isOverthrow ? 'Overthrow' : undefined),
       remarks: customOpts.remarks || deliveryRemarks || undefined
     };
 
@@ -1678,28 +1710,104 @@ export default function LiveScoringScreen() {
     }
   };
 
-  const handleMoreRunsSelect = async (r: number) => {
+  const handleMoreRunsSelect = (r: number) => {
+    setMoreRunsSelected(r);
+  };
+
+  const handleAwardMoreRuns = async () => {
+    const customTrimmed = customMoreRunsReason.trim();
+    let finalReason = '';
+    if (customTrimmed) {
+      finalReason = customTrimmed;
+    } else if (moreRunsReasonKey === 'WIDE') {
+      finalReason = `Wide + ${moreRunsSelected - 1} (Overthrow/Boundary)`;
+    } else if (moreRunsReasonKey === 'NO_BALL') {
+      finalReason = `No Ball + ${moreRunsSelected - 1} (Bat Boundary)`;
+    } else if (moreRunsReasonKey === 'OVERTHROW') {
+      finalReason = `${moreRunsSelected} Overthrow Runs (All Extras)`;
+    } else if (moreRunsReasonKey === 'RUNNING') {
+      finalReason = `${moreRunsSelected} Running Runs (Between Wickets)`;
+    } else if (moreRunsReasonKey === 'PENALTY') {
+      finalReason = `Penalty 5 Runs (Law 28 - Helmet Hit)`;
+    } else if (moreRunsReason) {
+      finalReason = moreRunsReason;
+    }
+
+    if (!finalReason) {
+      const msg = 'Please select or type a delivery reason before awarding more runs.';
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('Reason Required', msg);
+      }
+      return;
+    }
+
     setShowMoreRunsModal(false);
-    await handleScore(r, 'normal');
+    const totalR = moreRunsSelected;
+
+    if (moreRunsReasonKey === 'WIDE' || finalReason.toLowerCase().includes('wide')) {
+      await handleScore(1, 'wide', {
+        runsExtras: totalR,
+        extraType: 'WIDE',
+        remarks: finalReason
+      });
+    } else if (moreRunsReasonKey === 'NO_BALL' || finalReason.toLowerCase().includes('no ball') || finalReason.toLowerCase().includes('noball')) {
+      await handleScore(Math.max(0, totalR - 1), 'noball', {
+        extraType: 'NO_BALL',
+        remarks: finalReason
+      });
+    } else if (moreRunsReasonKey === 'PENALTY' || finalReason.toLowerCase().includes('penalty')) {
+      await handleScore(0, 'normal', {
+        runsExtras: totalR,
+        extraType: 'PENALTY',
+        remarks: finalReason
+      });
+    } else {
+      await handleScore(totalR, 'normal', {
+        remarks: finalReason
+      });
+    }
+    setMoreRunsReasonKey('');
+    setMoreRunsReason('');
+    setCustomMoreRunsReason('');
+  };
+
+  const toggleOverthrowFielder = (playerName: string) => {
+    setSelectedOverthrowFielders((prev) =>
+      prev.includes(playerName) ? prev.filter((p) => p !== playerName) : [...prev, playerName]
+    );
   };
 
   const handleOverThrowSelect = async (r: number) => {
     setShowOverThrowModal(false);
     setCustomOverthrowInput('');
+    setIsOverthrowFielderDropdownOpen(false);
+
+    const fldNames = selectedOverthrowFielders.length > 0
+      ? selectedOverthrowFielders.join(', ')
+      : (bowler?.name || 'Fielding Side');
 
     // Trigger instant broadcast animation with Overthrow illustration
     setActiveFieldingEvent({
       type: 'OVERTHROW',
-      fielderName: bowler?.name || 'Fielding Side',
+      fielderName: fldNames,
       teamName: matchInfo?.bowlingTeam || 'Bowling Team',
       title: `OVERTHROW: +${r} EXTRA RUNS! ⚡`,
       badge: `+${r} RUNS CONCEDED`,
       stats: `MCC Law 19.8 • ${r} Extra Run${r > 1 ? 's' : ''}`,
-      details: `Stray throw missed stumps and keeper, allowing batters to complete ${r} overthrow run${r > 1 ? 's' : ''}!`,
+      details: `Stray throw by ${fldNames} missed stumps and keeper, allowing batters to complete ${r} overthrow run${r > 1 ? 's' : ''}!`,
       durationMs: 3500
     });
 
-    await handleScore(r, 'normal', { remarks: `Overthrow: ${r} runs` });
+    await handleScore(r, 'normal', {
+      remarks: `Overthrow: +${r} runs (throw by ${fldNames})`,
+      isOverthrow: true,
+      overthrowFielders: selectedOverthrowFielders,
+      fielderName: fldNames
+    });
+
+    setSelectedOverthrowFielders([]);
   };
 
   const handleExtrasSelect = async (extraTypeKey: string) => {
@@ -1713,8 +1821,7 @@ export default function LiveScoringScreen() {
     } else if (extraTypeKey === 'NO_BALL_BOUNCER') {
       await handleScore(0, 'noball', { noBallReason: 'BOUNCER', remarks: 'Bouncer limit exceeded (Law 41.6)' });
     } else if (extraTypeKey === 'DEAD_BALL') {
-      const msg = 'Dead Ball declared by Umpire (MCC Law 20). This delivery does not count and will be re-bowled.';
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Dead Ball (Law 20)', msg);
+      setShowDeadBallModal(true);
     } else if (extraTypeKey === 'BYE') {
       await handleScore(1, 'bye');
     } else if (extraTypeKey === 'LEG_BYE') {
@@ -2235,6 +2342,15 @@ export default function LiveScoringScreen() {
       if (f) bwlName = f.name;
     }
 
+    const oldBwlName = bowler?.name || 'Previous Bowler';
+    const oldBwlBalls = Number(bowler?.balls || 0);
+    const oldBwlOvers = `${Math.floor(oldBwlBalls / 6)}.${oldBwlBalls % 6}`;
+    const ballsInCurrentOver = balls % 6;
+    const remainingBalls = ballsInCurrentOver > 0 ? (6 - ballsInCurrentOver) : 6;
+    const nextBallNum = ballsInCurrentOver + 1;
+    const currOverNum = Math.floor(balls / 6) + 1;
+    const reasonTag = bowlerSituation.trim() || changeBowlerReason || 'Bowler Injured';
+
     setIsUpdatingBowler(true);
     try {
       const res = await ScorerApi.changeBowler(matchId, {
@@ -2251,12 +2367,18 @@ export default function LiveScoringScreen() {
       }
       setShowChangeBowlerModal(false);
       await loadLiveState(false);
-      const ballsInCurrentOver = balls % 6;
-      const sitTag = bowlerSituation.trim() ? ` [${bowlerSituation.trim()}]` : '';
-      const succMsg = ballsInCurrentOver > 0
-        ? `Bowler substituted! ${bwlName || 'New bowler'} will bowl the remaining ${6 - ballsInCurrentOver} ball(s)${sitTag}.`
-        : (res?.message || `Bowler updated to ${bwlName || 'new bowler'}${sitTag}.`);
-      Platform.OS === 'web' ? window.alert(succMsg) : Alert.alert('Bowler Changed', succMsg);
+
+      setBowlerSubstitutedData({
+        oldBowlerName: oldBwlName,
+        newBowlerName: bwlName || 'New Bowler',
+        reason: reasonTag,
+        ballsBowledByOldBowler: ballsInCurrentOver,
+        oversBowledByOldBowler: oldBwlOvers,
+        remainingBallsInOver: remainingBalls,
+        currentOverNumber: currOverNum,
+        ballToBowlNext: nextBallNum
+      });
+      setShowBowlerSubstitutedModal(true);
     } catch (err: any) {
       const msg = err.message || 'Failed to change bowler.';
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
@@ -2703,6 +2825,9 @@ export default function LiveScoringScreen() {
     setEditExtraType(del.extraType || (del.extra ? del.extra : 'NONE'));
     setEditWicket(Boolean(del.wicket));
     setEditWicketType(del.wicketType || 'BOWLED');
+    setEditShotZone(del.shotZone || del.shot_zone || 'Cover');
+    setEditFielderName(del.fielderName || del.fielder_name || '');
+    setEditDismissedPlayer(del.dismissedPlayerId && del.dismissedPlayerId === del.nonStrikerId ? 'NON_STRIKER' : 'STRIKER');
     setShowEditDeliveryModal(true);
   };
 
@@ -2710,20 +2835,69 @@ export default function LiveScoringScreen() {
     if (!editingDelivery) return;
     setIsSubmittingEditDelivery(true);
     try {
-      const extraRuns = (editExtraType === 'WIDE' || editExtraType === 'NO_BALL') ? 1 : 0;
+      let rBat = 0;
+      let rExt = 0;
+      if (editExtraType === 'WIDE') {
+        rBat = 0;
+        rExt = editRunsInput > 0 ? editRunsInput : 1;
+      } else if (editExtraType === 'NO_BALL') {
+        rBat = editRunsInput;
+        rExt = 1;
+      } else if (editExtraType === 'BYE' || editExtraType === 'LEG_BYE') {
+        rBat = 0;
+        rExt = editRunsInput;
+      } else {
+        rBat = editRunsInput;
+        rExt = 0;
+      }
+
+      const dismissedId = editWicket ? (
+        editDismissedPlayer === 'NON_STRIKER'
+          ? (editingDelivery.nonStrikerId || nonStriker?.id)
+          : (editingDelivery.strikerId || striker?.id)
+      ) : null;
+
       const payload = {
-        runsBatter: editRunsInput,
-        runsExtras: extraRuns,
+        runsBatter: rBat,
+        runsExtras: rExt,
         extraType: editExtraType,
         wicket: editWicket,
-        wicketType: editWicket ? editWicketType : null
+        wicketType: editWicket ? editWicketType : null,
+        shotZone: editShotZone,
+        fielderName: editFielderName.trim() || null,
+        dismissedPlayerId: dismissedId
       };
       await ScorerApi.editDelivery(matchId, editingDelivery.id, payload);
+      
+      const isWkt = Boolean(payload.wicket);
+      const isWd = payload.extraType === 'WIDE';
+      const isNb = payload.extraType === 'NO_BALL';
+      const textVal = isWkt ? 'W' : (isWd ? 'WD' : (isNb ? 'NB' : (payload.runsBatter + (payload.runsExtras || 0))));
+
+      const updatedDel = {
+        ...editingDelivery,
+        runs: payload.runsBatter,
+        runsBatter: payload.runsBatter,
+        runsExtras: payload.runsExtras,
+        totalRuns: payload.runsBatter + (payload.runsExtras || 0),
+        wicket: isWkt,
+        wicketType: payload.wicket ? payload.wicketType : null,
+        wicket_type: payload.wicket ? payload.wicketType : null,
+        extraType: payload.extraType,
+        extra_type: payload.extraType,
+        extra: payload.extraType !== 'NONE' ? payload.extraType : null,
+        shotZone: payload.shotZone,
+        shot_zone: payload.shotZone,
+        fielderName: payload.fielderName,
+        dismissedPlayerId: payload.dismissedPlayerId,
+        text: textVal
+      };
+
+      setRecentDeliveries(prev => prev.map(item => (item.id === editingDelivery.id ? updatedDel : item)));
       setShowEditDeliveryModal(false);
       setEditingDelivery(null);
       await loadLiveState(false);
-      const msg = `Delivery ${editingDelivery.ball} corrected successfully! Scores and figures updated.`;
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Ball Corrected', msg);
+      setInspectingDelivery(updatedDel);
     } catch (err: any) {
       const msg = err.message || 'Failed to update delivery.';
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
@@ -5015,7 +5189,7 @@ export default function LiveScoringScreen() {
       })()}
 
 
-      {/* 15. MORE RUNS MODAL (Image 2 Slide 3) */}
+      {/* 15. MORE RUNS MODAL (Enhanced with Reason Selector & Custom Input) */}
       <Modal
         visible={showMoreRunsModal}
         transparent
@@ -5023,32 +5197,271 @@ export default function LiveScoringScreen() {
         onRequestClose={() => setShowMoreRunsModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 360 }]}>
+          <View style={[styles.modalContent, { maxWidth: 440, width: '92%', borderRadius: 16, borderWidth: 1.5, borderColor: '#3b82f6', padding: 18 }]}>
             <View style={styles.revisedModalHeader}>
-              <Text style={styles.revisedModalTitle}>MORE RUNS</Text>
-              <TouchableOpacity style={styles.redCloseBtn} onPress={() => setShowMoreRunsModal(false)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 18 }}>🏃</Text>
+                <Text style={[styles.revisedModalTitle, { color: '#1e40af' }]}>MORE RUNS OFF DELIVERY</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.redCloseBtn}
+                onPress={() => {
+                  setMoreRunsReasonKey('');
+                  setMoreRunsReason('');
+                  setCustomMoreRunsReason('');
+                  setShowMoreRunsModal(false);
+                }}
+              >
                 <Text style={styles.redCloseBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.revisedModalInfo}>
-              Select higher run value to award off the delivery:
+
+            <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 12, fontWeight: '500' }}>
+              Select run value and specific delivery reason (e.g. Wide + 4 boundary, overthrows, penalties):
             </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14, justifyContent: 'center' }}>
-              {[5, 7, 8, 9, 10, 11].map((r) => (
-                <TouchableOpacity
-                  key={`more-${r}`}
-                  style={[styles.scoreBtn, styles.scoreBtnNormal, { width: 90, height: 60, margin: 4 }]}
-                  onPress={() => handleMoreRunsSelect(r)}
-                >
-                  <Text style={[styles.scoreBtnText, styles.scoreBtnTextNormal]}>{r}</Text>
-                </TouchableOpacity>
-              ))}
+
+            {/* Quick Run Selection Buttons */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#1e293b', textTransform: 'uppercase', marginBottom: 6 }}>
+              1. SELECT RUNS TO AWARD:
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              {[5, 7, 8, 9, 10, 11].map((r) => {
+                const isSelected = moreRunsSelected === r;
+                return (
+                  <TouchableOpacity
+                    key={`more-${r}`}
+                    style={{
+                      width: 54,
+                      height: 42,
+                      borderRadius: 8,
+                      backgroundColor: isSelected ? '#2563eb' : '#f1f5f9',
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? '#1d4ed8' : '#cbd5e1',
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}
+                    onPress={() => handleMoreRunsSelect(r)}
+                  >
+                    <Text style={{ fontSize: 17, fontWeight: '900', color: isSelected ? '#ffffff' : '#1e293b' }}>{r}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Reason Selection Options */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#1e293b', textTransform: 'uppercase', marginBottom: 6 }}>
+              2. SELECT DELIVERY REASON:
+            </Text>
+            <View style={{ gap: 6, marginBottom: 12 }}>
+              {[
+                { key: 'WIDE', label: `Wide + ${moreRunsSelected - 1} (Overthrow/Boundary)` },
+                { key: 'NO_BALL', label: `No Ball + ${moreRunsSelected - 1} (Bat Boundary)` },
+                { key: 'OVERTHROW', label: `${moreRunsSelected} Overthrow Runs (All Extras)` },
+                { key: 'RUNNING', label: `${moreRunsSelected} Running Runs (Between Wickets)` },
+                { key: 'PENALTY', label: `Penalty 5 Runs (Law 28 - Helmet Hit)` }
+              ].map((reasonItem) => {
+                const isSelected = moreRunsReasonKey === reasonItem.key;
+                return (
+                  <TouchableOpacity
+                    key={`reason-opt-${reasonItem.key}`}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingVertical: 7,
+                      paddingHorizontal: 10,
+                      borderRadius: 8,
+                      backgroundColor: isSelected ? '#eff6ff' : '#f8fafc',
+                      borderWidth: 1.2,
+                      borderColor: isSelected ? '#3b82f6' : '#e2e8f0'
+                    }}
+                    onPress={() => {
+                      setMoreRunsReasonKey(reasonItem.key);
+                      setMoreRunsReason(reasonItem.label);
+                      setCustomMoreRunsReason('');
+                    }}
+                  >
+                    <View style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 8,
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? '#2563eb' : '#94a3b8',
+                      backgroundColor: isSelected ? '#2563eb' : '#ffffff',
+                      marginRight: 8,
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}>
+                      {isSelected && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#ffffff' }} />}
+                    </View>
+                    <Text style={{ fontSize: 12, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#1d4ed8' : '#334155' }}>
+                      {reasonItem.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Custom Reason Input (Last entry) */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>
+              ✍️ OR TYPE CUSTOM REASON:
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: '#ffffff',
+                borderWidth: 1.2,
+                borderColor: customMoreRunsReason.trim() ? '#2563eb' : '#cbd5e1',
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                fontSize: 12.5,
+                color: '#0f172a',
+                marginBottom: 14
+              }}
+              placeholder="e.g. Overthrow + boundary 4, short run, misfield..."
+              placeholderTextColor="#94a3b8"
+              value={customMoreRunsReason}
+              onChangeText={(text) => {
+                setCustomMoreRunsReason(text);
+                if (text.trim()) {
+                  setMoreRunsReasonKey('');
+                  setMoreRunsReason('');
+                }
+              }}
+            />
+
+            {/* Confirm Submit Button - Strictly Disabled until Reason is chosen or typed */}
+            {(() => {
+              const hasReason = Boolean(customMoreRunsReason.trim() || moreRunsReasonKey || moreRunsReason);
+              return (
+                <View>
+                  <TouchableOpacity
+                    disabled={!hasReason}
+                    style={{
+                      backgroundColor: hasReason ? '#2563eb' : '#94a3b8',
+                      borderRadius: 10,
+                      paddingVertical: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: hasReason ? 1 : 0.65
+                    }}
+                    onPress={handleAwardMoreRuns}
+                    activeOpacity={hasReason ? 0.85 : 1}
+                  >
+                    <Text style={{ color: '#ffffff', fontSize: 13.5, fontWeight: '900', letterSpacing: 0.5 }}>
+                      {hasReason ? `Award ${moreRunsSelected} Runs ✓` : `Select or Type a Reason to Award ${moreRunsSelected} Runs`}
+                    </Text>
+                  </TouchableOpacity>
+                  {!hasReason && (
+                    <Text style={{ fontSize: 11, color: '#ef4444', textAlign: 'center', marginTop: 6, fontWeight: '600' }}>
+                      * Please select a reason above or type a custom reason to enable run awarding.
+                    </Text>
+                  )}
+                </View>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+
+      {/* BOWLER SUBSTITUTED DEDICATED VISUAL MODAL (MCC LAW 2.3 & 17.8) */}
+      <Modal
+        visible={showBowlerSubstitutedModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBowlerSubstitutedModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 440, width: '92%', padding: 0, overflow: 'hidden', borderRadius: 16, borderWidth: 1.5, borderColor: '#f59e0b' }]}>
+            {/* 16:9 Banner Image */}
+            <View style={{ width: '100%', height: 180, position: 'relative', backgroundColor: '#0f172a' }}>
+              <Image
+                source={require('../../../assets/popups/popup_bowled.jpg')}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
+              />
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.45)' }} />
+              
+              {/* Top Left Badge */}
+              <View style={{ position: 'absolute', top: 12, left: 12, backgroundColor: '#dc2626', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#fca5a5' }}>
+                <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 }}>MCC LAW 2.3 & 17.8</Text>
+              </View>
+
+              {/* Close Button */}
+              <TouchableOpacity
+                style={{ position: 'absolute', top: 10, right: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}
+                onPress={() => setShowBowlerSubstitutedModal(false)}
+              >
+                <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
+
+              {/* Banner Floating Title */}
+              <View style={{ position: 'absolute', bottom: 12, left: 14, right: 14 }}>
+                <View style={{ backgroundColor: '#f59e0b', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 4 }}>
+                  <Text style={{ color: '#1e293b', fontSize: 10, fontWeight: '900' }}>⚡ {bowlerSubstitutedData?.reason || 'BOWLER INJURED'}</Text>
+                </View>
+                <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '900', textShadowColor: '#000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}>
+                  BOWLER SUBSTITUTED
+                </Text>
+              </View>
+            </View>
+
+            {/* Modal Body with Old Bowler & New Bowler Cards */}
+            <View style={{ padding: 16 }}>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                {/* Old Bowler Card */}
+                <View style={{ flex: 1, backgroundColor: '#fef2f2', borderColor: '#fecaca', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#b91c1c', marginBottom: 4 }}>OUTGOING BOWLER</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '900', color: '#1e293b', marginBottom: 6 }} numberOfLines={1}>
+                    {bowlerSubstitutedData?.oldBowlerName}
+                  </Text>
+                  <View style={{ gap: 2 }}>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Ov Bowled: <Text style={{ fontWeight: '800', color: '#0f172a' }}>{bowlerSubstitutedData?.oversBowledByOldBowler} Ov</Text>
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Over {bowlerSubstitutedData?.currentOverNumber}: <Text style={{ fontWeight: '800', color: '#dc2626' }}>{bowlerSubstitutedData?.ballsBowledByOldBowler} balls bowled</Text>
+                    </Text>
+                  </View>
+                </View>
+
+                {/* New Bowler Card */}
+                <View style={{ flex: 1, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#15803d', marginBottom: 4 }}>INCOMING BOWLER</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '900', color: '#1e293b', marginBottom: 6 }} numberOfLines={1}>
+                    {bowlerSubstitutedData?.newBowlerName}
+                  </Text>
+                  <View style={{ gap: 2 }}>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Next Ball: <Text style={{ fontWeight: '800', color: '#16a34a' }}>Ball {bowlerSubstitutedData?.ballToBowlNext} of Ov {bowlerSubstitutedData?.currentOverNumber}</Text>
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Remaining: <Text style={{ fontWeight: '800', color: '#0f172a' }}>{bowlerSubstitutedData?.remainingBallsInOver} balls to bowl</Text>
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Cricket Rule Explanatory Banner */}
+              <View style={{ backgroundColor: '#fffbeb', borderColor: '#fef3c7', borderWidth: 1, borderRadius: 8, padding: 9, marginBottom: 14 }}>
+                <Text style={{ fontSize: 11, color: '#92400e', lineHeight: 15, fontWeight: '500' }}>
+                  ⚖️ <Text style={{ fontWeight: '800' }}>Law 2.3 & 17.8:</Text> If a bowler is injured/unable to bowl, the substitute completes the over. Neither bowler may bowl the next consecutive over.
+                </Text>
+              </View>
+
+              {/* Confirm OK Button */}
+              <TouchableOpacity
+                style={{ backgroundColor: '#f59e0b', borderRadius: 10, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}
+                onPress={() => setShowBowlerSubstitutedModal(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={{ color: '#1e293b', fontSize: 13.5, fontWeight: '900', letterSpacing: 0.5 }}>Understood / Continue Scoring ✓</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* 16. OVER THROW RUNS MODAL (1 to 5 buttons + Custom Input for 6+) */}
+      {/* 16. OVER THROW RUNS MODAL (1 to 5 buttons + Custom Input for 6+ with Multi-Fielder Checkbox Selector) */}
       <Modal
         visible={showOverThrowModal}
         transparent
@@ -5056,10 +5469,11 @@ export default function LiveScoringScreen() {
         onRequestClose={() => {
           setShowOverThrowModal(false);
           setCustomOverthrowInput('');
+          setIsOverthrowFielderDropdownOpen(false);
         }}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 440, width: '92%', borderRadius: 16, borderWidth: 1.5, borderColor: '#f59e0b', padding: 18 }]}>
+          <View style={[styles.modalContent, { maxWidth: 460, width: '94%', maxHeight: '90%', borderRadius: 16, borderWidth: 1.5, borderColor: '#f59e0b', padding: 18 }]}>
             <View style={styles.revisedModalHeader}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.revisedModalTitle}>OVER THROW RUNS</Text>
@@ -5072,29 +5486,352 @@ export default function LiveScoringScreen() {
                 onPress={() => {
                   setShowOverThrowModal(false);
                   setCustomOverthrowInput('');
+                  setIsOverthrowFielderDropdownOpen(false);
                 }}
               >
                 <Text style={styles.redCloseBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Overthrow Broadcast Illustration Card */}
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
+              {/* Overthrow Broadcast Illustration Card */}
+              <View style={{
+                marginTop: 10,
+                marginBottom: 12,
+                borderRadius: 12,
+                overflow: 'hidden',
+                backgroundColor: '#fffbeb',
+                borderWidth: 1.5,
+                borderColor: '#fde68a',
+                shadowColor: '#d97706',
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: 0.15,
+                shadowRadius: 6,
+                elevation: 3
+              }}>
+                <Image
+                  source={overthrowImage}
+                  style={{
+                    width: '100%',
+                    height: 140,
+                    resizeMode: 'cover'
+                  }}
+                />
+                <View style={{
+                  position: 'absolute',
+                  top: 8,
+                  left: 8,
+                  backgroundColor: 'rgba(217, 119, 6, 0.92)',
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 6
+                }}>
+                  <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 }}>
+                    ⚡ MCC LAW 19.8 • OVERTHROW
+                  </Text>
+                </View>
+                <View style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  backgroundColor: 'rgba(15, 23, 42, 0.78)',
+                  paddingVertical: 5,
+                  paddingHorizontal: 10
+                }}>
+                  <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700', textAlign: 'center' }}>
+                    🏃 Batters sprinting extra runs on missed throw to stumps / keeper
+                  </Text>
+                </View>
+              </View>
+
+              {/* OVERTHROW FIELDERS MULTI-SELECT DROPDOWN */}
+              <View style={{
+                marginBottom: 14,
+                backgroundColor: '#fffdf5',
+                borderColor: '#fef08a',
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 10
+              }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#854d0e', textTransform: 'uppercase' }}>
+                    🎯 FIELDER(S) INVOLVED IN OVERTHROW:
+                  </Text>
+                  {selectedOverthrowFielders.length > 0 && (
+                    <TouchableOpacity onPress={() => setSelectedOverthrowFielders([])}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: '#dc2626' }}>Clear all</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Dropdown Toggle Pill */}
+                <TouchableOpacity
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: '#ffffff',
+                    borderColor: '#f59e0b',
+                    borderWidth: 1.5,
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10
+                  }}
+                  onPress={() => setIsOverthrowFielderDropdownOpen(!isOverthrowFielderDropdownOpen)}
+                  activeOpacity={0.8}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                    <Text style={{ fontSize: 15, marginRight: 6 }}>🧤</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: selectedOverthrowFielders.length > 0 ? '#92400e' : '#64748b' }} numberOfLines={1}>
+                      {selectedOverthrowFielders.length === 0
+                        ? 'Select fielder(s) who made the throw...'
+                        : `${selectedOverthrowFielders.length} Fielder${selectedOverthrowFielders.length > 1 ? 's' : ''} Selected`}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {selectedOverthrowFielders.length > 0 && (
+                      <View style={{ backgroundColor: '#d97706', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 }}>
+                        <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '900' }}>{selectedOverthrowFielders.length}</Text>
+                      </View>
+                    )}
+                    <Text style={{ fontSize: 13, color: '#b45309', fontWeight: 'bold' }}>
+                      {isOverthrowFielderDropdownOpen ? '▲' : '▼'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Selected Fielders Chip Badges */}
+                {selectedOverthrowFielders.length > 0 && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    {selectedOverthrowFielders.map((fName) => (
+                      <TouchableOpacity
+                        key={`ot-chip-${fName}`}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: '#fef3c7',
+                          borderColor: '#f59e0b',
+                          borderWidth: 1,
+                          borderRadius: 14,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          gap: 5
+                        }}
+                        onPress={() => toggleOverthrowFielder(fName)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>🧤 {fName}</Text>
+                        <Text style={{ fontSize: 11, fontWeight: '900', color: '#dc2626' }}>✕</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                {/* Expanded Dropdown List of Fielders with Checkboxes */}
+                {isOverthrowFielderDropdownOpen && (
+                  <View style={{
+                    marginTop: 8,
+                    maxHeight: 180,
+                    backgroundColor: '#ffffff',
+                    borderColor: '#fcd34d',
+                    borderWidth: 1.5,
+                    borderRadius: 10,
+                    padding: 6,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3
+                  }}>
+                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={true}>
+                      {((bowlingSquad && bowlingSquad.length > 0 ? bowlingSquad : (matchInfo?.teamBPlayers || matchInfo?.teamAPlayers || [])) as any[]).map((player: any) => {
+                        const playerName = player.name || player.player_name || `Player ${player.id || ''}`;
+                        const isSelected = selectedOverthrowFielders.includes(playerName);
+                        return (
+                          <TouchableOpacity
+                            key={`ot-fld-chk-${player.id || playerName}`}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              paddingVertical: 8,
+                              paddingHorizontal: 10,
+                              borderRadius: 6,
+                              backgroundColor: isSelected ? '#fef3c7' : 'transparent',
+                              borderBottomWidth: 0.5,
+                              borderBottomColor: '#f1f5f9'
+                            }}
+                            onPress={() => toggleOverthrowFielder(playerName)}
+                            activeOpacity={0.7}
+                          >
+                            {/* Checkbox Icon */}
+                            <View style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: 4,
+                              borderWidth: 1.8,
+                              borderColor: isSelected ? '#d97706' : '#94a3b8',
+                              backgroundColor: isSelected ? '#d97706' : '#ffffff',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              marginRight: 10
+                            }}>
+                              {isSelected && (
+                                <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '900', lineHeight: 14 }}>✓</Text>
+                              )}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{
+                                fontSize: 13,
+                                fontWeight: isSelected ? '800' : '600',
+                                color: isSelected ? '#92400e' : '#1e293b'
+                              }}>
+                                {playerName}
+                              </Text>
+                              {player.role && (
+                                <Text style={{ fontSize: 10, color: '#64748b' }}>
+                                  {player.role}
+                                </Text>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              {/* Quick 1 to 5 Buttons */}
+              <Text style={{ fontSize: 11, fontWeight: '800', color: '#854d0e', textTransform: 'uppercase', marginBottom: 6 }}>
+                QUICK OVERTHROW RUNS:
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6 }}>
+                {[1, 2, 3, 4, 5].map((r) => (
+                  <TouchableOpacity
+                    key={`ot-${r}`}
+                    style={[
+                      styles.scoreBtn,
+                      {
+                        backgroundColor: '#fef3c7',
+                        borderColor: '#f59e0b',
+                        borderWidth: 1.5,
+                        flex: 1,
+                        height: 50,
+                        marginHorizontal: 2,
+                        borderRadius: 10,
+                        shadowColor: '#d97706',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.15,
+                        shadowRadius: 3,
+                        elevation: 2
+                      }
+                    ]}
+                    onPress={() => handleOverThrowSelect(r)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.scoreBtnText, { color: '#b45309', fontSize: 17, fontWeight: '900' }]}>+{r}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Custom Input Box for 6 or more runs */}
+              <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 12 }}>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Or Type Custom Overthrow Runs (6+ or more):
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                  <TextInput
+                    style={{
+                      flex: 1,
+                      height: 48,
+                      fontSize: 16,
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                      backgroundColor: '#ffffff',
+                      borderColor: customOverthrowInput ? '#d97706' : '#cbd5e1',
+                      borderWidth: 1.5,
+                      borderRadius: 8,
+                      paddingHorizontal: 10,
+                      color: '#0f172a'
+                    }}
+                    value={customOverthrowInput}
+                    onChangeText={(val) => setCustomOverthrowInput(val.replace(/\D/g, ''))}
+                    placeholder="Enter runs (e.g. 6)"
+                    keyboardType="number-pad"
+                    placeholderTextColor="#94a3b8"
+                    maxLength={2}
+                  />
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: customOverthrowInput.trim() ? '#d97706' : '#cbd5e1',
+                      paddingHorizontal: 18,
+                      height: 48,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      borderRadius: 8
+                    }}
+                    disabled={!customOverthrowInput.trim()}
+                    onPress={() => {
+                      const parsed = parseInt(customOverthrowInput.trim(), 10);
+                      if (!isNaN(parsed) && parsed > 0) {
+                        handleOverThrowSelect(parsed);
+                      }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>
+                      Add Runs ↵
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 16B. DEAD BALL MODAL (MCC LAW 20) with Broadcast Illustration Card */}
+      <Modal
+        visible={showDeadBallModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDeadBallModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 440, width: '92%', borderRadius: 16, borderWidth: 1.5, borderColor: '#64748b', padding: 18 }]}>
+            <View style={styles.revisedModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.revisedModalTitle, { color: '#0f172a' }]}>DEAD BALL (MCC LAW 20)</Text>
+                <Text style={[styles.revisedModalInfo, { marginTop: 2, color: '#475569' }]}>
+                  Umpire Declares Dead Ball • Delivery Does Not Count
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.redCloseBtn}
+                onPress={() => setShowDeadBallModal(false)}
+              >
+                <Text style={styles.redCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Dead Ball Broadcast Illustration Card */}
             <View style={{
               marginTop: 10,
               marginBottom: 12,
               borderRadius: 12,
               overflow: 'hidden',
-              backgroundColor: '#fffbeb',
+              backgroundColor: '#f8fafc',
               borderWidth: 1.5,
-              borderColor: '#fde68a',
-              shadowColor: '#d97706',
+              borderColor: '#cbd5e1',
+              shadowColor: '#475569',
               shadowOffset: { width: 0, height: 3 },
               shadowOpacity: 0.15,
               shadowRadius: 6,
               elevation: 3
             }}>
               <Image
-                source={overthrowImage}
+                source={deadBallImage}
                 style={{
                   width: '100%',
                   height: 145,
@@ -5105,13 +5842,13 @@ export default function LiveScoringScreen() {
                 position: 'absolute',
                 top: 8,
                 left: 8,
-                backgroundColor: 'rgba(217, 119, 6, 0.92)',
+                backgroundColor: 'rgba(15, 23, 42, 0.88)',
                 paddingHorizontal: 8,
                 paddingVertical: 3,
                 borderRadius: 6
               }}>
                 <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 }}>
-                  ⚡ MCC LAW 19.8 • OVERTHROW
+                  🛑 MCC LAW 20 • DEAD BALL
                 </Text>
               </View>
               <View style={{
@@ -5124,95 +5861,102 @@ export default function LiveScoringScreen() {
                 paddingHorizontal: 10
               }}>
                 <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700', textAlign: 'center' }}>
-                  🏃 Batters sprinting extra runs on missed throw to stumps / keeper
+                  🚫 Umpire crossed arms signal • Play ceased immediately
                 </Text>
               </View>
             </View>
 
-            {/* Quick 1 to 5 Buttons */}
-            <Text style={{ fontSize: 11, fontWeight: '800', color: '#854d0e', textTransform: 'uppercase', marginBottom: 6 }}>
-              QUICK OVERTHROW RUNS:
+            {/* Context Info */}
+            <View style={{
+              backgroundColor: '#f1f5f9',
+              borderRadius: 10,
+              padding: 10,
+              marginBottom: 12,
+              borderLeftWidth: 4,
+              borderLeftColor: '#475569'
+            }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#0f172a' }}>
+                🛑 Dead Ball Called by On-Field Umpire
+              </Text>
+              <Text style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>
+                Bowler: <Text style={{ fontWeight: '700' }}>{bowler?.name || 'Bowler'}</Text> • Striker: <Text style={{ fontWeight: '700' }}>{striker?.name || 'Striker'}</Text>
+              </Text>
+              <Text style={{ fontSize: 11, color: '#334155', marginTop: 4, fontStyle: 'italic' }}>
+                Reason: {deadBallReason}
+              </Text>
+            </View>
+
+            {/* Quick Reason Selection */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: 6 }}>
+              SELECT DEAD BALL REASON:
             </Text>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6 }}>
-              {[1, 2, 3, 4, 5].map((r) => (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+              {[
+                'Bowler aborted run-up',
+                'Batter not ready',
+                'Foreign object on pitch',
+                'Player injury delay',
+                'Umpire intervention'
+              ].map((reason) => (
                 <TouchableOpacity
-                  key={`ot-${r}`}
-                  style={[
-                    styles.scoreBtn,
-                    {
-                      backgroundColor: '#fef3c7',
-                      borderColor: '#f59e0b',
-                      borderWidth: 1.5,
-                      flex: 1,
-                      height: 50,
-                      marginHorizontal: 2,
-                      borderRadius: 10,
-                      shadowColor: '#d97706',
-                      shadowOffset: { width: 0, height: 2 },
-                      shadowOpacity: 0.15,
-                      shadowRadius: 3,
-                      elevation: 2
-                    }
-                  ]}
-                  onPress={() => handleOverThrowSelect(r)}
-                  activeOpacity={0.75}
+                  key={`db-${reason}`}
+                  style={{
+                    backgroundColor: deadBallReason === reason ? '#0f172a' : '#f8fafc',
+                    borderColor: deadBallReason === reason ? '#0f172a' : '#cbd5e1',
+                    borderWidth: 1,
+                    borderRadius: 16,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5
+                  }}
+                  onPress={() => setDeadBallReason(reason)}
+                  activeOpacity={0.7}
                 >
-                  <Text style={[styles.scoreBtnText, { color: '#b45309', fontSize: 17, fontWeight: '900' }]}>+{r}</Text>
+                  <Text style={{
+                    fontSize: 11,
+                    fontWeight: deadBallReason === reason ? '800' : '600',
+                    color: deadBallReason === reason ? '#ffffff' : '#334155'
+                  }}>
+                    {reason}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* Custom Input Box for 6 or more runs */}
-            <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 12 }}>
-              <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>
-                Or Type Custom Overthrow Runs (6+ or more):
+            {/* Official Rule Tip */}
+            <View style={{
+              backgroundColor: '#fef3c7',
+              borderColor: '#fde68a',
+              borderWidth: 1,
+              borderRadius: 8,
+              padding: 8,
+              marginBottom: 14
+            }}>
+              <Text style={{ fontSize: 11, color: '#92400e', lineHeight: 15 }}>
+                💡 <Text style={{ fontWeight: '800' }}>MCC Law 20 Rule:</Text> No runs can be scored, no wicket can fall, and this ball does NOT count toward the 6 legal balls of the over. The ball will be re-bowled.
               </Text>
-              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-                <TextInput
-                  style={{
-                    flex: 1,
-                    height: 48,
-                    fontSize: 16,
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    backgroundColor: '#ffffff',
-                    borderColor: customOverthrowInput ? '#d97706' : '#cbd5e1',
-                    borderWidth: 1.5,
-                    borderRadius: 8,
-                    paddingHorizontal: 10,
-                    color: '#0f172a'
-                  }}
-                  value={customOverthrowInput}
-                  onChangeText={(val) => setCustomOverthrowInput(val.replace(/\D/g, ''))}
-                  placeholder="Enter runs (e.g. 6)"
-                  keyboardType="number-pad"
-                  placeholderTextColor="#94a3b8"
-                  maxLength={2}
-                />
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: customOverthrowInput.trim() ? '#d97706' : '#cbd5e1',
-                    paddingHorizontal: 18,
-                    height: 48,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    borderRadius: 8
-                  }}
-                  disabled={!customOverthrowInput.trim()}
-                  onPress={() => {
-                    const parsed = parseInt(customOverthrowInput.trim(), 10);
-                    if (!isNaN(parsed) && parsed > 0) {
-                      handleOverThrowSelect(parsed);
-                    }
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>
-                    Add Runs ↵
-                  </Text>
-                </TouchableOpacity>
-              </View>
             </View>
+
+            {/* Primary Action Button */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#f59e0b',
+                borderRadius: 10,
+                paddingVertical: 13,
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#d97706',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+                elevation: 3
+              }}
+              onPress={() => setShowDeadBallModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: '#ffffff', fontWeight: '900', fontSize: 14, letterSpacing: 0.5 }}>
+                ✓ OK, RE-BOWL DELIVERY
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -6413,31 +7157,7 @@ export default function LiveScoringScreen() {
                             if (isEditMode) {
                               handleOpenEditDelivery(del);
                             } else {
-                              // Check if delivery matches an official umpire signal
-                              const dt = (del.text || '').toUpperCase();
-                              let sigType: UmpireSignalType | null = null;
-                              if (isWicket || (dt.includes('W') && !dt.includes('WD'))) sigType = 'OUT';
-                              else if (dt.includes('WD')) sigType = 'WIDE';
-                              else if (dt.includes('NB')) sigType = 'NO_BALL';
-                              else if (dt.includes('DEAD')) sigType = 'DEAD_BALL';
-                              else if (dt.includes('LB')) sigType = 'LEG_BYE';
-                              else if (dt.includes('B') && !dt.includes('NB')) sigType = 'BYE';
-                              else if (isSix || dt === '6') sigType = 'SIX';
-                              else if (isFour || dt === '4') sigType = 'FOUR';
-
-                              if (sigType) {
-                                setActiveUmpireSignal({
-                                  type: sigType,
-                                  batterName: del.strikerName || striker?.name,
-                                  bowlerName: del.bowlerName || bowler?.name,
-                                  runs: del.runs,
-                                  overText: `Ball ${del.ball}`,
-                                  extraDetails: del.commentary || `Delivery ${del.ball}: ${del.text} • Click 'Edit Mode' to alter historical ball`
-                                });
-                              } else {
-                                const info = `Ball ${del.ball}: ${del.text} • ${del.commentary || 'Recorded delivery'}\n\nTip: Activate 'Edit Mode' in the sidebar or top banner to modify past deliveries directly.`;
-                                Platform.OS === 'web' ? window.alert(info) : Alert.alert('Delivery Details', info);
-                              }
+                              setInspectingDelivery(del);
                             }
                           }}
                           activeOpacity={0.7}
@@ -6653,7 +7373,12 @@ export default function LiveScoringScreen() {
                   <View style={styles.engineKeypadRow}>
                     <TouchableOpacity
                       style={[styles.engineKeypadBtn, styles.engineAuxKeypadBtn]}
-                      onPress={() => setShowMoreRunsModal(true)}
+                      onPress={() => {
+                        setMoreRunsReasonKey('');
+                        setMoreRunsReason('');
+                        setCustomMoreRunsReason('');
+                        setShowMoreRunsModal(true);
+                      }}
                       activeOpacity={0.7}
                     >
                       <Text style={styles.engineAuxKeypadText}>MORE RUNS</Text>
@@ -8188,6 +8913,54 @@ export default function LiveScoringScreen() {
         </View>
       </Modal>
 
+      {/* DELIVERY INSPECTION & SHOT DETAILS MODAL (Ball Click Visual Breakdown) */}
+      {(() => {
+        if (!inspectingDelivery) return null;
+
+        // Calculate ground-truth score at the time of this delivery
+        let scoreAtBall = `${runs}/${wickets} (${getOvers(balls)} Ov)`;
+        const delIndex = recentDeliveries.findIndex(d => 
+          (d.id && inspectingDelivery.id && d.id === inspectingDelivery.id) || 
+          (d.ball === inspectingDelivery.ball && d.overNumber === inspectingDelivery.overNumber)
+        );
+        if (delIndex > 0) {
+          let laterRuns = 0;
+          let laterWkts = 0;
+          for (let i = 0; i < delIndex; i++) {
+            const d = recentDeliveries[i];
+            laterRuns += (Number(d.runsBatter ?? d.runs ?? 0) + Number(d.runsExtras ?? d.runs_extras ?? 0));
+            if (d.wicket && d.wicketType !== 'RETIRED_HURT') laterWkts += 1;
+          }
+          const ballRuns = Math.max(0, runs - laterRuns);
+          const ballWkts = Math.max(0, wickets - laterWkts);
+          const ballOv = inspectingDelivery.ball || (inspectingDelivery.overNumber !== undefined ? `${inspectingDelivery.overNumber}.${inspectingDelivery.ballNumber}` : getOvers(balls));
+          scoreAtBall = `${ballRuns}/${ballWkts} (${ballOv} Ov)`;
+        } else if (delIndex === 0) {
+          const ballOv = inspectingDelivery.ball || getOvers(balls);
+          scoreAtBall = `${runs}/${wickets} (${ballOv} Ov)`;
+        } else if (inspectingDelivery.scoreAtDelivery || inspectingDelivery.matchScore) {
+          scoreAtBall = inspectingDelivery.scoreAtDelivery || inspectingDelivery.matchScore;
+        }
+
+        return (
+          <DeliveryInspectionModal
+            visible={Boolean(inspectingDelivery)}
+            delivery={inspectingDelivery}
+            onClose={() => setInspectingDelivery(null)}
+            onEdit={(del) => {
+              setInspectingDelivery(null);
+              handleOpenEditDelivery(del);
+            }}
+            strikerName={inspectingDelivery?.strikerName || striker?.name}
+            nonStrikerName={inspectingDelivery?.nonStrikerName || nonStriker?.name}
+            bowlerName={inspectingDelivery?.bowlerName || bowler?.name}
+            fielderName={inspectingDelivery?.fielderName}
+            currentScore={scoreAtBall}
+            battingTeamName={matchInfo?.battingTeam || matchInfo?.teamA || 'Batting Team'}
+          />
+        );
+      })()}
+
       {/* RETROACTIVE DELIVERY CORRECTION MODAL (Edit Mode Direct Ball Edit) */}
       <Modal
         visible={showEditDeliveryModal}
@@ -8279,6 +9052,31 @@ export default function LiveScoringScreen() {
                   ))}
                 </View>
 
+                {/* WAGON WHEEL / SHOT ZONE */}
+                <Text style={styles.editSectionLabel}>Wagon Wheel Shot Direction:</Text>
+                <View style={styles.editShotZoneGrid}>
+                  {['Cover', 'Extra Cover', 'Long-Off', 'Long-On', 'Mid-Wicket', 'Square Leg', 'Fine Leg', 'Third Man', 'Point'].map((zone) => (
+                    <TouchableOpacity
+                      key={`edit-zone-${zone}`}
+                      style={[
+                        styles.editShotZoneChip,
+                        editShotZone === zone && styles.editShotZoneChipActive
+                      ]}
+                      onPress={() => setEditShotZone(zone)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.editShotZoneChipText,
+                          editShotZone === zone && styles.editShotZoneChipTextActive
+                        ]}
+                      >
+                        {zone}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
                 {/* WICKET TOGGLE */}
                 <Text style={styles.editSectionLabel}>Wicket / Dismissal Status:</Text>
                 <View style={styles.editWicketToggleRow}>
@@ -8303,28 +9101,118 @@ export default function LiveScoringScreen() {
                 </View>
 
                 {editWicket && (
-                  <View style={styles.editWicketTypeGrid}>
-                    {['BOWLED', 'CAUGHT', 'LBW', 'RUN_OUT', 'STUMPED', 'HIT_WICKET'].map((wt) => (
+                  <>
+                    {/* DISMISSAL METHOD SELECTION */}
+                    <Text style={[styles.editSectionLabel, { marginTop: 6 }]}>How did the Wicket Fall?</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                      {[
+                        { id: 'BOWLED', label: 'Bowled', desc: 'b Bowler' },
+                        { id: 'CAUGHT', label: 'Caught', desc: 'c Fielder b Bowler' },
+                        { id: 'CAUGHT_BEHIND', label: 'Caught Behind', desc: 'c †Keeper b Bowler' },
+                        { id: 'CAUGHT_AND_BOWLED', label: 'Caught & Bowled', desc: 'c & b Bowler' },
+                        { id: 'LBW', label: 'LBW', desc: 'lbw b Bowler' },
+                        { id: 'RUN_OUT', label: 'Run Out', desc: 'run out (Fielder)' },
+                        { id: 'STUMPED', label: 'Stumped', desc: 'st †Keeper b Bowler' },
+                        { id: 'HIT_WICKET', label: 'Hit Wicket', desc: 'hit wicket b Bowler' },
+                        { id: 'RETIRED_HURT', label: 'Retired Hurt', desc: 'injury (not out)' },
+                        { id: 'RETIRED_OUT', label: 'Retired Out', desc: 'retired out' }
+                      ].map((wt) => {
+                        const isSelected = editWicketType === wt.id;
+                        return (
+                          <TouchableOpacity
+                            key={`wt-${wt.id}`}
+                            style={{
+                              flex: 1,
+                              minWidth: '47%',
+                              paddingVertical: 7,
+                              paddingHorizontal: 8,
+                              borderRadius: 8,
+                              backgroundColor: isSelected ? '#fee2e2' : '#f8fafc',
+                              borderWidth: 1.5,
+                              borderColor: isSelected ? '#dc2626' : '#e2e8f0'
+                            }}
+                            onPress={() => {
+                              setEditWicketType(wt.id);
+                              if (wt.id === 'CAUGHT_AND_BOWLED') {
+                                setEditFielderName(editingDelivery?.bowlerName || bowler?.name || '');
+                              }
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={{ fontSize: 12, fontWeight: isSelected ? '900' : '700', color: isSelected ? '#b91c1c' : '#1e293b' }}>
+                              {wt.label}
+                            </Text>
+                            <Text style={{ fontSize: 10, color: isSelected ? '#dc2626' : '#64748b', fontWeight: '500' }}>
+                              {wt.desc}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {/* DISMISSED BATTER SELECTION */}
+                    <Text style={[styles.editSectionLabel, { marginTop: 6 }]}>Dismissed Batter:</Text>
+                    <View style={styles.editWicketToggleRow}>
                       <TouchableOpacity
-                        key={`wt-${wt}`}
-                        style={[
-                          styles.editWicketTypeChip,
-                          editWicketType === wt && styles.editWicketTypeChipActive
-                        ]}
-                        onPress={() => setEditWicketType(wt)}
+                        style={[styles.editWicketToggleBtn, editDismissedPlayer === 'STRIKER' && styles.editWicketToggleBtnActive]}
+                        onPress={() => setEditDismissedPlayer('STRIKER')}
                         activeOpacity={0.7}
                       >
-                        <Text
-                          style={[
-                            styles.editWicketTypeChipText,
-                            editWicketType === wt && styles.editWicketTypeChipTextActive
-                          ]}
-                        >
-                          {wt.replace('_', ' ')}
+                        <Text style={[styles.editWicketToggleBtnText, editDismissedPlayer === 'STRIKER' && styles.editWicketToggleBtnTextActive]} numberOfLines={1}>
+                          🏏 {editingDelivery.strikerName || striker?.name || 'Striker'}
                         </Text>
                       </TouchableOpacity>
-                    ))}
-                  </View>
+                      <TouchableOpacity
+                        style={[styles.editWicketToggleBtn, editDismissedPlayer === 'NON_STRIKER' && styles.editWicketToggleBtnActive]}
+                        onPress={() => setEditDismissedPlayer('NON_STRIKER')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.editWicketToggleBtnText, editDismissedPlayer === 'NON_STRIKER' && styles.editWicketToggleBtnTextActive]} numberOfLines={1}>
+                          🏃 {editingDelivery.nonStrikerName || nonStriker?.name || 'Non-Striker'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* FIELDER / CATCHER / KEEPER SELECTOR */}
+                    {['CAUGHT', 'CAUGHT_BEHIND', 'RUN_OUT', 'STUMPED'].includes(editWicketType) && (
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={[styles.editSectionLabel, { marginBottom: 6 }]}>
+                          {editWicketType.includes('CAUGHT') ? '🤲 Select Catcher from Fielding Squad:' : editWicketType === 'STUMPED' ? '🧤 Select Wicketkeeper:' : '⚡ Select Fielder (Run Out):'}
+                        </Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                          {((bowlingSquad && bowlingSquad.length > 0 ? bowlingSquad : (matchInfo?.teamBPlayers || matchInfo?.teamAPlayers || [])) as any[]).map((fld: any) => {
+                            const fldName = fld.name || fld.player_name || `Player ${fld.id}`;
+                            const isChosen = editFielderName.trim() === fldName.trim();
+                            return (
+                              <TouchableOpacity
+                                key={`edit-fld-${fld.id || fldName}`}
+                                style={{
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 5,
+                                  borderRadius: 14,
+                                  backgroundColor: isChosen ? '#dbeafe' : '#f1f5f9',
+                                  borderColor: isChosen ? '#2563eb' : '#cbd5e1',
+                                  borderWidth: 1.2
+                                }}
+                                onPress={() => setEditFielderName(fldName)}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: isChosen ? '900' : '600', color: isChosen ? '#1d4ed8' : '#334155' }}>
+                                  {isChosen ? '✓ ' : ''}{fldName}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                        <TextInput
+                          style={styles.editFielderInput}
+                          value={editFielderName}
+                          onChangeText={setEditFielderName}
+                          placeholder="Or type custom fielder name"
+                          placeholderTextColor="#94a3b8"
+                        />
+                      </View>
+                    )}
+                  </>
                 )}
 
                 {/* ACTIONS */}
@@ -12422,6 +13310,45 @@ const getStyles = (isDesktop: boolean) =>
     editWicketTypeChipTextActive: {
       color: '#ffffff',
       fontWeight: '800'
+    },
+    editShotZoneGrid: {
+      flexDirection: 'row',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    },
+    editShotZoneChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 6,
+      backgroundColor: '#f8fafc',
+      borderWidth: 1,
+      borderColor: '#cbd5e1'
+    },
+    editShotZoneChipActive: {
+      backgroundColor: '#059669',
+      borderColor: '#047857'
+    },
+    editShotZoneChipText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#475569'
+    },
+    editShotZoneChipTextActive: {
+      color: '#ffffff',
+      fontWeight: '800'
+    },
+    editFielderInput: {
+      backgroundColor: '#ffffff',
+      borderWidth: 1.5,
+      borderColor: '#cbd5e1',
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      fontSize: 13,
+      color: '#0f172a',
+      marginTop: 4,
+      marginBottom: 8
     },
     editDeliveryActionRow: {
       flexDirection: 'row',

@@ -40,10 +40,10 @@ async function runAllTests() {
   await db.initDb();
 
   // Idempotent test fixture reset before each run
-  await db.models.Match.deleteMany({ id: { $nin: ['M001', 'M002', 'M003'] } });
-  await db.models.Match.updateOne({ id: 'M001' }, { status: 'SCHEDULED', team_a_id: 'TM-01', team_b_id: 'TM-02', current_innings_number: 1, result_summary: null, assigned_scorer_id: 'SCR-101' });
-  await db.models.Match.updateOne({ id: 'M002' }, { status: 'LIVE', team_a_id: 'TM-01', team_b_id: 'TM-02', current_innings_number: 1, result_summary: null, assigned_scorer_id: 'SCR-101' });
-  await db.models.Match.updateOne({ id: 'M003' }, { status: 'COMPLETED', team_a_id: 'TM-01', team_b_id: 'TM-02', result_summary: 'Virudhunagar Strikers won by 7 wickets', assigned_scorer_id: 'SCR-101' });
+  await db.models.Match.deleteMany({ id: { $nin: ['M001', 'M002', 'M003', 'M005'] } });
+  await db.models.Match.updateOne({ id: 'M001' }, { status: 'SCHEDULED', schedule_confirmation_status: 'CONFIRMED', team_a_id: 'TM-01', team_b_id: 'TM-02', current_innings_number: 1, result_summary: null, assigned_scorer_id: 'SCR-101' });
+  await db.models.Match.updateOne({ id: 'M002' }, { status: 'LIVE', schedule_confirmation_status: 'CONFIRMED', team_a_id: 'TM-01', team_b_id: 'TM-02', current_innings_number: 1, result_summary: null, assigned_scorer_id: 'SCR-101' });
+  await db.models.Match.updateOne({ id: 'M003' }, { status: 'COMPLETED', schedule_confirmation_status: 'CONFIRMED', team_a_id: 'TM-01', team_b_id: 'TM-02', result_summary: 'Virudhunagar Strikers won by 7 wickets', assigned_scorer_id: 'SCR-101' });
   await db.models.Innings.updateOne({ id: 'INN-M002-1' }, { is_completed: false, is_over_complete: false, wickets: 3, total_runs: 142, overs: 16, balls: 2 });
   await db.models.Innings.deleteOne({ id: 'INN-M002-2' });
   await db.models.Team.updateOne({ id: 'TM-01' }, { name: 'Sattur Spartans' });

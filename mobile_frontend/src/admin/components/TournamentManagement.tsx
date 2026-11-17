@@ -17,6 +17,7 @@ import {
   Modal,
   ActivityIndicator,
   Platform,
+  Linking,
   Alert,
   Image
 } from 'react-native';
@@ -2434,7 +2435,15 @@ export const TournamentManagement: React.FC<TournamentManagementProps> = ({
                                 {/* Match Date / Venue / Officials */}
                                 <View style={styles.matchMetaRow}>
                                   <Text style={styles.matchMetaText}>📅 {m.match_date} at {m.match_time || '09:30 AM'}</Text>
-                                  <Text style={styles.matchMetaText}>📍 {m.venue}</Text>
+                                  <TouchableOpacity
+                                    onPress={() => {
+                                      const mapUrl = m.venue_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((m.venue || 'Kamarajar District Stadium') + ', Virudhunagar')}`;
+                                      if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(mapUrl, '_blank');
+                                      else Linking.openURL(mapUrl).catch(() => {});
+                                    }}
+                                  >
+                                    <Text style={[styles.matchMetaText, { color: '#0284c7', textDecorationLine: 'underline' }]}>📍 {m.venue} ↗</Text>
+                                  </TouchableOpacity>
                                   <Text style={styles.matchMetaText}>⚖️ Umpire: {m.umpire1_name || 'Appointed Official'}</Text>
                                 </View>
 

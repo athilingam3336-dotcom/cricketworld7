@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ScrollView, Platform, Linking } from 'react-native';
 import PageHeader from '../components/PageHeader';
 import DataTable, { ColumnDef } from '../components/DataTable';
 import StatusBadge from '../components/StatusBadge';
@@ -37,6 +37,7 @@ export const MatchesPage: React.FC = () => {
   const [formTeamA, setFormTeamA] = useState('');
   const [formTeamB, setFormTeamB] = useState('');
   const [formVenue, setFormVenue] = useState('Kamarajar District Stadium, Virudhunagar');
+  const [formVenueMapsUrl, setFormVenueMapsUrl] = useState('');
   const [formDate, setFormDate] = useState('');
   const [formTime, setFormTime] = useState('09:30 AM');
   const [formOvers, setFormOvers] = useState('20');
@@ -47,6 +48,7 @@ export const MatchesPage: React.FC = () => {
   const [editTeamAId, setEditTeamAId] = useState('');
   const [editTeamBId, setEditTeamBId] = useState('');
   const [editVenue, setEditVenue] = useState('');
+  const [editVenueMapsUrl, setEditVenueMapsUrl] = useState('');
   const [editDate, setEditDate] = useState('');
   const [editTime, setEditTime] = useState('09:30 AM');
   const [editOvers, setEditOvers] = useState('20');
@@ -136,6 +138,7 @@ export const MatchesPage: React.FC = () => {
     setFormTeamA(defaultTeamA);
     setFormTeamB(defaultTeamB);
     setFormVenue(defaultVenue);
+    setFormVenueMapsUrl(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(defaultVenue)}`);
     setFormDate(defaultSlot.date);
     setFormTime(defaultSlot.time);
     setFormOvers('20');
@@ -164,6 +167,8 @@ export const MatchesPage: React.FC = () => {
         teamAId: formTeamA,
         teamBId: formTeamB,
         venueName: formVenue,
+        venueMapsUrl: formVenueMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formVenue)}`,
+        venue_maps_url: formVenueMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formVenue)}`,
         date: formDate,
         time: formTime,
         overs: parseInt(formOvers, 10) || 20
@@ -181,7 +186,9 @@ export const MatchesPage: React.FC = () => {
     setEditTournamentId(m.tournament_id || m.tournamentId || (tournaments.length > 0 ? tournaments[0].id : 'TOUR-2026'));
     setEditTeamAId(m.team_a_id || m.teamAId || (teams.length > 0 ? teams[0].id : ''));
     setEditTeamBId(m.team_b_id || m.teamBId || (teams.length > 1 ? teams[1].id : ''));
-    setEditVenue(m.venue || (venues.length > 0 ? (venues[0].name || venues[0]) : 'Kamarajar District Stadium, Virudhunagar'));
+    const curVenue = m.venue || (venues.length > 0 ? (venues[0].name || venues[0]) : 'Kamarajar District Stadium, Virudhunagar');
+    setEditVenue(curVenue);
+    setEditVenueMapsUrl(m.venue_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(curVenue)}`);
     setEditDate(m.match_date || m.date || '');
     setEditTime(m.match_time || m.time || '09:30 AM');
     setEditOvers(String(m.overs_per_side || m.overs || 20));
@@ -219,6 +226,8 @@ export const MatchesPage: React.FC = () => {
         teamBId: editTeamBId,
         venue: editVenue,
         venueName: editVenue,
+        venue_maps_url: editVenueMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(editVenue)}`,
+        venueMapsUrl: editVenueMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(editVenue)}`,
         match_date: editDate,
         date: editDate,
         match_time: editTime,
@@ -346,12 +355,26 @@ export const MatchesPage: React.FC = () => {
     },
     {
       header: 'Venue & Ground',
-      accessor: (m) => (
-        <View>
-          <Text style={styles.venueText}>{m.venue || 'District Stadium'}</Text>
-          <Text style={styles.groundSub}>Virudhunagar</Text>
-        </View>
-      )
+      accessor: (m) => {
+        const vUrl = m.venue_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((m.venue || 'Kamarajar District Stadium') + ', Virudhunagar')}`;
+        return (
+          <TouchableOpacity
+            onPress={() => {
+              if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                window.open(vUrl, '_blank');
+              } else {
+                Linking.openURL(vUrl).catch(() => {});
+              }
+            }}
+            style={{ cursor: 'pointer' as any }}
+          >
+            <Text style={[styles.venueText, { color: '#0284c7', textDecorationLine: 'underline' }]}>
+              📍 {m.venue || 'District Stadium'} ↗
+            </Text>
+            <Text style={styles.groundSub}>Virudhunagar (Click to view map)</Text>
+          </TouchableOpacity>
+        );
+      }
     },
     {
       header: 'Date & Time',
@@ -742,7 +765,11 @@ export const MatchesPage: React.FC = () => {
                   <select
                     aria-label="Select Ground"
                     value={formVenue}
-                    onChange={(e) => setFormVenue(e.target.value)}
+                    onChange={(e) => {
+                      const newVenue = e.target.value;
+                      setFormVenue(newVenue);
+                      setFormVenueMapsUrl(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(newVenue + (newVenue.toLowerCase().includes('virudhunagar') ? '' : ', Virudhunagar'))}`);
+                    }}
                     style={{
                       padding: '9px 12px',
                       fontSize: 13,
@@ -774,6 +801,46 @@ export const MatchesPage: React.FC = () => {
                       </>
                     )}
                   </select>
+                </View>
+
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>📍 Ground Google Maps Link (Auto-generated or Custom)</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="https://www.google.com/maps/..."
+                      value={formVenueMapsUrl}
+                      onChange={(e) => setFormVenueMapsUrl(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        fontSize: 12,
+                        borderRadius: 6,
+                        border: '1px solid #CBD5E1',
+                        backgroundColor: '#F8FAFC',
+                        color: '#1E293B',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <TouchableOpacity
+                      onPress={() => {
+                        const target = formVenueMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(formVenue + ', Virudhunagar')}`;
+                        if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(target, '_blank');
+                        else Linking.openURL(target).catch(() => {});
+                      }}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        backgroundColor: '#E0F2FE',
+                        borderRadius: 6,
+                        borderWidth: 1,
+                        borderColor: '#BAE6FD'
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, color: '#0284c7', fontWeight: '700' }}>🗺️ Test Map ↗</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <View style={{ flexDirection: 'row', gap: 12 }}>
@@ -944,7 +1011,11 @@ export const MatchesPage: React.FC = () => {
                   <Text style={styles.fieldLabel}>Match Venue / Ground *</Text>
                   <select
                     value={editVenue}
-                    onChange={(e) => setEditVenue(e.target.value)}
+                    onChange={(e) => {
+                      const newVenue = e.target.value;
+                      setEditVenue(newVenue);
+                      setEditVenueMapsUrl(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(newVenue + (newVenue.toLowerCase().includes('virudhunagar') ? '' : ', Virudhunagar'))}`);
+                    }}
                     style={{
                       padding: '9px 12px',
                       fontSize: 13,
@@ -965,6 +1036,46 @@ export const MatchesPage: React.FC = () => {
                       );
                     })}
                   </select>
+                </View>
+
+                <View style={styles.fieldGroup}>
+                  <Text style={styles.fieldLabel}>📍 Ground Google Maps Link (Auto-generated or Custom)</Text>
+                  <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="text"
+                      placeholder="https://www.google.com/maps/..."
+                      value={editVenueMapsUrl}
+                      onChange={(e) => setEditVenueMapsUrl(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: '8px 12px',
+                        fontSize: 12,
+                        borderRadius: 6,
+                        border: '1px solid #CBD5E1',
+                        backgroundColor: '#F8FAFC',
+                        color: '#1E293B',
+                        outline: 'none',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <TouchableOpacity
+                      onPress={() => {
+                        const target = editVenueMapsUrl || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(editVenue + ', Virudhunagar')}`;
+                        if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(target, '_blank');
+                        else Linking.openURL(target).catch(() => {});
+                      }}
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 8,
+                        backgroundColor: '#E0F2FE',
+                        borderRadius: 6,
+                        borderWidth: 1,
+                        borderColor: '#BAE6FD'
+                      }}
+                    >
+                      <Text style={{ fontSize: 12, color: '#0284c7', fontWeight: '700' }}>🗺️ Test Map ↗</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 <View style={{ flexDirection: 'row', gap: 12 }}>
