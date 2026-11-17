@@ -8850,21 +8850,52 @@ export default function LiveScoringScreen() {
       </Modal>
 
       {/* DELIVERY INSPECTION & SHOT DETAILS MODAL (Ball Click Visual Breakdown) */}
-      <DeliveryInspectionModal
-        visible={Boolean(inspectingDelivery)}
-        delivery={inspectingDelivery}
-        onClose={() => setInspectingDelivery(null)}
-        onEdit={(del) => {
-          setInspectingDelivery(null);
-          handleOpenEditDelivery(del);
-        }}
-        strikerName={inspectingDelivery?.strikerName || striker?.name}
-        nonStrikerName={inspectingDelivery?.nonStrikerName || nonStriker?.name}
-        bowlerName={inspectingDelivery?.bowlerName || bowler?.name}
-        fielderName={inspectingDelivery?.fielderName}
-        currentScore={`${runs}/${wickets} (${getOvers(balls)} Ov)`}
-        battingTeamName={matchInfo?.battingTeam || matchInfo?.teamA || 'Batting Team'}
-      />
+      {(() => {
+        if (!inspectingDelivery) return null;
+
+        // Calculate ground-truth score at the time of this delivery
+        let scoreAtBall = `${runs}/${wickets} (${getOvers(balls)} Ov)`;
+        const delIndex = recentDeliveries.findIndex(d => 
+          (d.id && inspectingDelivery.id && d.id === inspectingDelivery.id) || 
+          (d.ball === inspectingDelivery.ball && d.overNumber === inspectingDelivery.overNumber)
+        );
+        if (delIndex > 0) {
+          let laterRuns = 0;
+          let laterWkts = 0;
+          for (let i = 0; i < delIndex; i++) {
+            const d = recentDeliveries[i];
+            laterRuns += (Number(d.runsBatter ?? d.runs ?? 0) + Number(d.runsExtras ?? d.runs_extras ?? 0));
+            if (d.wicket && d.wicketType !== 'RETIRED_HURT') laterWkts += 1;
+          }
+          const ballRuns = Math.max(0, runs - laterRuns);
+          const ballWkts = Math.max(0, wickets - laterWkts);
+          const ballOv = inspectingDelivery.ball || (inspectingDelivery.overNumber !== undefined ? `${inspectingDelivery.overNumber}.${inspectingDelivery.ballNumber}` : getOvers(balls));
+          scoreAtBall = `${ballRuns}/${ballWkts} (${ballOv} Ov)`;
+        } else if (delIndex === 0) {
+          const ballOv = inspectingDelivery.ball || getOvers(balls);
+          scoreAtBall = `${runs}/${wickets} (${ballOv} Ov)`;
+        } else if (inspectingDelivery.scoreAtDelivery || inspectingDelivery.matchScore) {
+          scoreAtBall = inspectingDelivery.scoreAtDelivery || inspectingDelivery.matchScore;
+        }
+
+        return (
+          <DeliveryInspectionModal
+            visible={Boolean(inspectingDelivery)}
+            delivery={inspectingDelivery}
+            onClose={() => setInspectingDelivery(null)}
+            onEdit={(del) => {
+              setInspectingDelivery(null);
+              handleOpenEditDelivery(del);
+            }}
+            strikerName={inspectingDelivery?.strikerName || striker?.name}
+            nonStrikerName={inspectingDelivery?.nonStrikerName || nonStriker?.name}
+            bowlerName={inspectingDelivery?.bowlerName || bowler?.name}
+            fielderName={inspectingDelivery?.fielderName}
+            currentScore={scoreAtBall}
+            battingTeamName={matchInfo?.battingTeam || matchInfo?.teamA || 'Batting Team'}
+          />
+        );
+      })()}
 
       {/* RETROACTIVE DELIVERY CORRECTION MODAL (Edit Mode Direct Ball Edit) */}
       <Modal

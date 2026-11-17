@@ -470,10 +470,6 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
                     <Text style={styles.hudLabel}>Bowler:</Text>
                     <Text style={styles.hudValueBowler} numberOfLines={1}>🎳 {bowler}</Text>
                   </View>
-                  <View style={styles.hudRow}>
-                    <Text style={styles.hudLabel}>Shot / Field:</Text>
-                    <Text style={styles.hudValue} numberOfLines={1}>{catcher ? `Fld: ${catcher}` : sector}</Text>
-                  </View>
                 </View>
 
                 {/* 4. MATCH DETAILS */}
@@ -505,65 +501,18 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
               </View>
             </View>
 
-            {/* 2. Wagon Wheel Sector / Shot Direction Badge */}
-            <View style={styles.wagonWheelRow}>
-              <View style={styles.wagonWheelPill}>
-                <Text style={styles.wagonWheelPillIcon}>🎯</Text>
-                <Text style={styles.wagonWheelPillLabel}>Wagon Wheel / Direction:</Text>
-                <Text style={styles.wagonWheelPillValue}>{sector}</Text>
-              </View>
-            </View>
-
-            {/* 3. Reason & Match Event Details Box */}
-            <View style={styles.reasonCardBox}>
-              <Text style={styles.reasonCardText}>{whyReason}</Text>
-            </View>
-
-            {/* 4. Complete Match Logistics Strip: Striker, Non-Striker, Bowler, Fielder */}
-            <View style={styles.playerStripRow}>
-              <View style={styles.playerStripCol}>
-                <Text style={styles.playerStripLabel}>🏏 STRIKER</Text>
-                <Text style={styles.playerStripValue} numberOfLines={1}>{batter}</Text>
-              </View>
-
-              <View style={styles.playerStripDivider} />
-
-              <View style={styles.playerStripCol}>
-                <Text style={styles.playerStripLabel}>🏃 NON-STRIKER</Text>
-                <Text style={styles.playerStripValue} numberOfLines={1}>{nonStriker}</Text>
-              </View>
-
-              <View style={styles.playerStripDivider} />
-
-              <View style={styles.playerStripCol}>
-                <Text style={styles.playerStripLabel}>🎳 BOWLER</Text>
-                <Text style={styles.playerStripValue} numberOfLines={1}>{bowler}</Text>
-              </View>
-
-              {Boolean(catcher) && (
-                <>
-                  <View style={styles.playerStripDivider} />
-                  <View style={styles.playerStripCol}>
-                    <Text style={styles.playerStripLabel}>
-                      {isCaught ? '🤲 CAUGHT BY' : isStumped ? '🧤 KEEPER' : '⚡ FIELDER'}
-                    </Text>
-                    <Text style={[styles.playerStripValue, { color: '#dc2626' }]} numberOfLines={1}>
-                      {catcher}
-                    </Text>
-                  </View>
-                </>
-              )}
-            </View>
-
-            {/* 5. Helpful Scoring Rule Tip Box */}
-            {Boolean(tipText) && (
-              <View style={styles.tipBox}>
-                <Text style={styles.tipIcon}>💡</Text>
-                <Text style={styles.tipText}>{tipText}</Text>
+            {/* 2. Wagon Wheel Sector / Shot Direction Badge (ONLY for 4s and 6s) */}
+            {(isFour || isSix) && (
+              <View style={styles.wagonWheelRow}>
+                <View style={styles.wagonWheelPill}>
+                  <Text style={styles.wagonWheelPillIcon}>🎯</Text>
+                  <Text style={styles.wagonWheelPillLabel}>Wagon Wheel / Direction:</Text>
+                  <Text style={styles.wagonWheelPillValue}>{sector}</Text>
+                </View>
               </View>
             )}
 
-            {/* 6. Dual Action Buttons: '✏️ Edit Ball' & '✓ OK' */}
+            {/* 3. Dual Action Buttons: '✏️ Edit Ball' & '✓ OK' */}
             <View style={styles.buttonRow}>
               <TouchableOpacity
                 style={styles.editBallBtn}
@@ -592,7 +541,7 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
 };
 
 const { width } = Dimensions.get('window');
-const cardMaxWidth = Math.min(width - 32, 520);
+const cardMaxWidth = Math.min(width - 24, 580);
 
 const styles = StyleSheet.create({
   modalOverlay: {
@@ -600,13 +549,13 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(15, 23, 42, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16
+    padding: 12
   },
   cardContainer: {
     width: '100%',
     maxWidth: cardMaxWidth,
     backgroundColor: '#ffffff',
-    borderRadius: 22,
+    borderRadius: 20,
     overflow: 'hidden',
     ...Platform.select({
       web: {
@@ -622,10 +571,10 @@ const styles = StyleSheet.create({
     })
   },
 
-  // EXACT 16:9 WIDESCREEN 210px HEIGHT BANNER
+  // COMPACT 16:9 WIDESCREEN 165px HEIGHT BANNER
   uniformBannerWrap: {
     width: '100%',
-    height: 210,
+    height: 165,
     backgroundColor: '#0f172a',
     position: 'relative',
     overflow: 'hidden'
@@ -639,7 +588,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 60,
+    height: 50,
     backgroundColor: 'rgba(0, 0, 0, 0.3)'
   },
 
@@ -726,8 +675,8 @@ const styles = StyleSheet.create({
 
   // Content Body
   contentBody: {
-    padding: 16,
-    maxHeight: 460
+    padding: 12,
+    maxHeight: 380
   },
   headlineRow: {
     flexDirection: 'row',
@@ -904,16 +853,16 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5
   },
 
-  // OFFICIAL MATCH DELIVERY HUD STYLES
+  // OFFICIAL MATCH DELIVERY HUD STYLES (YELLOW & WHITE CLEAN THEME)
   hudCardContainer: {
-    backgroundColor: '#0f172a',
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: '#334155',
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1.8,
+    borderColor: '#f59e0b',
     padding: 10,
-    marginBottom: 12,
+    marginBottom: 10,
     ...Platform.select({
-      web: { boxShadow: '0 2px 8px rgba(0,0,0,0.25)' },
+      web: { boxShadow: '0 2px 10px rgba(245, 158, 11, 0.15)' },
       default: { elevation: 3 }
     })
   },
@@ -923,34 +872,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingBottom: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#1e293b',
+    borderBottomColor: '#fef3c7',
     marginBottom: 8
   },
   hudLivePulse: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#22c55e'
+    backgroundColor: '#16a34a'
   },
   hudCardHeaderTitle: {
-    color: '#94a3b8',
-    fontSize: 10.5,
-    fontWeight: '800',
+    color: '#b45309',
+    fontSize: 11,
+    fontWeight: '900',
     letterSpacing: 0.8,
     textTransform: 'uppercase'
   },
   hudBallBadge: {
-    backgroundColor: '#1e293b',
-    borderColor: '#475569',
+    backgroundColor: '#fef3c7',
+    borderColor: '#fcd34d',
     borderWidth: 1,
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6
   },
   hudBallBadgeText: {
-    color: '#f8fafc',
+    color: '#92400e',
     fontSize: 10.5,
-    fontWeight: '800'
+    fontWeight: '900'
   },
   hudGrid: {
     flexDirection: 'row',
@@ -960,10 +909,10 @@ const styles = StyleSheet.create({
   hudGridItem: {
     flex: 1,
     minWidth: '47%',
-    backgroundColor: '#1e293b',
+    backgroundColor: '#fffdf5',
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#fef08a',
     padding: 8
   },
   hudItemHeader: {
@@ -973,7 +922,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     paddingBottom: 4,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#475569'
+    borderBottomColor: '#fef08a'
   },
   hudItemIcon: {
     fontSize: 12
@@ -981,7 +930,7 @@ const styles = StyleSheet.create({
   hudItemTitle: {
     fontSize: 10,
     fontWeight: '900',
-    color: '#fbbf24',
+    color: '#b45309',
     letterSpacing: 0.4
   },
   hudRow: {
@@ -992,45 +941,47 @@ const styles = StyleSheet.create({
   },
   hudLabel: {
     fontSize: 10,
-    color: '#94a3b8',
+    color: '#64748b',
     fontWeight: '600'
   },
   hudValue: {
     fontSize: 11,
-    color: '#e2e8f0',
+    color: '#1e293b',
     fontWeight: '700',
     maxWidth: '65%'
   },
   hudValueBold: {
     fontSize: 11.5,
-    color: '#ffffff',
+    color: '#0f172a',
     fontWeight: '900'
   },
   hudValueStriker: {
     fontSize: 11,
-    color: '#38bdf8',
+    color: '#0284c7',
     fontWeight: '800',
     maxWidth: '65%'
   },
   hudValueBowler: {
     fontSize: 11,
-    color: '#fb923c',
+    color: '#d97706',
     fontWeight: '800',
     maxWidth: '65%'
   },
   hudValueScore: {
     fontSize: 11.5,
-    color: '#4ade80',
+    color: '#16a34a',
     fontWeight: '900'
   },
   hudRunsBadge: {
-    backgroundColor: '#0284c7',
+    backgroundColor: '#fef3c7',
+    borderColor: '#f59e0b',
+    borderWidth: 1,
     paddingHorizontal: 6,
     paddingVertical: 1.5,
     borderRadius: 4
   },
   hudRunsBadgeText: {
-    color: '#ffffff',
+    color: '#b45309',
     fontSize: 10.5,
     fontWeight: '900'
   }
