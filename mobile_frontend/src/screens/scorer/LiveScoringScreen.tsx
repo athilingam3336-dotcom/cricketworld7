@@ -6414,7 +6414,7 @@ export default function LiveScoringScreen() {
                               handleOpenEditDelivery(del);
                             } else {
                               // Check if delivery matches an official umpire signal
-                              const dt = (del.text || '').toUpperCase();
+                              const dt = String(del.text ?? '').toUpperCase();
                               let sigType: UmpireSignalType | null = null;
                               if (isWicket || (dt.includes('W') && !dt.includes('WD'))) sigType = 'OUT';
                               else if (dt.includes('WD')) sigType = 'WIDE';
