@@ -506,7 +506,8 @@ export default function LiveScoringScreen() {
   // Keypad Popups
   const [showMoreRunsModal, setShowMoreRunsModal] = useState<boolean>(false);
   const [moreRunsSelected, setMoreRunsSelected] = useState<number>(5);
-  const [moreRunsReason, setMoreRunsReason] = useState<string>('Wide + 4 (Overthrow/Boundary)');
+  const [moreRunsReasonKey, setMoreRunsReasonKey] = useState<string>('');
+  const [moreRunsReason, setMoreRunsReason] = useState<string>('');
   const [customMoreRunsReason, setCustomMoreRunsReason] = useState<string>('');
   const [isMoreRunsReasonDropdownOpen, setIsMoreRunsReasonDropdownOpen] = useState<boolean>(false);
 
@@ -1714,22 +1715,49 @@ export default function LiveScoringScreen() {
   };
 
   const handleAwardMoreRuns = async () => {
+    const customTrimmed = customMoreRunsReason.trim();
+    let finalReason = '';
+    if (customTrimmed) {
+      finalReason = customTrimmed;
+    } else if (moreRunsReasonKey === 'WIDE') {
+      finalReason = `Wide + ${moreRunsSelected - 1} (Overthrow/Boundary)`;
+    } else if (moreRunsReasonKey === 'NO_BALL') {
+      finalReason = `No Ball + ${moreRunsSelected - 1} (Bat Boundary)`;
+    } else if (moreRunsReasonKey === 'OVERTHROW') {
+      finalReason = `${moreRunsSelected} Overthrow Runs (All Extras)`;
+    } else if (moreRunsReasonKey === 'RUNNING') {
+      finalReason = `${moreRunsSelected} Running Runs (Between Wickets)`;
+    } else if (moreRunsReasonKey === 'PENALTY') {
+      finalReason = `Penalty 5 Runs (Law 28 - Helmet Hit)`;
+    } else if (moreRunsReason) {
+      finalReason = moreRunsReason;
+    }
+
+    if (!finalReason) {
+      const msg = 'Please select or type a delivery reason before awarding more runs.';
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('Reason Required', msg);
+      }
+      return;
+    }
+
     setShowMoreRunsModal(false);
     const totalR = moreRunsSelected;
-    const finalReason = customMoreRunsReason.trim() || moreRunsReason;
-    
-    if (finalReason.includes('Wide')) {
+
+    if (moreRunsReasonKey === 'WIDE' || finalReason.toLowerCase().includes('wide')) {
       await handleScore(1, 'wide', {
         runsExtras: totalR,
         extraType: 'WIDE',
         remarks: finalReason
       });
-    } else if (finalReason.includes('No Ball')) {
+    } else if (moreRunsReasonKey === 'NO_BALL' || finalReason.toLowerCase().includes('no ball') || finalReason.toLowerCase().includes('noball')) {
       await handleScore(Math.max(0, totalR - 1), 'noball', {
         extraType: 'NO_BALL',
         remarks: finalReason
       });
-    } else if (finalReason.includes('Penalty')) {
+    } else if (moreRunsReasonKey === 'PENALTY' || finalReason.toLowerCase().includes('penalty')) {
       await handleScore(0, 'normal', {
         runsExtras: totalR,
         extraType: 'PENALTY',
@@ -1740,6 +1768,8 @@ export default function LiveScoringScreen() {
         remarks: finalReason
       });
     }
+    setMoreRunsReasonKey('');
+    setMoreRunsReason('');
     setCustomMoreRunsReason('');
   };
 
@@ -5173,7 +5203,15 @@ export default function LiveScoringScreen() {
                 <Text style={{ fontSize: 18 }}>🏃</Text>
                 <Text style={[styles.revisedModalTitle, { color: '#1e40af' }]}>MORE RUNS OFF DELIVERY</Text>
               </View>
-              <TouchableOpacity style={styles.redCloseBtn} onPress={() => setShowMoreRunsModal(false)}>
+              <TouchableOpacity
+                style={styles.redCloseBtn}
+                onPress={() => {
+                  setMoreRunsReasonKey('');
+                  setMoreRunsReason('');
+                  setCustomMoreRunsReason('');
+                  setShowMoreRunsModal(false);
+                }}
+              >
                 <Text style={styles.redCloseBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
@@ -5216,16 +5254,16 @@ export default function LiveScoringScreen() {
             </Text>
             <View style={{ gap: 6, marginBottom: 12 }}>
               {[
-                `Wide + ${moreRunsSelected - 1} (Overthrow/Boundary)`,
-                `No Ball + ${moreRunsSelected - 1} (Bat Boundary)`,
-                `${moreRunsSelected} Overthrow Runs (All Extras)`,
-                `${moreRunsSelected} Running Runs (Between Wickets)`,
-                `Penalty 5 Runs (Law 28 - Helmet Hit)`
-              ].map((reasonOption) => {
-                const isSelected = moreRunsReason === reasonOption;
+                { key: 'WIDE', label: `Wide + ${moreRunsSelected - 1} (Overthrow/Boundary)` },
+                { key: 'NO_BALL', label: `No Ball + ${moreRunsSelected - 1} (Bat Boundary)` },
+                { key: 'OVERTHROW', label: `${moreRunsSelected} Overthrow Runs (All Extras)` },
+                { key: 'RUNNING', label: `${moreRunsSelected} Running Runs (Between Wickets)` },
+                { key: 'PENALTY', label: `Penalty 5 Runs (Law 28 - Helmet Hit)` }
+              ].map((reasonItem) => {
+                const isSelected = moreRunsReasonKey === reasonItem.key;
                 return (
                   <TouchableOpacity
-                    key={`reason-opt-${reasonOption}`}
+                    key={`reason-opt-${reasonItem.key}`}
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
@@ -5237,7 +5275,8 @@ export default function LiveScoringScreen() {
                       borderColor: isSelected ? '#3b82f6' : '#e2e8f0'
                     }}
                     onPress={() => {
-                      setMoreRunsReason(reasonOption);
+                      setMoreRunsReasonKey(reasonItem.key);
+                      setMoreRunsReason(reasonItem.label);
                       setCustomMoreRunsReason('');
                     }}
                   >
@@ -5255,7 +5294,7 @@ export default function LiveScoringScreen() {
                       {isSelected && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#ffffff' }} />}
                     </View>
                     <Text style={{ fontSize: 12, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#1d4ed8' : '#334155' }}>
-                      {reasonOption}
+                      {reasonItem.label}
                     </Text>
                   </TouchableOpacity>
                 );
@@ -5270,7 +5309,7 @@ export default function LiveScoringScreen() {
               style={{
                 backgroundColor: '#ffffff',
                 borderWidth: 1.2,
-                borderColor: customMoreRunsReason ? '#2563eb' : '#cbd5e1',
+                borderColor: customMoreRunsReason.trim() ? '#2563eb' : '#cbd5e1',
                 borderRadius: 8,
                 paddingHorizontal: 10,
                 paddingVertical: 8,
@@ -5281,25 +5320,45 @@ export default function LiveScoringScreen() {
               placeholder="e.g. Overthrow + boundary 4, short run, misfield..."
               placeholderTextColor="#94a3b8"
               value={customMoreRunsReason}
-              onChangeText={(text) => setCustomMoreRunsReason(text)}
+              onChangeText={(text) => {
+                setCustomMoreRunsReason(text);
+                if (text.trim()) {
+                  setMoreRunsReasonKey('');
+                  setMoreRunsReason('');
+                }
+              }}
             />
 
-            {/* Confirm Submit Button */}
-            <TouchableOpacity
-              style={{
-                backgroundColor: '#2563eb',
-                borderRadius: 10,
-                paddingVertical: 12,
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-              onPress={handleAwardMoreRuns}
-              activeOpacity={0.85}
-            >
-              <Text style={{ color: '#ffffff', fontSize: 13.5, fontWeight: '900', letterSpacing: 0.5 }}>
-                Award {moreRunsSelected} Runs ✓
-              </Text>
-            </TouchableOpacity>
+            {/* Confirm Submit Button - Strictly Disabled until Reason is chosen or typed */}
+            {(() => {
+              const hasReason = Boolean(customMoreRunsReason.trim() || moreRunsReasonKey || moreRunsReason);
+              return (
+                <View>
+                  <TouchableOpacity
+                    disabled={!hasReason}
+                    style={{
+                      backgroundColor: hasReason ? '#2563eb' : '#94a3b8',
+                      borderRadius: 10,
+                      paddingVertical: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: hasReason ? 1 : 0.65
+                    }}
+                    onPress={handleAwardMoreRuns}
+                    activeOpacity={hasReason ? 0.85 : 1}
+                  >
+                    <Text style={{ color: '#ffffff', fontSize: 13.5, fontWeight: '900', letterSpacing: 0.5 }}>
+                      {hasReason ? `Award ${moreRunsSelected} Runs ✓` : `Select or Type a Reason to Award ${moreRunsSelected} Runs`}
+                    </Text>
+                  </TouchableOpacity>
+                  {!hasReason && (
+                    <Text style={{ fontSize: 11, color: '#ef4444', textAlign: 'center', marginTop: 6, fontWeight: '600' }}>
+                      * Please select a reason above or type a custom reason to enable run awarding.
+                    </Text>
+                  )}
+                </View>
+              );
+            })()}
           </View>
         </View>
       </Modal>
@@ -7314,7 +7373,12 @@ export default function LiveScoringScreen() {
                   <View style={styles.engineKeypadRow}>
                     <TouchableOpacity
                       style={[styles.engineKeypadBtn, styles.engineAuxKeypadBtn]}
-                      onPress={() => setShowMoreRunsModal(true)}
+                      onPress={() => {
+                        setMoreRunsReasonKey('');
+                        setMoreRunsReason('');
+                        setCustomMoreRunsReason('');
+                        setShowMoreRunsModal(true);
+                      }}
                       activeOpacity={0.7}
                     >
                       <Text style={styles.engineAuxKeypadText}>MORE RUNS</Text>
