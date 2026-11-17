@@ -8175,8 +8175,9 @@ export default function LiveScoringScreen() {
           setInspectingDelivery(null);
           handleOpenEditDelivery(del);
         }}
-        strikerName={striker?.name}
-        bowlerName={bowler?.name}
+        strikerName={inspectingDelivery?.strikerName || striker?.name}
+        bowlerName={inspectingDelivery?.bowlerName || bowler?.name}
+        fielderName={inspectingDelivery?.fielderName}
       />
 
       {/* RETROACTIVE DELIVERY CORRECTION MODAL (Edit Mode Direct Ball Edit) */}

@@ -1,14 +1,18 @@
 /**
  * mobile_frontend/src/components/scorer/DeliveryInspectionModal.tsx
  *
- * Professional CricHeroes/TNCA style Delivery Inspection Modal.
- * Triggered when a scorer taps any past ball in the 'THIS OVER / RECENT DELIVERIES' strip.
- * Features dedicated visual cards for:
- * - 1, 2, 3 Runs & Dots (with Pitch trajectory graphic, runs badge, commentary)
- * - 4s & 6s (with Umpire boundary signals, celebration badges, and Wagon Wheel shot direction)
- * - No Balls (with Umpire No-Ball signal and illegal delivery reason)
- * - Wickets & Wides (with official signals and dismissal breakdown)
- * - Direct "Edit This Ball" action button to allow retroactive ball correction.
+ * Professional CricHeroes/TNCA Delivery Inspection & Breakdown Modal.
+ * Displays dedicated visual popups for:
+ * - Wickets: Bowled, Caught (with who caught the ball), LBW, Run Out, Stumped with reasons why out
+ * - Overthrow: Extra runs conceded on stray throws
+ * - Dot Ball: No runs scored breakdown
+ * - Wide: Tramline extra penalty
+ * - No Ball: Overstep / height reasons
+ * - Boundaries (4s & 6s): Wagon wheel sectors / sides
+ * - 1, 2, 3 Runs: Running between wickets
+ *
+ * All popups maintain strict visual size consistency with identical 16:9 banner dimensions,
+ * ball badges, why-out/reason breakdowns, and direct '✏️ Edit Ball' retroactive action buttons.
  */
 
 import React from 'react';
@@ -20,15 +24,20 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
-  Platform
+  Platform,
+  ScrollView
 } from 'react-native';
-import Svg, { Rect, Path, Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
+
+const POPUP_BOWLED = require('../../../assets/popups/popup_bowled.jpg');
+const POPUP_CAUGHT = require('../../../assets/popups/popup_caught.jpg');
+const POPUP_OVERTHROW = require('../../../assets/popups/popup_overthrow.jpg');
+const POPUP_DOTBALL = require('../../../assets/popups/popup_dotball.jpg');
+const POPUP_WIDE = require('../../../assets/popups/popup_wide.jpg');
+const POPUP_EXTRA = require('../../../assets/popups/popup_extra.jpg');
 
 const IMG_UMPIRE_FOUR = require('../../../assets/umpire/umpire_four.jpg');
 const IMG_UMPIRE_SIX = require('../../../assets/umpire/umpire_six.jpg');
 const IMG_UMPIRE_NOBALL = require('../../../assets/umpire/umpire_noball.png');
-const IMG_UMPIRE_OUT = require('../../../assets/umpire/umpire_out.png');
-const IMG_UMPIRE_WIDE = require('../../../assets/umpire/umpire_wide.png');
 
 export interface DeliveryInspectionModalProps {
   visible: boolean;
@@ -37,6 +46,7 @@ export interface DeliveryInspectionModalProps {
   onEdit: (del: any) => void;
   strikerName?: string;
   bowlerName?: string;
+  fielderName?: string;
 }
 
 export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = ({
@@ -45,7 +55,8 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   onClose,
   onEdit,
   strikerName,
-  bowlerName
+  bowlerName,
+  fielderName
 }) => {
   if (!visible || !delivery) return null;
 
@@ -61,35 +72,152 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   const isSix = runs === 6 || dt === '6';
   const isFour = runs === 4 || dt === '4';
 
+  const commentaryLower = (delivery.commentary || '').toLowerCase();
+  const isOverthrow = Boolean(delivery.isOverthrow || delivery.is_overthrow || commentaryLower.includes('overthrow'));
+
+  const wicketTypeRaw = String(delivery.wicketType || delivery.wicket_type || '').toUpperCase();
+  const isCaught = isWicket && (wicketTypeRaw.includes('CAUGHT') || commentaryLower.includes('caught') || wicketTypeRaw.includes('CT'));
+  const isBowled = isWicket && (wicketTypeRaw.includes('BOWLED') || commentaryLower.includes('bowled') || (!isCaught && !wicketTypeRaw.includes('RUN') && !wicketTypeRaw.includes('LBW') && !wicketTypeRaw.includes('STUMP')));
+  const isLBW = isWicket && (wicketTypeRaw.includes('LBW') || commentaryLower.includes('lbw'));
+  const isRunOut = isWicket && (wicketTypeRaw.includes('RUN_OUT') || wicketTypeRaw.includes('RUN OUT') || commentaryLower.includes('run out'));
+  const isStumped = isWicket && (wicketTypeRaw.includes('STUMP') || commentaryLower.includes('stump'));
+
+  const isDotBall = !isWicket && !isWide && !isNoBall && runs === 0 && (delivery.runsExtras || 0) === 0;
+
   const sector = delivery.shotZone || delivery.shot_zone || delivery.wagonSector || (isSix ? 'Long-On' : 'Extra Cover');
   const batter = delivery.strikerName || strikerName || 'Batter';
   const bowler = delivery.bowlerName || bowlerName || 'Bowler';
+  const catcher = delivery.fielderName || fielderName || (isCaught ? (delivery.dismissalText?.match(/c\s+([^b]+)\s+b/i)?.[1]?.trim() || 'Deep Fielder') : '');
 
-  // Determine commentary & shot description
-  let commentaryText = delivery.commentary || '';
-  if (!commentaryText) {
-    if (isNoBall) {
-      commentaryText = 'Illegal delivery (e.g. overstep / height). Free hit awarded to batting team.';
-    } else if (isWide) {
-      commentaryText = 'Delivery passed outside the off-stump tramline (+1 extra run).';
-    } else if (isWicket) {
-      const wType = delivery.wicketType || 'Out';
-      commentaryText = `${batter} dismissed (${wType}) b ${bowler}.`;
-    } else if (isSix) {
-      commentaryText = `Cleared the ropes over ${sector} (${delivery.distance || '84'}m). Fantastic maximum!`;
-    } else if (isFour) {
-      commentaryText = `Nice shot! Driven past ${sector} to the boundary.`;
-    } else if (runs === 2) {
-      commentaryText = `Worked into the gap towards ${sector || 'Cover'}, easy double taken.`;
-    } else if (runs === 1) {
-      commentaryText = `Pushed into the gap towards ${sector || 'Cover'}, quick single taken.`;
-    } else if (runs === 3) {
-      commentaryText = `Driven into the deep towards ${sector || 'Long-Off'}, excellent running between the wickets for three.`;
-    } else if (runs === 0) {
-      commentaryText = 'Good length delivery on off stump, defended solidly to the fielder.';
+  // Select matching image for exact 200px uniform banner
+  let bannerImageSource: any = null;
+  let bannerBadgeBg = '#f59e0b';
+  let bannerBadgeText = `Ball ${ballText}`;
+  let bannerType: 'CAUGHT' | 'BOWLED' | 'OTHER_WICKET' | 'OVERTHROW' | 'DOT' | 'WIDE' | 'SIX' | 'FOUR' | 'NO_BALL' | 'RUNS' = 'RUNS';
+
+  if (isOverthrow) {
+    bannerType = 'OVERTHROW';
+    bannerImageSource = POPUP_OVERTHROW;
+    bannerBadgeBg = '#2563eb';
+  } else if (isCaught) {
+    bannerType = 'CAUGHT';
+    bannerImageSource = POPUP_CAUGHT;
+    bannerBadgeBg = '#dc2626';
+  } else if (isBowled) {
+    bannerType = 'BOWLED';
+    bannerImageSource = POPUP_BOWLED;
+    bannerBadgeBg = '#b91c1c';
+  } else if (isWicket) {
+    bannerType = 'OTHER_WICKET';
+    bannerImageSource = POPUP_BOWLED;
+    bannerBadgeBg = '#b91c1c';
+  } else if (isNoBall) {
+    bannerType = 'NO_BALL';
+    bannerImageSource = IMG_UMPIRE_NOBALL;
+    bannerBadgeBg = '#dc2626';
+  } else if (isWide) {
+    bannerType = 'WIDE';
+    bannerImageSource = POPUP_WIDE;
+    bannerBadgeBg = '#ea580c';
+  } else if (isSix) {
+    bannerType = 'SIX';
+    bannerImageSource = IMG_UMPIRE_SIX;
+    bannerBadgeBg = '#2563eb';
+  } else if (isFour) {
+    bannerType = 'FOUR';
+    bannerImageSource = IMG_UMPIRE_FOUR;
+    bannerBadgeBg = '#059669';
+  } else if (isDotBall) {
+    bannerType = 'DOT';
+    bannerImageSource = POPUP_DOTBALL;
+    bannerBadgeBg = '#475569';
+  } else {
+    bannerType = 'RUNS';
+    bannerImageSource = POPUP_EXTRA;
+    bannerBadgeBg = '#0284c7';
+  }
+
+  // Generate detailed breakdown of why out, reasons, and wagon wheel sides
+  let titleText = '';
+  let subtitleText = '';
+  let whyOutReason = '';
+  let tipText = '';
+  let iconEmoji = '🏏';
+
+  if (bannerType === 'CAUGHT') {
+    iconEmoji = '🤲';
+    titleText = 'CAUGHT OUT!';
+    subtitleText = `c ${catcher || 'Fielder'} b ${bowler}`;
+    whyOutReason = `Why Out: Lofted shot towards ${sector}, caught cleanly by ${catcher || 'the fielder'}. Batter dismissed.`;
+    tipText = "Tip: Verify catcher & bowler in official match scorecard or click 'Edit Ball' to correct.";
+  } else if (bannerType === 'BOWLED') {
+    iconEmoji = '🎯';
+    titleText = 'BOWLED OUT!';
+    subtitleText = `b ${bowler}`;
+    whyOutReason = `Why Out: Clean bowled! Beat the defensive stroke and shattered the stumps, dislodging the bails.`;
+    tipText = "Tip: Use 'Edit Ball' if the delivery was called a no-ball or decision was reversed.";
+  } else if (bannerType === 'OTHER_WICKET') {
+    iconEmoji = '☝️';
+    if (isLBW) {
+      titleText = 'LBW DISMISSAL!';
+      subtitleText = `lbw b ${bowler}`;
+      whyOutReason = `Why Out: Struck in front of middle stump. Ball pitched in line and would have hit the stumps.`;
+    } else if (isRunOut) {
+      titleText = 'RUN OUT!';
+      subtitleText = `run out (${catcher || 'Fielder'})`;
+      whyOutReason = `Why Out: Direct throw hit the stumps while ${batter} was stranded short of the popping crease.`;
+    } else if (isStumped) {
+      titleText = 'STUMPED!';
+      subtitleText = `st †Keeper b ${bowler}`;
+      whyOutReason = `Why Out: Batter dragged foot out of crease, wicketkeeper whipped off bails cleanly.`;
     } else {
-      commentaryText = `Scored ${runs} runs off the bat with aggressive running.`;
+      titleText = 'BATTER DISMISSED!';
+      subtitleText = `${batter} is OUT`;
+      whyOutReason = delivery.dismissalText || `Why Out: Batter dismissed by official umpire decision.`;
     }
+    tipText = "Tip: Use 'Edit Ball' to modify dismissal type or reverse wicket.";
+  } else if (bannerType === 'OVERTHROW') {
+    iconEmoji = '⚡';
+    titleText = `OVERTHROW! +${runs} RUNS`;
+    subtitleText = `${batter} took advantage of fielding mishap`;
+    whyOutReason = `Fielding throw from ${sector || 'the deep'} missed the stumps and backup fielder, enabling ${runs} extra overthrow runs.`;
+    tipText = "Tip: Overthrow runs count toward batter's total if off the bat, or extras as designated.";
+  } else if (bannerType === 'DOT') {
+    iconEmoji = '🛡️';
+    titleText = 'DOT BALL! No Runs';
+    subtitleText = `Bowled by ${bowler} to ${batter}`;
+    whyOutReason = `Good length delivery defended solidly into ${sector || 'Cover'}. No runs conceded (Dot ball recorded).`;
+    tipText = "Tip: Dot balls build bowler pressure and lower required economy rate.";
+  } else if (bannerType === 'WIDE') {
+    iconEmoji = '↔️';
+    titleText = 'WIDE BALL! +1 Run';
+    subtitleText = `Bowled by ${bowler}`;
+    whyOutReason = `Delivery bowled outside the official tramline marker. +1 extra penalty run added to team total, ball must be re-bowled.`;
+    tipText = "Tip: Wide balls do not count as legal balls in the over.";
+  } else if (bannerType === 'NO_BALL') {
+    iconEmoji = '🚫';
+    titleText = 'NO BALL! +1 Penalty Run';
+    subtitleText = `Bowler overstepped / illegal height`;
+    whyOutReason = delivery.reason || `Illegal delivery (e.g. overstep / height). Free hit awarded to batting team on next legal ball.`;
+    tipText = "Tip: Mandatory Free Hit follows for the next delivery.";
+  } else if (bannerType === 'SIX') {
+    iconEmoji = '💥';
+    titleText = 'FANTASTIC MAXIMUM! (6)';
+    subtitleText = `Smashed by ${batter} off ${bowler}`;
+    whyOutReason = `Cleared the boundary ropes over ${sector} (${delivery.distance || '86'}m). Huge six!`;
+    tipText = "Tip: Wagon wheel shot sector and distance recorded for tournament analytics.";
+  } else if (bannerType === 'FOUR') {
+    iconEmoji = '🏏';
+    titleText = 'FOUR RUNS! (4)';
+    subtitleText = `Driven by ${batter} off ${bowler}`;
+    whyOutReason = `Cracking shot! Driven past ${sector} to the boundary ropes for four.`;
+    tipText = "Tip: Wagon wheel boundary trajectory mapped to playing sector.";
+  } else {
+    iconEmoji = '🏃';
+    titleText = `${runs} ${runs === 1 ? 'RUN' : 'RUNS'} SCORED`;
+    subtitleText = `Running between wickets by ${batter}`;
+    whyOutReason = `Pushed into the gap towards ${sector || 'Cover'}, quick running completed.`;
+    tipText = "Tip: Strike rotates for odd runs completed.";
   }
 
   const handleEditClick = () => {
@@ -107,510 +235,109 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
       <View style={styles.modalOverlay}>
         <View style={styles.cardContainer}>
           {/* ═════════════════════════════════════════════════════════════════════
-              CASE 1: NO BALL (Image 6)
+              UNIFORM EXACT 200px HEIGHT BANNER FOR ALL POPUP IMAGES
              ═════════════════════════════════════════════════════════════════════ */}
-          {isNoBall ? (
-            <>
-              {/* Top Banner with Red Ball Pill */}
-              <View style={[styles.graphicBannerWrapper, { backgroundColor: '#1e293b' }]}>
-                <Image
-                  source={IMG_UMPIRE_NOBALL}
-                  style={styles.umpireHeaderImg}
-                  resizeMode="cover"
-                />
-                <View style={styles.bannerDarkGradientOverlay} />
+          <View style={styles.uniformBannerWrap}>
+            {bannerImageSource ? (
+              <Image
+                source={bannerImageSource}
+                style={styles.uniformBannerImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={[styles.uniformBannerImage, { backgroundColor: '#1e293b' }]} />
+            )}
 
-                {/* Pill Top Left */}
-                <View style={[styles.headerPill, styles.headerPillRed]}>
-                  <Text style={styles.headerPillRedText}>Ball {ballText}</Text>
-                </View>
+            {/* Gradient Overlay for Top Controls */}
+            <View style={styles.bannerTopFadeGradient} />
 
-                {/* Close Button Top Right */}
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={styles.closeCircleBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.closeCircleBtnText}>✕</Text>
-                </TouchableOpacity>
+            {/* Floating Top Left Pill: Ball X.Y */}
+            <View style={[styles.headerPill, { backgroundColor: bannerBadgeBg }]}>
+              <Text style={styles.headerPillText}>{bannerBadgeText}</Text>
+            </View>
 
-                {/* Flying Ball Graphic & No Ball Banner */}
-                <View style={styles.noBallBannerBadge}>
-                  <Text style={styles.noBallBannerText}>No Ball!</Text>
-                </View>
+            {/* Floating Top Right Close Button */}
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.closeCircleBtn}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.closeCircleBtnText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* ═════════════════════════════════════════════════════════════════════
+              CONTENT DETAILS (Who caught it, Why out, Reasons, Overthrows)
+             ═════════════════════════════════════════════════════════════════════ */}
+          <View style={styles.contentBody}>
+            {/* 1. Main Headline Row */}
+            <View style={styles.headlineRow}>
+              <View style={styles.iconCircleBadge}>
+                <Text style={{ fontSize: 26 }}>{iconEmoji}</Text>
               </View>
+              <View style={styles.headlineTextCol}>
+                <Text style={styles.mainTitle}>{titleText}</Text>
+                <Text style={styles.subTitle} numberOfLines={1}>
+                  {subtitleText}
+                </Text>
+              </View>
+            </View>
 
-              {/* Content Body */}
-              <View style={styles.contentBody}>
-                <View style={styles.detailRow}>
-                  <View style={styles.iconCircleRed}>
-                    <Text style={{ fontSize: 24 }}>🚫</Text>
-                  </View>
-                  <View style={styles.verticalDivider} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.contentTitle}>No Ball!</Text>
-                    <Text style={styles.contentSubtitle}>
-                      {delivery.reason || 'Illegal delivery (e.g. overstep / height).'}
+            {/* 2. Structured Reason / Why Out / Field Details Box */}
+            <View style={styles.reasonCardBox}>
+              <Text style={styles.reasonCardText}>
+                {whyOutReason}
+              </Text>
+            </View>
+
+            {/* 3. Match Logistics Strip: Batter & Bowler & Catcher */}
+            <View style={styles.playerStripRow}>
+              <View style={styles.playerStripCol}>
+                <Text style={styles.playerStripLabel}>🏏 BATTER</Text>
+                <Text style={styles.playerStripValue} numberOfLines={1}>{batter}</Text>
+              </View>
+              <View style={styles.playerStripDivider} />
+              <View style={styles.playerStripCol}>
+                <Text style={styles.playerStripLabel}>🎯 BOWLER</Text>
+                <Text style={styles.playerStripValue} numberOfLines={1}>{bowler}</Text>
+              </View>
+              {Boolean(catcher) && (
+                <>
+                  <View style={styles.playerStripDivider} />
+                  <View style={styles.playerStripCol}>
+                    <Text style={styles.playerStripLabel}>🤲 CAUGHT BY</Text>
+                    <Text style={[styles.playerStripValue, { color: '#dc2626' }]} numberOfLines={1}>
+                      {catcher}
                     </Text>
                   </View>
-                </View>
+                </>
+              )}
+            </View>
 
-                {/* Tip Box */}
-                <View style={styles.tipBox}>
-                  <Text style={styles.tipIcon}>💡</Text>
-                  <Text style={styles.tipText}>
-                    <Text style={{ fontWeight: '700' }}>Tip:</Text> Use 'No Ball' button to continue.
-                  </Text>
-                </View>
+            {/* 4. Tip Box */}
+            <View style={styles.tipBox}>
+              <Text style={styles.tipIcon}>💡</Text>
+              <Text style={styles.tipText}>{tipText}</Text>
+            </View>
 
-                {/* Buttons */}
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity
-                    style={styles.editBallBtn}
-                    onPress={handleEditClick}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.editBallBtnText}>✏️ Edit Ball {ballText}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.okBtn}
-                    onPress={onClose}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.okBtnText}>✓ OK</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
-          ) : isSix ? (
-            /* ═════════════════════════════════════════════════════════════════════
-                CASE 2: SIX RUNS (Image 4)
-               ═════════════════════════════════════════════════════════════════════ */
-            <>
-              <View style={[styles.graphicBannerWrapper, { backgroundColor: '#172554' }]}>
-                <Image
-                  source={IMG_UMPIRE_SIX}
-                  style={styles.umpireHeaderImg}
-                  resizeMode="cover"
-                />
-                <View style={styles.bannerDarkGradientOverlay} />
-
-                {/* Pill Top Left */}
-                <View style={[styles.headerPill, styles.headerPillYellow]}>
-                  <Text style={styles.headerPillYellowText}>Ball {ballText}</Text>
-                </View>
-
-                {/* Close Button Top Right */}
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={styles.closeCircleBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.closeCircleBtnText}>✕</Text>
-                </TouchableOpacity>
-
-                {/* 6 RUNS Big Celebration Badge */}
-                <View style={styles.sixRunsBadgeWrap}>
-                  <Text style={styles.sixHugeNumber}>6</Text>
-                  <View style={styles.runsPillNavy}>
-                    <Text style={styles.runsPillNavyText}>RUNS!</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Content Body */}
-              <View style={styles.contentBody}>
-                <View style={styles.detailRow}>
-                  <View style={styles.ballIconWrap}>
-                    <Text style={{ fontSize: 24 }}>🔴</Text>
-                  </View>
-                  <View style={styles.verticalDivider} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.contentTitle}>Fantastic shot!</Text>
-                    <Text style={styles.contentSubtitle}>
-                      Cleared the ropes over <Text style={{ fontWeight: '800', color: '#1e293b' }}>{sector}</Text>{delivery.distance ? ` (${delivery.distance}m)` : ' (84m)'}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Tip Box */}
-                <View style={styles.tipBox}>
-                  <Text style={styles.tipIcon}>💡</Text>
-                  <Text style={styles.tipText}>
-                    <Text style={{ fontWeight: '700' }}>Tip:</Text> Activate 'Edit Mode' to modify past deliveries directly.
-                  </Text>
-                </View>
-
-                {/* Buttons */}
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity
-                    style={styles.editBallBtn}
-                    onPress={handleEditClick}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.editBallBtnText}>✏️ Edit Ball {ballText}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.okBtn}
-                    onPress={onClose}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.okBtnText}>✓ OK</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
-          ) : isFour ? (
-            /* ═════════════════════════════════════════════════════════════════════
-                CASE 3: FOUR RUNS (Image 5)
-               ═════════════════════════════════════════════════════════════════════ */
-            <>
-              <View style={[styles.graphicBannerWrapper, { backgroundColor: '#172554' }]}>
-                <Image
-                  source={IMG_UMPIRE_FOUR}
-                  style={styles.umpireHeaderImg}
-                  resizeMode="cover"
-                />
-                <View style={styles.bannerDarkGradientOverlay} />
-
-                {/* Pill Top Left */}
-                <View style={[styles.headerPill, styles.headerPillYellow]}>
-                  <Text style={styles.headerPillYellowText}>Ball {ballText}</Text>
-                </View>
-
-                {/* Close Button Top Right */}
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={styles.closeCircleBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.closeCircleBtnText}>✕</Text>
-                </TouchableOpacity>
-
-                {/* 4 RUNS Big Badge */}
-                <View style={styles.fourRunsBadgeWrap}>
-                  <Text style={styles.fourHugeNumber}>4</Text>
-                  <View style={styles.runsPillNavy}>
-                    <Text style={styles.runsPillNavyText}>RUNS!</Text>
-                  </View>
-                </View>
-              </View>
-
-              {/* Content Body */}
-              <View style={styles.contentBody}>
-                <View style={styles.detailRow}>
-                  <View style={styles.ballIconWrap}>
-                    <Text style={{ fontSize: 24 }}>🔴</Text>
-                  </View>
-                  <View style={styles.verticalDivider} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.contentTitle}>Four Runs!</Text>
-                    <Text style={styles.contentSubtitle}>
-                      Nice shot! Driven past <Text style={{ fontWeight: '800', color: '#1e293b' }}>{sector}</Text> to the boundary.
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Tip Box */}
-                <View style={styles.tipBox}>
-                  <Text style={styles.tipIcon}>💡</Text>
-                  <Text style={styles.tipText}>
-                    <Text style={{ fontWeight: '700' }}>Tip:</Text> Use 'Edit Mode' to modify past deliveries directly.
-                  </Text>
-                </View>
-
-                {/* Buttons */}
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity
-                    style={styles.editBallBtn}
-                    onPress={handleEditClick}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.editBallBtnText}>✏️ Edit Ball {ballText}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.okBtn}
-                    onPress={onClose}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.okBtnText}>✓ OK</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
-          ) : isWicket ? (
-            /* ═════════════════════════════════════════════════════════════════════
-                CASE 4: WICKET / DISMISSAL
-               ═════════════════════════════════════════════════════════════════════ */
-            <>
-              <View style={[styles.graphicBannerWrapper, { backgroundColor: '#450a0a' }]}>
-                <Image
-                  source={IMG_UMPIRE_OUT}
-                  style={styles.umpireHeaderImg}
-                  resizeMode="cover"
-                />
-                <View style={styles.bannerDarkGradientOverlay} />
-
-                <View style={[styles.headerPill, styles.headerPillRed]}>
-                  <Text style={styles.headerPillRedText}>Ball {ballText}</Text>
-                </View>
-
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={styles.closeCircleBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.closeCircleBtnText}>✕</Text>
-                </TouchableOpacity>
-
-                <View style={styles.wicketBannerBadge}>
-                  <Text style={styles.wicketBannerText}>BATTER OUT!</Text>
-                </View>
-              </View>
-
-              <View style={styles.contentBody}>
-                <View style={styles.detailRow}>
-                  <View style={styles.iconCircleRed}>
-                    <Text style={{ fontSize: 24 }}>☝️</Text>
-                  </View>
-                  <View style={styles.verticalDivider} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.contentTitle}>Wicket Dismissal!</Text>
-                    <Text style={styles.contentSubtitle}>{commentaryText}</Text>
-                  </View>
-                </View>
-
-                <View style={styles.tipBox}>
-                  <Text style={styles.tipIcon}>💡</Text>
-                  <Text style={styles.tipText}>
-                    <Text style={{ fontWeight: '700' }}>Tip:</Text> Use 'Edit Mode' if this dismissal was reversed or given incorrectly.
-                  </Text>
-                </View>
-
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity
-                    style={styles.editBallBtn}
-                    onPress={handleEditClick}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.editBallBtnText}>✏️ Edit Ball {ballText}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.okBtn}
-                    onPress={onClose}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.okBtnText}>✓ OK</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
-          ) : isWide ? (
-            /* ═════════════════════════════════════════════════════════════════════
-                CASE 5: WIDE BALL
-               ════════════════════════════════════════════─═════════════════════════ */
-            <>
-              <View style={[styles.graphicBannerWrapper, { backgroundColor: '#431407' }]}>
-                <Image
-                  source={IMG_UMPIRE_WIDE}
-                  style={styles.umpireHeaderImg}
-                  resizeMode="cover"
-                />
-                <View style={styles.bannerDarkGradientOverlay} />
-
-                <View style={[styles.headerPill, styles.headerPillYellow]}>
-                  <Text style={styles.headerPillYellowText}>Ball {ballText}</Text>
-                </View>
-
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={styles.closeCircleBtn}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.closeCircleBtnText}>✕</Text>
-                </TouchableOpacity>
-
-                <View style={styles.wideBannerBadge}>
-                  <Text style={styles.wideBannerText}>Wide Ball!</Text>
-                </View>
-              </View>
-
-              <View style={styles.contentBody}>
-                <View style={styles.detailRow}>
-                  <View style={styles.ballIconWrap}>
-                    <Text style={{ fontSize: 24 }}>↔️</Text>
-                  </View>
-                  <View style={styles.verticalDivider} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.contentTitle}>Wide Delivery!</Text>
-                    <Text style={styles.contentSubtitle}>
-                      {commentaryText || 'Delivery passed outside the off-stump tramline (+1 extra run).'}
-                    </Text>
-                  </View>
-                </View>
-
-                <View style={styles.tipBox}>
-                  <Text style={styles.tipIcon}>💡</Text>
-                  <Text style={styles.tipText}>
-                    <Text style={{ fontWeight: '700' }}>Tip:</Text> Use 'Edit Mode' to alter extra runs or re-bowl status.
-                  </Text>
-                </View>
-
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity
-                    style={styles.editBallBtn}
-                    onPress={handleEditClick}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.editBallBtnText}>✏️ Edit Ball {ballText}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.okBtn}
-                    onPress={onClose}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.okBtnText}>✓ OK</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
-          ) : (
-            /* ═════════════════════════════════════════════════════════════════════
-                CASE 6: 1, 2, 3 RUNS & DOT BALLS (Image 3)
-               ═════════════════════════════════════════════════════════════════════ */
-            <>
-              {/* Dark Navy Curved Header with Batsman Silhouette */}
-              <View style={styles.curvedNavyHeader}>
-                <View style={styles.headerBatsmanSilhouette}>
-                  <Text style={{ fontSize: 22 }}>🏏</Text>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={styles.headerBallTitleText}>Ball </Text>
-                  <Text style={styles.headerBallNumberGold}>{ballText}</Text>
-                </View>
-
-                {/* Close Button Top Right */}
-                <TouchableOpacity
-                  onPress={onClose}
-                  style={styles.closeCircleBtnNavy}
-                  activeOpacity={0.8}
-                >
-                  <Text style={styles.closeCircleBtnText}>✕</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Graphic Pitch Trajectory SVG Illustration */}
-              <View style={styles.pitchGraphicContainer}>
-                <Svg width="100%" height={140} viewBox="0 0 380 140">
-                  <Defs>
-                    <SvgLinearGradient id="pitchSky" x1="0" y1="0" x2="0" y2="1">
-                      <Stop offset="0%" stopColor="#1e293b" />
-                      <Stop offset="50%" stopColor="#334155" />
-                      <Stop offset="100%" stopColor="#475569" />
-                    </SvgLinearGradient>
-                    <SvgLinearGradient id="fieldGrass" x1="0" y1="0" x2="0" y2="1">
-                      <Stop offset="0%" stopColor="#15803d" />
-                      <Stop offset="100%" stopColor="#166534" />
-                    </SvgLinearGradient>
-                    <SvgLinearGradient id="pitchClay" x1="0" y1="0" x2="0" y2="1">
-                      <Stop offset="0%" stopColor="#d97706" />
-                      <Stop offset="100%" stopColor="#b45309" />
-                    </SvgLinearGradient>
-                  </Defs>
-
-                  {/* Sky & Stadium Crowd Horizon */}
-                  <Rect x="0" y="0" width="380" height="70" fill="url(#pitchSky)" />
-
-                  {/* Outfield Grass */}
-                  <Rect x="0" y="65" width="380" height="75" fill="url(#fieldGrass)" />
-
-                  {/* Center Turf Pitch Perspective */}
-                  <Path
-                    d="M 140 70 L 240 70 L 270 140 L 110 140 Z"
-                    fill="url(#pitchClay)"
-                    opacity={0.88}
-                  />
-
-                  {/* Pitch Crease Lines */}
-                  <Path d="M 155 76 L 225 76" stroke="#ffffff" strokeWidth="1.5" opacity={0.7} />
-                  <Path d="M 125 125 L 255 125" stroke="#ffffff" strokeWidth="2" opacity={0.8} />
-
-                  {/* Wooden Stumps at Far End */}
-                  <Rect x="186" y="60" width="2" height="12" fill="#fef08a" />
-                  <Rect x="190" y="60" width="2" height="12" fill="#fef08a" />
-                  <Rect x="194" y="60" width="2" height="12" fill="#fef08a" />
-                  <Rect x="185" y="59" width="12" height="1.8" fill="#fef08a" />
-
-                  {/* White Curved Ball Trajectory Arc */}
-                  <Path
-                    d="M 130 120 Q 200 45 285 92"
-                    stroke="#ffffff"
-                    strokeWidth="3"
-                    strokeDasharray="4 3"
-                    fill="none"
-                  />
-
-                  {/* 3D Red Cricket Ball with Glow */}
-                  <Circle cx="285" cy="92" r="14" fill="#dc2626" />
-                  <Circle cx="280" cy="88" r="4.5" fill="#f87171" opacity={0.65} />
-                  {/* Seam */}
-                  <Path
-                    d="M 273 92 Q 285 86 297 92"
-                    stroke="#ffffff"
-                    strokeWidth="1.2"
-                    strokeDasharray="1.5 1.5"
-                    fill="none"
-                  />
-                </Svg>
-              </View>
-
-              {/* Middle Section: Circle Badge + Commentary */}
-              <View style={styles.contentBody}>
-                <View style={styles.detailRow}>
-                  {/* Circular Badge */}
-                  <View style={styles.runsCircleBadge}>
-                    <Text style={styles.runsCircleNumber}>{runs}</Text>
-                    <Text style={styles.runsCircleLabel}>{runs === 1 ? 'Run' : runs === 0 ? 'Dot' : 'Runs'}</Text>
-                  </View>
-
-                  <View style={styles.verticalDivider} />
-
-                  {/* Text Description */}
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.commentaryProseText}>
-                      {commentaryText}
-                    </Text>
-                  </View>
-                </View>
-
-                {/* Tip Box */}
-                <View style={styles.tipBox}>
-                  <Text style={styles.tipIcon}>💡</Text>
-                  <Text style={styles.tipText}>
-                    <Text style={{ fontWeight: '700' }}>Tip:</Text> Activate 'Edit Mode' in the sidebar or top banner to modify past deliveries directly.
-                  </Text>
-                </View>
-
-                {/* Buttons */}
-                <View style={styles.buttonRow}>
-                  <TouchableOpacity
-                    style={styles.editBallBtn}
-                    onPress={handleEditClick}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.editBallBtnText}>✏️ Edit Ball {ballText}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.okBtn}
-                    onPress={onClose}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={styles.okBtnText}>✓ OK</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </>
-          )}
+            {/* 5. Dual Action Buttons: Retroactive Ball Correction & OK */}
+            <View style={styles.buttonRow}>
+              <TouchableOpacity
+                style={styles.editBallBtn}
+                onPress={handleEditClick}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.editBallBtnText}>✏️ Edit Ball {ballText}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.okBtn}
+                onPress={onClose}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.okBtnText}>✓ OK</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </View>
     </Modal>
@@ -620,7 +347,7 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
 const styles = StyleSheet.create({
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16
@@ -633,10 +360,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...Platform.select({
       web: {
-        boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.45)'
+        boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.5)'
       },
       default: {
-        elevation: 12,
+        elevation: 14,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.35,
@@ -645,32 +372,28 @@ const styles = StyleSheet.create({
     })
   },
 
-  // 1. Graphic Banner Wrappers
-  graphicBannerWrapper: {
-    height: 180,
+  // EXACT SAME 200px HEIGHT BANNER FOR ALL POPUP IMAGES
+  uniformBannerWrap: {
     width: '100%',
+    height: 200,
+    backgroundColor: '#0f172a',
     position: 'relative',
-    overflow: 'hidden',
-    justifyContent: 'center',
-    alignItems: 'center'
+    overflow: 'hidden'
   },
-  umpireHeaderImg: {
+  uniformBannerImage: {
     width: '100%',
-    height: '100%',
-    position: 'absolute',
-    top: 0,
-    left: 0
+    height: '100%'
   },
-  bannerDarkGradientOverlay: {
+  bannerTopFadeGradient: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.28)'
+    height: 60,
+    backgroundColor: 'rgba(0, 0, 0, 0.25)'
   },
 
-  // Header Pills
+  // Top Left Floating Pill
   headerPill: {
     position: 'absolute',
     top: 14,
@@ -678,259 +401,117 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 5,
     borderRadius: 8,
-    borderWidth: 1.2
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)'
   },
-  headerPillRed: {
-    backgroundColor: '#ef4444',
-    borderColor: '#dc2626'
-  },
-  headerPillRedText: {
+  headerPillText: {
     color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '800'
-  },
-  headerPillYellow: {
-    backgroundColor: '#fef3c7',
-    borderColor: '#fde047'
-  },
-  headerPillYellowText: {
-    color: '#854d0e',
-    fontSize: 13,
-    fontWeight: '800'
+    fontSize: 12.5,
+    fontWeight: '900',
+    letterSpacing: 0.5
   },
 
-  // Close Circle Buttons
+  // Top Right Close Button
   closeCircleBtn: {
     position: 'absolute',
     top: 12,
     right: 12,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(15, 23, 42, 0.65)',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)'
-  },
-  closeCircleBtnNavy: {
-    position: 'absolute',
-    right: 14,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    justifyContent: 'center',
-    alignItems: 'center'
+    borderWidth: 1.2,
+    borderColor: 'rgba(255, 255, 255, 0.4)'
   },
   closeCircleBtnText: {
     color: '#ffffff',
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800'
-  },
-
-  // Large Overlay Badges (Six, Four, No Ball, Wicket)
-  sixRunsBadgeWrap: {
-    position: 'absolute',
-    left: 20,
-    bottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  sixHugeNumber: {
-    fontSize: 68,
-    fontWeight: '900',
-    color: '#fbbf24',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 2, height: 3 },
-    textShadowRadius: 6
-  },
-  fourRunsBadgeWrap: {
-    position: 'absolute',
-    left: 20,
-    bottom: 20,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6
-  },
-  fourHugeNumber: {
-    fontSize: 68,
-    fontWeight: '900',
-    color: '#facc15',
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 2, height: 3 },
-    textShadowRadius: 6
-  },
-  runsPillNavy: {
-    backgroundColor: '#1e3a8a',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    transform: [{ rotate: '-8deg' }]
-  },
-  runsPillNavyText: {
-    color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 0.8
-  },
-  noBallBannerBadge: {
-    position: 'absolute',
-    left: 16,
-    bottom: 18,
-    backgroundColor: '#dc2626',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 8,
-    transform: [{ rotate: '-4deg' }],
-    borderWidth: 1.5,
-    borderColor: '#ffffff'
-  },
-  noBallBannerText: {
-    color: '#ffffff',
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: 0.8
-  },
-  wicketBannerBadge: {
-    position: 'absolute',
-    left: 16,
-    bottom: 18,
-    backgroundColor: '#b91c1c',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#ffffff'
-  },
-  wicketBannerText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: 0.8
-  },
-  wideBannerBadge: {
-    position: 'absolute',
-    left: 16,
-    bottom: 18,
-    backgroundColor: '#ea580c',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: '#ffffff'
-  },
-  wideBannerText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: 0.8
-  },
-
-  // Curved Navy Header (Case 6)
-  curvedNavyHeader: {
-    backgroundColor: '#0f172a',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative'
-  },
-  headerBatsmanSilhouette: {
-    position: 'absolute',
-    left: 16
-  },
-  headerBallTitleText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '800'
-  },
-  headerBallNumberGold: {
-    color: '#f59e0b',
-    fontSize: 22,
-    fontWeight: '900'
-  },
-  pitchGraphicContainer: {
-    width: '100%',
-    height: 140,
-    backgroundColor: '#1e293b',
-    overflow: 'hidden'
   },
 
   // Content Body
   contentBody: {
     padding: 18
   },
-  detailRow: {
+  headlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16
+    gap: 12,
+    marginBottom: 12
   },
-  runsCircleBadge: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    borderWidth: 3,
-    borderColor: '#f59e0b',
-    backgroundColor: '#fffdf5',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  runsCircleNumber: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#1e293b',
-    lineHeight: 28
-  },
-  runsCircleLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#64748b'
-  },
-  verticalDivider: {
-    width: 1.2,
-    height: 48,
-    backgroundColor: '#e2e8f0',
-    marginHorizontal: 14
-  },
-  commentaryProseText: {
-    fontSize: 14.5,
-    color: '#1e293b',
-    lineHeight: 21,
-    fontWeight: '500'
-  },
-  ballIconWrap: {
+  iconCircleBadge: {
     width: 52,
     height: 52,
     borderRadius: 26,
     backgroundColor: '#f8fafc',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#e2e8f0',
     justifyContent: 'center',
     alignItems: 'center'
   },
-  iconCircleRed: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#fef2f2',
-    borderWidth: 1,
-    borderColor: '#fecaca',
-    justifyContent: 'center',
-    alignItems: 'center'
+  headlineTextCol: {
+    flex: 1
   },
-  contentTitle: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#1e293b',
-    marginBottom: 3
+  mainTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    color: '#0f172a',
+    letterSpacing: 0.3,
+    marginBottom: 2
   },
-  contentSubtitle: {
+  subTitle: {
     fontSize: 13,
-    color: '#475569',
-    lineHeight: 18
+    fontWeight: '600',
+    color: '#64748b'
+  },
+
+  // Why Out / Details Reason Box
+  reasonCardBox: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12
+  },
+  reasonCardText: {
+    fontSize: 13.5,
+    color: '#1e293b',
+    lineHeight: 19,
+    fontWeight: '500'
+  },
+
+  // Player Strip Row
+  playerStripRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f1f5f9',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    marginBottom: 12
+  },
+  playerStripCol: {
+    flex: 1
+  },
+  playerStripLabel: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#64748b',
+    marginBottom: 1
+  },
+  playerStripValue: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0f172a'
+  },
+  playerStripDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: '#cbd5e1',
+    marginHorizontal: 8
   },
 
   // Tip Box
@@ -940,17 +521,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 9,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     marginBottom: 16
   },
   tipIcon: {
-    fontSize: 16
+    fontSize: 15
   },
   tipText: {
-    fontSize: 12,
+    fontSize: 11.5,
     color: '#1e40af',
     flex: 1,
     lineHeight: 16
