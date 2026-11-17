@@ -994,14 +994,36 @@ class ScoringEngine {
     if (updateData.shotZone) delivery.shot_zone = updateData.shotZone;
     if (typeof updateData.shotX === 'number') delivery.shot_x = updateData.shotX;
     if (typeof updateData.shotY === 'number') delivery.shot_y = updateData.shotY;
+    if (updateData.fielderId) delivery.fielder_id = updateData.fielderId;
+    if (updateData.fielderName) delivery.fielder_name = updateData.fielderName;
+    if (updateData.dismissedPlayerId) delivery.dismissed_player_id = updateData.dismissedPlayerId;
+    if (typeof updateData.isOverthrow === 'boolean') delivery.is_overthrow = updateData.isOverthrow;
+
+    // Recalculate legal delivery count and overs if extra type changed
+    const oldIsLegal = delivery.extra_type !== 'WIDE' && delivery.extra_type !== 'NO_BALL';
+    const newIsLegal = newExtraType !== 'WIDE' && newExtraType !== 'NO_BALL';
+    delivery.is_legal_delivery = newIsLegal;
     await delivery.save();
+
+    if (innings && oldIsLegal !== newIsLegal) {
+      const legalCount = await db.models.Delivery.countDocuments({
+        innings_id: innings.id,
+        extra_type: { $nin: ['WIDE', 'NO_BALL'] }
+      });
+      innings.overs = Math.floor(legalCount / 6);
+      innings.balls = legalCount % 6;
+      await innings.save();
+    }
 
     try {
       broadcastScoreUpdate(matchId, {
         action: 'DELIVERY_EDITED',
+        matchId,
         deliveryId,
         totalRuns: innings?.total_runs,
-        wickets: innings?.wickets
+        wickets: innings?.wickets,
+        overs: `${innings?.overs ?? 0}.${innings?.balls ?? 0}`,
+        score: `${innings?.total_runs ?? 0}/${innings?.wickets ?? 0} (${innings?.overs ?? 0}.${innings?.balls ?? 0} Ov)`
       });
     } catch (_) {}
 

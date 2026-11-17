@@ -532,6 +532,9 @@ export default function LiveScoringScreen() {
   const [editExtraType, setEditExtraType] = useState<'NONE' | 'WIDE' | 'NO_BALL' | 'BYE' | 'LEG_BYE'>('NONE');
   const [editWicket, setEditWicket] = useState<boolean>(false);
   const [editWicketType, setEditWicketType] = useState<string>('BOWLED');
+  const [editShotZone, setEditShotZone] = useState<string>('Cover');
+  const [editFielderName, setEditFielderName] = useState<string>('');
+  const [editDismissedPlayer, setEditDismissedPlayer] = useState<'STRIKER' | 'NON_STRIKER'>('STRIKER');
   const [isSubmittingEditDelivery, setIsSubmittingEditDelivery] = useState<boolean>(false);
   const [offlineQueueCount, setOfflineQueueCount] = useState<number>(0);
   const [inspectingDelivery, setInspectingDelivery] = useState<any | null>(null);
@@ -2705,6 +2708,9 @@ export default function LiveScoringScreen() {
     setEditExtraType(del.extraType || (del.extra ? del.extra : 'NONE'));
     setEditWicket(Boolean(del.wicket));
     setEditWicketType(del.wicketType || 'BOWLED');
+    setEditShotZone(del.shotZone || del.shot_zone || 'Cover');
+    setEditFielderName(del.fielderName || del.fielder_name || '');
+    setEditDismissedPlayer(del.dismissedPlayerId && del.dismissedPlayerId === del.nonStrikerId ? 'NON_STRIKER' : 'STRIKER');
     setShowEditDeliveryModal(true);
   };
 
@@ -2713,12 +2719,21 @@ export default function LiveScoringScreen() {
     setIsSubmittingEditDelivery(true);
     try {
       const extraRuns = (editExtraType === 'WIDE' || editExtraType === 'NO_BALL') ? 1 : 0;
+      const dismissedId = editWicket ? (
+        editDismissedPlayer === 'NON_STRIKER'
+          ? (editingDelivery.nonStrikerId || nonStriker?.id)
+          : (editingDelivery.strikerId || striker?.id)
+      ) : null;
+
       const payload = {
         runsBatter: editRunsInput,
         runsExtras: extraRuns,
         extraType: editExtraType,
         wicket: editWicket,
-        wicketType: editWicket ? editWicketType : null
+        wicketType: editWicket ? editWicketType : null,
+        shotZone: editShotZone,
+        fielderName: editFielderName.trim() || null,
+        dismissedPlayerId: dismissedId
       };
       await ScorerApi.editDelivery(matchId, editingDelivery.id, payload);
       setShowEditDeliveryModal(false);
@@ -8176,6 +8191,7 @@ export default function LiveScoringScreen() {
           handleOpenEditDelivery(del);
         }}
         strikerName={inspectingDelivery?.strikerName || striker?.name}
+        nonStrikerName={inspectingDelivery?.nonStrikerName || nonStriker?.name}
         bowlerName={inspectingDelivery?.bowlerName || bowler?.name}
         fielderName={inspectingDelivery?.fielderName}
       />
@@ -8271,6 +8287,31 @@ export default function LiveScoringScreen() {
                   ))}
                 </View>
 
+                {/* WAGON WHEEL / SHOT ZONE */}
+                <Text style={styles.editSectionLabel}>Wagon Wheel Shot Direction:</Text>
+                <View style={styles.editShotZoneGrid}>
+                  {['Cover', 'Extra Cover', 'Long-Off', 'Long-On', 'Mid-Wicket', 'Square Leg', 'Fine Leg', 'Third Man', 'Point'].map((zone) => (
+                    <TouchableOpacity
+                      key={`edit-zone-${zone}`}
+                      style={[
+                        styles.editShotZoneChip,
+                        editShotZone === zone && styles.editShotZoneChipActive
+                      ]}
+                      onPress={() => setEditShotZone(zone)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.editShotZoneChipText,
+                          editShotZone === zone && styles.editShotZoneChipTextActive
+                        ]}
+                      >
+                        {zone}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
                 {/* WICKET TOGGLE */}
                 <Text style={styles.editSectionLabel}>Wicket / Dismissal Status:</Text>
                 <View style={styles.editWicketToggleRow}>
@@ -8295,28 +8336,63 @@ export default function LiveScoringScreen() {
                 </View>
 
                 {editWicket && (
-                  <View style={styles.editWicketTypeGrid}>
-                    {['BOWLED', 'CAUGHT', 'LBW', 'RUN_OUT', 'STUMPED', 'HIT_WICKET'].map((wt) => (
+                  <>
+                    <View style={styles.editWicketTypeGrid}>
+                      {['BOWLED', 'CAUGHT', 'LBW', 'RUN_OUT', 'STUMPED', 'HIT_WICKET'].map((wt) => (
+                        <TouchableOpacity
+                          key={`wt-${wt}`}
+                          style={[
+                            styles.editWicketTypeChip,
+                            editWicketType === wt && styles.editWicketTypeChipActive
+                          ]}
+                          onPress={() => setEditWicketType(wt)}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.editWicketTypeChipText,
+                              editWicketType === wt && styles.editWicketTypeChipTextActive
+                            ]}
+                          >
+                            {wt.replace('_', ' ')}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {/* DISMISSED BATTER SELECTION */}
+                    <Text style={[styles.editSectionLabel, { marginTop: 6 }]}>Dismissed Batter:</Text>
+                    <View style={styles.editWicketToggleRow}>
                       <TouchableOpacity
-                        key={`wt-${wt}`}
-                        style={[
-                          styles.editWicketTypeChip,
-                          editWicketType === wt && styles.editWicketTypeChipActive
-                        ]}
-                        onPress={() => setEditWicketType(wt)}
+                        style={[styles.editWicketToggleBtn, editDismissedPlayer === 'STRIKER' && styles.editWicketToggleBtnActive]}
+                        onPress={() => setEditDismissedPlayer('STRIKER')}
                         activeOpacity={0.7}
                       >
-                        <Text
-                          style={[
-                            styles.editWicketTypeChipText,
-                            editWicketType === wt && styles.editWicketTypeChipTextActive
-                          ]}
-                        >
-                          {wt.replace('_', ' ')}
+                        <Text style={[styles.editWicketToggleBtnText, editDismissedPlayer === 'STRIKER' && styles.editWicketToggleBtnTextActive]} numberOfLines={1}>
+                          🏏 {editingDelivery.strikerName || striker?.name || 'Striker'}
                         </Text>
                       </TouchableOpacity>
-                    ))}
-                  </View>
+                      <TouchableOpacity
+                        style={[styles.editWicketToggleBtn, editDismissedPlayer === 'NON_STRIKER' && styles.editWicketToggleBtnActive]}
+                        onPress={() => setEditDismissedPlayer('NON_STRIKER')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.editWicketToggleBtnText, editDismissedPlayer === 'NON_STRIKER' && styles.editWicketToggleBtnTextActive]} numberOfLines={1}>
+                          🏃 {editingDelivery.nonStrikerName || nonStriker?.name || 'Non-Striker'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* FIELDER / CATCHER / KEEPER NAME INPUT */}
+                    <Text style={[styles.editSectionLabel, { marginTop: 6 }]}>Fielder / Catcher / Keeper:</Text>
+                    <TextInput
+                      style={styles.editFielderInput}
+                      value={editFielderName}
+                      onChangeText={setEditFielderName}
+                      placeholder="e.g. Fielder who caught, threw or kept"
+                      placeholderTextColor="#94a3b8"
+                    />
+                  </>
                 )}
 
                 {/* ACTIONS */}
@@ -12414,6 +12490,45 @@ const getStyles = (isDesktop: boolean) =>
     editWicketTypeChipTextActive: {
       color: '#ffffff',
       fontWeight: '800'
+    },
+    editShotZoneGrid: {
+      flexDirection: 'row',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    },
+    editShotZoneChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 6,
+      backgroundColor: '#f8fafc',
+      borderWidth: 1,
+      borderColor: '#cbd5e1'
+    },
+    editShotZoneChipActive: {
+      backgroundColor: '#059669',
+      borderColor: '#047857'
+    },
+    editShotZoneChipText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#475569'
+    },
+    editShotZoneChipTextActive: {
+      color: '#ffffff',
+      fontWeight: '800'
+    },
+    editFielderInput: {
+      backgroundColor: '#ffffff',
+      borderWidth: 1.5,
+      borderColor: '#cbd5e1',
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      fontSize: 13,
+      color: '#0f172a',
+      marginTop: 4,
+      marginBottom: 8
     },
     editDeliveryActionRow: {
       flexDirection: 'row',

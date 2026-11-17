@@ -2,22 +2,29 @@
  * mobile_frontend/src/components/scorer/DeliveryInspectionModal.tsx
  *
  * Professional CricHeroes/TNCA Delivery Inspection & Breakdown Modal.
- * Displays dedicated visual popups for:
+ * Displays dedicated 16:9 widescreen HD visual popups for:
  * - 🎯 Bowled: BOWLED OUT!
  * - 🤲 Caught: CAUGHT OUT! (with who caught the ball)
  * - ⚡ Run Out: RUN OUT! (direct throw, batter short of crease)
  * - 🧤 Stumping: STUMPED! (wicketkeeper whipping bails off)
  * - 🔥 LBW: LBW Out – LBW! (ball tracking, pad impact in line)
+ * - 💥 Four Runs: BOUNDARY 4! (Wagon wheel shot side, striker, non-striker, bowler)
+ * - 🚀 Six Runs: MAXIMUM 6! (Wagon wheel shot side, striker, non-striker, bowler)
  * - 🏃 Three Runs: 3 RUNS! (running between wickets)
- * - ⚡ Overthrow: Extra runs conceded on stray throws
- * - 🛡️ Dot Ball: No runs scored breakdown
+ * - ⚡ Two Runs: 2 RUNS! (quick double, running between wickets)
+ * - 🔄 One Run: 1 RUN! (strike rotation single)
+ * - 🛡️ Dot Ball: NO RUN! (defensive stroke, 0 runs)
  * - ↔️ Wide: Tramline extra penalty
- * - 🚫 No Ball: Overstep / height reasons
- * - 💥 Boundaries (4s & 6s): Wagon wheel sectors / sides
- * - 1 & 2 Runs: Quick singles and doubles
+ * - 🚫 No Ball: Overstep / height reasons + Free Hit
+ * - 💫 Overthrow: Extra runs conceded on stray throws
  *
- * All popups maintain strict visual size consistency with identical 200px 16:9 banner dimensions,
- * ball badges, why-out/reason breakdowns, and direct '✏️ Edit Ball' retroactive action buttons.
+ * Displays full professional logistics:
+ * 1. Striker (who hit the ball / faced)
+ * 2. Non-Striker (partner at bowler end)
+ * 3. Bowler (who bowled the delivery)
+ * 4. Fielder / Keeper (if caught, run out, stumped)
+ * 5. Wagon Wheel Sector / Direction for all shots
+ * 6. Direct '✏️ Edit Ball' retroactive action button
  */
 
 import React from 'react';
@@ -29,7 +36,8 @@ import {
   Image,
   TouchableOpacity,
   Dimensions,
-  Platform
+  Platform,
+  ScrollView
 } from 'react-native';
 
 const POPUP_BOWLED = require('../../../assets/popups/popup_bowled.jpg');
@@ -37,15 +45,16 @@ const POPUP_CAUGHT = require('../../../assets/popups/popup_caught.jpg');
 const POPUP_RUNOUT = require('../../../assets/popups/popup_runout.jpg');
 const POPUP_STUMPED = require('../../../assets/popups/popup_stumped.jpg');
 const POPUP_LBW = require('../../../assets/popups/popup_lbw.jpg');
+const POPUP_4RUNS = require('../../../assets/popups/popup_4runs.jpg');
+const POPUP_SIX = require('../../../assets/popups/popup_six.jpg');
 const POPUP_3RUNS = require('../../../assets/popups/popup_3runs.jpg');
-const POPUP_OVERTHROW = require('../../../assets/popups/popup_overthrow.jpg');
+const POPUP_2RUNS = require('../../../assets/popups/popup_2runs.jpg');
+const POPUP_1RUN = require('../../../assets/popups/popup_1run.jpg');
 const POPUP_DOTBALL = require('../../../assets/popups/popup_dotball.jpg');
 const POPUP_WIDE = require('../../../assets/popups/popup_wide.jpg');
+const POPUP_NOBALL = require('../../../assets/popups/popup_noball.jpg');
+const POPUP_OVERTHROW = require('../../../assets/popups/popup_overthrow.jpg');
 const POPUP_EXTRA = require('../../../assets/popups/popup_extra.jpg');
-
-const IMG_UMPIRE_FOUR = require('../../../assets/umpire/umpire_four.jpg');
-const IMG_UMPIRE_SIX = require('../../../assets/umpire/umpire_six.jpg');
-const IMG_UMPIRE_NOBALL = require('../../../assets/umpire/umpire_noball.png');
 
 export interface DeliveryInspectionModalProps {
   visible: boolean;
@@ -53,6 +62,7 @@ export interface DeliveryInspectionModalProps {
   onClose: () => void;
   onEdit: (del: any) => void;
   strikerName?: string;
+  nonStrikerName?: string;
   bowlerName?: string;
   fielderName?: string;
 }
@@ -63,6 +73,7 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   onClose,
   onEdit,
   strikerName,
+  nonStrikerName,
   bowlerName,
   fielderName
 }) => {
@@ -79,6 +90,10 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   const isWicket = Boolean(delivery.wicket) || dt === 'W' || dt.includes('W');
   const isSix = runs === 6 || dt === '6';
   const isFour = runs === 4 || dt === '4';
+  const isThreeRuns = !isWicket && !isWide && !isNoBall && runs === 3;
+  const isTwoRuns = !isWicket && !isWide && !isNoBall && runs === 2;
+  const isOneRun = !isWicket && !isWide && !isNoBall && runs === 1;
+  const isDotBall = !isWicket && !isWide && !isNoBall && runs === 0 && (delivery.runsExtras || 0) === 0;
 
   const commentaryLower = (delivery.commentary || '').toLowerCase();
   const isOverthrow = Boolean(delivery.isOverthrow || delivery.is_overthrow || commentaryLower.includes('overthrow'));
@@ -90,19 +105,29 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
   const isLBW = isWicket && (wicketTypeRaw.includes('LBW') || commentaryLower.includes('lbw'));
   const isBowled = isWicket && !isCaught && !isRunOut && !isStumped && !isLBW;
 
-  const isDotBall = !isWicket && !isWide && !isNoBall && runs === 0 && (delivery.runsExtras || 0) === 0;
-  const isThreeRuns = !isWicket && !isWide && !isNoBall && !isOverthrow && runs === 3;
+  // Shot zone / Wagon Wheel side
+  const sector = delivery.shotZone || delivery.shot_zone || delivery.wagonSector || (
+    isSix ? 'Deep Mid-Wicket' :
+    isFour ? 'Extra Cover' :
+    isThreeRuns ? 'Deep Long-Off' :
+    isTwoRuns ? 'Square Leg' :
+    isOneRun ? 'Point' : 'Cover'
+  );
 
-  const sector = delivery.shotZone || delivery.shot_zone || delivery.wagonSector || (isSix ? 'Long-On' : 'Extra Cover');
-  const batter = delivery.strikerName || strikerName || 'Batter';
+  const batter = delivery.strikerName || strikerName || 'Striker';
+  const nonStriker = delivery.nonStrikerName || nonStrikerName || 'Non-Striker';
   const bowler = delivery.bowlerName || bowlerName || 'Bowler';
-  const catcher = delivery.fielderName || fielderName || (isCaught ? (delivery.dismissalText?.match(/c\s+([^b]+)\s+b/i)?.[1]?.trim() || 'Deep Fielder') : '');
+  const catcher = delivery.fielderName || fielderName || (
+    isCaught ? (delivery.dismissalText?.match(/c\s+([^b]+)\s+b/i)?.[1]?.trim() || 'Deep Fielder') :
+    isRunOut ? (delivery.dismissalText?.match(/\(([^)]+)\)/)?.[1]?.trim() || 'Fielder') :
+    isStumped ? (delivery.dismissalText?.match(/st\s+†?([^b]+)\s+b/i)?.[1]?.trim() || 'Wicketkeeper') : ''
+  );
 
-  // Select matching image for exact uniform 200px banner
+  // Dedicated 16:9 Landscape Banner Image Selection
   let bannerImageSource: any = null;
   let bannerBadgeBg = '#f59e0b';
   let bannerBadgeText = `Ball ${ballText}`;
-  let bannerType: 'CAUGHT' | 'BOWLED' | 'RUN_OUT' | 'STUMPED' | 'LBW' | 'OVERTHROW' | 'DOT' | 'WIDE' | 'SIX' | 'FOUR' | 'NO_BALL' | 'THREE_RUNS' | 'RUNS' = 'RUNS';
+  let bannerType: 'CAUGHT' | 'BOWLED' | 'RUN_OUT' | 'STUMPED' | 'LBW' | 'OVERTHROW' | 'DOT' | 'WIDE' | 'SIX' | 'FOUR' | 'NO_BALL' | 'THREE_RUNS' | 'TWO_RUNS' | 'ONE_RUN' | 'RUNS' = 'RUNS';
 
   if (isRunOut) {
     bannerType = 'RUN_OUT';
@@ -130,7 +155,7 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     bannerBadgeBg = '#2563eb';
   } else if (isNoBall) {
     bannerType = 'NO_BALL';
-    bannerImageSource = IMG_UMPIRE_NOBALL;
+    bannerImageSource = POPUP_NOBALL;
     bannerBadgeBg = '#dc2626';
   } else if (isWide) {
     bannerType = 'WIDE';
@@ -138,15 +163,23 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     bannerBadgeBg = '#ea580c';
   } else if (isSix) {
     bannerType = 'SIX';
-    bannerImageSource = IMG_UMPIRE_SIX;
+    bannerImageSource = POPUP_SIX;
     bannerBadgeBg = '#2563eb';
   } else if (isFour) {
     bannerType = 'FOUR';
-    bannerImageSource = IMG_UMPIRE_FOUR;
+    bannerImageSource = POPUP_4RUNS;
     bannerBadgeBg = '#059669';
   } else if (isThreeRuns) {
     bannerType = 'THREE_RUNS';
     bannerImageSource = POPUP_3RUNS;
+    bannerBadgeBg = '#0284c7';
+  } else if (isTwoRuns) {
+    bannerType = 'TWO_RUNS';
+    bannerImageSource = POPUP_2RUNS;
+    bannerBadgeBg = '#0284c7';
+  } else if (isOneRun) {
+    bannerType = 'ONE_RUN';
+    bannerImageSource = POPUP_1RUN;
     bannerBadgeBg = '#0284c7';
   } else if (isDotBall) {
     bannerType = 'DOT';
@@ -158,97 +191,104 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
     bannerBadgeBg = '#0284c7';
   }
 
-  // Generate detailed breakdown of why out, reasons, and wagon wheel sides
+  // Generate detailed professional breakdown of reasons and wagon wheel details
   let titleText = '';
   let subtitleText = '';
-  let whyOutReason = '';
+  let whyReason = '';
   let tipText = '';
   let iconEmoji = '🏏';
 
-  if (bannerType === 'RUN_OUT') {
+  if (bannerType === 'FOUR') {
+    iconEmoji = '💥';
+    titleText = 'Four Runs – BOUNDARY 4!';
+    subtitleText = `Hit by ${batter} off ${bowler}`;
+    whyReason = `Punched past ${sector} with immaculate timing! The ball raced across the outfield and crossed the boundary rope for 4 runs.`;
+    tipText = "Tip: 4 runs credited to batter's score; boundary count updated.";
+  } else if (bannerType === 'SIX') {
+    iconEmoji = '🚀';
+    titleText = 'Six Runs – MAXIMUM 6!';
+    subtitleText = `Huge hit by ${batter} off ${bowler}`;
+    whyReason = `Massive strike! Smashed high and handsome over ${sector} deep into the stadium stands. 6 runs awarded without bouncing.`;
+    tipText = "Tip: 6 runs credited to batter's score; maximum count incremented.";
+  } else if (bannerType === 'RUN_OUT') {
     iconEmoji = '⚡';
-    titleText = 'RUN OUT!';
+    titleText = 'Run Out – RUN OUT!';
     subtitleText = `run out (${catcher || 'Fielder'})`;
-    whyOutReason = `Why Out: Direct throw hit the stumps while ${batter} was stranded short of the popping crease. Decision confirmed out.`;
-    tipText = "Tip: Run outs do not credit the bowler on official bowling figures.";
+    whyReason = `Why Out: Direct throw hit the stumps while ${batter} was stranded short of the popping crease. Decision confirmed out.`;
+    tipText = "Tip: Run outs do not charge the bowler's official bowling analysis.";
   } else if (bannerType === 'STUMPED') {
     iconEmoji = '🧤';
     titleText = '🧤 Stumping – STUMPED!';
     subtitleText = `st †${catcher || 'Wicketkeeper'} b ${bowler}`;
-    whyOutReason = `Why Out: Batter dragged foot out of crease while attacking the delivery. Wicketkeeper collected cleanly and whipped off the bails in a flash.`;
-    tipText = "Tip: Stumping is credited as a bowler wicket and keeper dismissal.";
+    whyReason = `Why Out: Batter dragged foot out of crease while attacking. Wicketkeeper collected cleanly and whipped off the bails in a flash.`;
+    tipText = "Tip: Stumping is credited as a bowler wicket and wicketkeeper dismissal.";
   } else if (bannerType === 'LBW') {
     iconEmoji = '🔥';
     titleText = '🔥 LBW Out – LBW!';
     subtitleText = `lbw b ${bowler}`;
-    whyOutReason = `Why Out: Struck on the front pad in line with middle and off stumps. Ball pitched in line, impact in line, and would have hit the stumps. Plumb in front!`;
-    tipText = "Tip: LBW wickets are credited to the bowler's official bowling analysis.";
+    whyReason = `Why Out: Struck on the front pad in line with middle and off stumps. Ball pitched in line, impact in line, and would have crashed into the stumps. Plumb in front!`;
+    tipText = "Tip: LBW wickets are credited to the bowler's official bowling figures.";
   } else if (bannerType === 'CAUGHT') {
     iconEmoji = '🤲';
-    titleText = 'CAUGHT OUT!';
+    titleText = 'Caught Out – CAUGHT!';
     subtitleText = `c ${catcher || 'Fielder'} b ${bowler}`;
-    whyOutReason = `Why Out: Lofted shot towards ${sector}, caught cleanly by ${catcher || 'the fielder'}. Batter dismissed.`;
-    tipText = "Tip: Verify catcher & bowler in official match scorecard or click 'Edit Ball' to correct.";
+    whyReason = `Why Out: Aerial shot towards ${sector}. Fielder ${catcher || 'in deep'} judged the trajectory perfectly and took a clean catch.`;
+    tipText = "Tip: Batter dismissed; wicket credited to bowler and catch to fielder.";
   } else if (bannerType === 'BOWLED') {
     iconEmoji = '🎯';
-    titleText = 'BOWLED OUT!';
+    titleText = 'Bowled Out – BOWLED!';
     subtitleText = `b ${bowler}`;
-    whyOutReason = `Why Out: Clean bowled! Beat the defensive stroke and shattered the stumps, dislodging the bails.`;
+    whyReason = `Why Out: Clean bowled! Beat the defensive stroke and shattered the stumps, dislodging the bails.`;
     tipText = "Tip: Use 'Edit Ball' if the delivery was called a no-ball or decision was reversed.";
   } else if (bannerType === 'THREE_RUNS') {
     iconEmoji = '🏃';
     titleText = '🏃 Three Runs – 3 RUNS!';
-    subtitleText = `Running between wickets by ${batter}`;
-    whyOutReason = `Pushed into the deep towards ${sector || 'Long-Off'}. Superb running between the wickets by both batsmen to complete 3 runs safely.`;
+    subtitleText = `Running between wickets by ${batter} & ${nonStriker}`;
+    whyReason = `Pushed into the deep gap towards ${sector}. Superb running between the wickets by both batsmen to complete 3 runs safely.`;
     tipText = "Tip: 3 runs completed off the bat; strike rotates to the non-striker.";
-  } else if (bannerType === 'OVERTHROW') {
+  } else if (bannerType === 'TWO_RUNS') {
     iconEmoji = '⚡';
-    titleText = `OVERTHROW! +${runs} RUNS`;
-    subtitleText = `${batter} took advantage of fielding mishap`;
-    whyOutReason = `Fielding throw from ${sector || 'the deep'} missed the stumps and backup fielder, enabling ${runs} extra overthrow runs.`;
-    tipText = "Tip: Overthrow runs count toward batter's total if off the bat, or extras as designated.";
-  } else if (bannerType === 'DOT') {
-    iconEmoji = '🛡️';
-    titleText = 'DOT BALL! No Runs';
-    subtitleText = `Bowled by ${bowler} to ${batter}`;
-    whyOutReason = `Good length delivery defended solidly into ${sector || 'Cover'}. No runs conceded (Dot ball recorded).`;
-    tipText = "Tip: Dot balls build bowler pressure and lower required economy rate.";
-  } else if (bannerType === 'WIDE') {
-    iconEmoji = '↔️';
-    titleText = 'WIDE BALL! +1 Run';
-    subtitleText = `Bowled by ${bowler}`;
-    whyOutReason = `Delivery bowled outside the official tramline marker. +1 extra penalty run added to team total, ball must be re-bowled.`;
-    tipText = "Tip: Wide balls do not count as legal balls in the over.";
+    titleText = '⚡ Two Runs – 2 RUNS!';
+    subtitleText = `Double taken by ${batter} & ${nonStriker}`;
+    whyReason = `Worked into the gap at ${sector}. Quick call and sharp turning at the crease allowed both batsmen to comfortably take 2 runs.`;
+    tipText = "Tip: 2 runs scored off the bat; striker retains the strike.";
+  } else if (bannerType === 'ONE_RUN') {
+    iconEmoji = '🔄';
+    titleText = '🔄 One Run – SINGLE!';
+    subtitleText = `Strike rotated: ${batter} ➔ ${nonStriker}`;
+    whyReason = `Tapped softly into ${sector} for a quick single. Good communication between wickets to rotate the strike safely.`;
+    tipText = "Tip: 1 run scored off the bat; non-striker moves to the striker end.";
+  } else if (bannerType === 'OVERTHROW') {
+    iconEmoji = '💫';
+    titleText = `Overthrow – OVERTHROW! +${runs} RUNS`;
+    subtitleText = `Wayward throw conceded extra runs`;
+    whyReason = `Fielder threw towards the stumps towards ${sector}, but backup was missed. Batsmen capitalized on the overthrow for extra runs.`;
+    tipText = "Tip: Overthrow runs count towards team total and batter score.";
   } else if (bannerType === 'NO_BALL') {
     iconEmoji = '🚫';
-    titleText = 'NO BALL! +1 Penalty Run';
-    subtitleText = `Bowler overstepped / illegal height`;
-    whyOutReason = delivery.reason || `Illegal delivery (e.g. overstep / height). Free hit awarded to batting team on next legal ball.`;
-    tipText = "Tip: Mandatory Free Hit follows for the next delivery.";
-  } else if (bannerType === 'SIX') {
-    iconEmoji = '💥';
-    titleText = 'FANTASTIC MAXIMUM! (6)';
-    subtitleText = `Smashed by ${batter} off ${bowler}`;
-    whyOutReason = `Cleared the boundary ropes over ${sector} (${delivery.distance || '86'}m). Huge six!`;
-    tipText = "Tip: Wagon wheel shot sector and distance recorded for tournament analytics.";
-  } else if (bannerType === 'FOUR') {
-    iconEmoji = '🏏';
-    titleText = 'FOUR RUNS! (4)';
-    subtitleText = `Driven by ${batter} off ${bowler}`;
-    whyOutReason = `Cracking shot! Driven past ${sector} to the boundary ropes for four.`;
-    tipText = "Tip: Wagon wheel boundary trajectory mapped to playing sector.";
+    titleText = 'No Ball – FREE HIT!';
+    subtitleText = `Bowled by ${bowler} (+1 Extra & Free Hit)`;
+    whyReason = `Illegal delivery: Bowler overstepped the popping crease (front foot no-ball). 1 extra run added and next ball is a FREE HIT!`;
+    tipText = "Tip: Batsman cannot be dismissed on a Free Hit except by run out.";
+  } else if (bannerType === 'WIDE') {
+    iconEmoji = '↔️';
+    titleText = 'Wide Ball – WIDE! (+1 Extra)';
+    subtitleText = `Bowled by ${bowler}`;
+    whyReason = `Delivery passed outside the tramline marking beyond batter's reach. 1 extra run added and delivery must be re-bowled.`;
+    tipText = "Tip: Wide deliveries do not count towards the 6 legal balls in the over.";
+  } else if (bannerType === 'DOT') {
+    iconEmoji = '🛡️';
+    titleText = 'Dot Ball – NO RUN (0)';
+    subtitleText = `Faced by ${batter} from ${bowler}`;
+    whyReason = `Solid defensive shot towards ${sector}. Fielded cleanly inside the circle with no run conceded. Excellent pressure ball!`;
+    tipText = "Tip: Dot balls build pressure and lower the scoring run rate.";
   } else {
-    iconEmoji = '🏃';
-    titleText = `${runs} ${runs === 1 ? 'RUN' : 'RUNS'} SCORED`;
-    subtitleText = `Running between wickets by ${batter}`;
-    whyOutReason = `Pushed into the gap towards ${sector || 'Cover'}, quick running completed.`;
-    tipText = "Tip: Strike rotates for odd runs completed.";
+    iconEmoji = '🏏';
+    titleText = `Delivery – +${runs} RUNS`;
+    subtitleText = `Scored off ${bowler}`;
+    whyReason = delivery.commentary || `Ball played towards ${sector} for ${runs} run(s).`;
+    tipText = "Tip: Use 'Edit Ball' to retroactively modify runs, extras or wicket.";
   }
-
-  const handleEditClick = () => {
-    onClose();
-    onEdit(delivery);
-  };
 
   return (
     <Modal
@@ -260,7 +300,7 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
       <View style={styles.modalOverlay}>
         <View style={styles.cardContainer}>
           {/* ═════════════════════════════════════════════════════════════════════
-              UNIFORM EXACT 200px HEIGHT BANNER FOR ALL POPUP IMAGES
+              EXACT 16:9 WIDESCREEN 210px HEIGHT BANNER (ZERO CROPPING / FULL VIEW)
              ═════════════════════════════════════════════════════════════════════ */}
           <View style={styles.uniformBannerWrap}>
             {bannerImageSource ? (
@@ -273,18 +313,18 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
               <View style={[styles.uniformBannerImage, { backgroundColor: '#1e293b' }]} />
             )}
 
-            {/* Gradient Overlay for Top Controls */}
+            {/* Top Fade Gradient for controls */}
             <View style={styles.bannerTopFadeGradient} />
 
-            {/* Floating Top Left Pill: Ball X.Y */}
+            {/* Top Left Floating Pill: Ball X.Y */}
             <View style={[styles.headerPill, { backgroundColor: bannerBadgeBg }]}>
               <Text style={styles.headerPillText}>{bannerBadgeText}</Text>
             </View>
 
-            {/* Floating Top Right Close Button */}
+            {/* Top Right Close Button */}
             <TouchableOpacity
-              onPress={onClose}
               style={styles.closeCircleBtn}
+              onPress={onClose}
               activeOpacity={0.8}
             >
               <Text style={styles.closeCircleBtnText}>✕</Text>
@@ -292,40 +332,55 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
           </View>
 
           {/* ═════════════════════════════════════════════════════════════════════
-              CONTENT DETAILS (Who caught it, Why out, Reasons, Overthrows)
+              CARD CONTENT BODY (PROFESSIONAL DETAILS: STRIKER, NON-STRIKER, BOWLER, WAGON WHEEL)
              ═════════════════════════════════════════════════════════════════════ */}
-          <View style={styles.contentBody}>
-            {/* 1. Main Headline Row */}
+          <ScrollView style={styles.contentBody} bounces={false}>
+            {/* 1. Headline Row */}
             <View style={styles.headlineRow}>
               <View style={styles.iconCircleBadge}>
                 <Text style={{ fontSize: 26 }}>{iconEmoji}</Text>
               </View>
               <View style={styles.headlineTextCol}>
                 <Text style={styles.mainTitle}>{titleText}</Text>
-                <Text style={styles.subTitle} numberOfLines={1}>
-                  {subtitleText}
-                </Text>
+                <Text style={styles.subTitle}>{subtitleText}</Text>
               </View>
             </View>
 
-            {/* 2. Structured Reason / Why Out / Field Details Box */}
-            <View style={styles.reasonCardBox}>
-              <Text style={styles.reasonCardText}>
-                {whyOutReason}
-              </Text>
+            {/* 2. Wagon Wheel Sector / Shot Direction Badge */}
+            <View style={styles.wagonWheelRow}>
+              <View style={styles.wagonWheelPill}>
+                <Text style={styles.wagonWheelPillIcon}>🎯</Text>
+                <Text style={styles.wagonWheelPillLabel}>Wagon Wheel / Direction:</Text>
+                <Text style={styles.wagonWheelPillValue}>{sector}</Text>
+              </View>
             </View>
 
-            {/* 3. Match Logistics Strip: Batter & Bowler & Catcher/Keeper/Fielder */}
+            {/* 3. Reason & Match Event Details Box */}
+            <View style={styles.reasonCardBox}>
+              <Text style={styles.reasonCardText}>{whyReason}</Text>
+            </View>
+
+            {/* 4. Complete Match Logistics Strip: Striker, Non-Striker, Bowler, Fielder */}
             <View style={styles.playerStripRow}>
               <View style={styles.playerStripCol}>
-                <Text style={styles.playerStripLabel}>🏏 BATTER</Text>
+                <Text style={styles.playerStripLabel}>🏏 STRIKER</Text>
                 <Text style={styles.playerStripValue} numberOfLines={1}>{batter}</Text>
               </View>
+
               <View style={styles.playerStripDivider} />
+
               <View style={styles.playerStripCol}>
-                <Text style={styles.playerStripLabel}>🎯 BOWLER</Text>
+                <Text style={styles.playerStripLabel}>🏃 NON-STRIKER</Text>
+                <Text style={styles.playerStripValue} numberOfLines={1}>{nonStriker}</Text>
+              </View>
+
+              <View style={styles.playerStripDivider} />
+
+              <View style={styles.playerStripCol}>
+                <Text style={styles.playerStripLabel}>🎳 BOWLER</Text>
                 <Text style={styles.playerStripValue} numberOfLines={1}>{bowler}</Text>
               </View>
+
               {Boolean(catcher) && (
                 <>
                   <View style={styles.playerStripDivider} />
@@ -341,35 +396,44 @@ export const DeliveryInspectionModal: React.FC<DeliveryInspectionModalProps> = (
               )}
             </View>
 
-            {/* 4. Tip Box */}
-            <View style={styles.tipBox}>
-              <Text style={styles.tipIcon}>💡</Text>
-              <Text style={styles.tipText}>{tipText}</Text>
-            </View>
+            {/* 5. Helpful Scoring Rule Tip Box */}
+            {Boolean(tipText) && (
+              <View style={styles.tipBox}>
+                <Text style={styles.tipIcon}>💡</Text>
+                <Text style={styles.tipText}>{tipText}</Text>
+              </View>
+            )}
 
-            {/* 5. Dual Action Buttons: Retroactive Ball Correction & OK */}
+            {/* 6. Dual Action Buttons: '✏️ Edit Ball' & '✓ OK' */}
             <View style={styles.buttonRow}>
               <TouchableOpacity
                 style={styles.editBallBtn}
-                onPress={handleEditClick}
-                activeOpacity={0.85}
+                onPress={() => {
+                  onClose();
+                  onEdit(delivery);
+                }}
+                activeOpacity={0.8}
               >
                 <Text style={styles.editBallBtnText}>✏️ Edit Ball {ballText}</Text>
               </TouchableOpacity>
+
               <TouchableOpacity
                 style={styles.okBtn}
                 onPress={onClose}
-                activeOpacity={0.85}
+                activeOpacity={0.8}
               >
                 <Text style={styles.okBtnText}>✓ OK</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </ScrollView>
         </View>
       </View>
     </Modal>
   );
 };
+
+const { width } = Dimensions.get('window');
+const cardMaxWidth = Math.min(width - 32, 520);
 
 const styles = StyleSheet.create({
   modalOverlay: {
@@ -381,16 +445,16 @@ const styles = StyleSheet.create({
   },
   cardContainer: {
     width: '100%',
-    maxWidth: 440,
+    maxWidth: cardMaxWidth,
     backgroundColor: '#ffffff',
     borderRadius: 22,
     overflow: 'hidden',
     ...Platform.select({
       web: {
-        boxShadow: '0 20px 40px -15px rgba(0, 0, 0, 0.5)'
+        boxShadow: '0 20px 45px rgba(0, 0, 0, 0.4)'
       },
       default: {
-        elevation: 14,
+        elevation: 10,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 10 },
         shadowOpacity: 0.35,
@@ -399,10 +463,10 @@ const styles = StyleSheet.create({
     })
   },
 
-  // EXACT SAME 200px HEIGHT BANNER FOR ALL POPUP IMAGES
+  // EXACT 16:9 WIDESCREEN 210px HEIGHT BANNER
   uniformBannerWrap: {
     width: '100%',
-    height: 200,
+    height: 210,
     backgroundColor: '#0f172a',
     position: 'relative',
     overflow: 'hidden'
@@ -417,7 +481,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 60,
-    backgroundColor: 'rgba(0, 0, 0, 0.25)'
+    backgroundColor: 'rgba(0, 0, 0, 0.3)'
   },
 
   // Top Left Floating Pill
@@ -446,7 +510,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.2,
@@ -460,18 +524,19 @@ const styles = StyleSheet.create({
 
   // Content Body
   contentBody: {
-    padding: 18
+    padding: 16,
+    maxHeight: 460
   },
   headlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    marginBottom: 12
+    marginBottom: 10
   },
   iconCircleBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: '#f8fafc',
     borderWidth: 1.5,
     borderColor: '#e2e8f0',
@@ -482,63 +547,93 @@ const styles = StyleSheet.create({
     flex: 1
   },
   mainTitle: {
-    fontSize: 17,
+    fontSize: 16.5,
     fontWeight: '900',
     color: '#0f172a',
     letterSpacing: 0.3,
     marginBottom: 2
   },
   subTitle: {
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '600',
     color: '#64748b'
   },
 
-  // Why Out / Details Reason Box
+  // Wagon Wheel Direction Pill
+  wagonWheelRow: {
+    flexDirection: 'row',
+    marginBottom: 10
+  },
+  wagonWheelPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ecfdf5',
+    borderColor: '#a7f3d0',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 6
+  },
+  wagonWheelPillIcon: {
+    fontSize: 13
+  },
+  wagonWheelPillLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#047857'
+  },
+  wagonWheelPillValue: {
+    fontSize: 11.5,
+    fontWeight: '900',
+    color: '#065f46'
+  },
+
+  // Details Reason Box
   reasonCardBox: {
     backgroundColor: '#f8fafc',
     borderColor: '#e2e8f0',
     borderWidth: 1,
     borderRadius: 10,
-    padding: 12,
-    marginBottom: 12
+    padding: 11,
+    marginBottom: 10
   },
   reasonCardText: {
-    fontSize: 13.5,
+    fontSize: 13,
     color: '#1e293b',
-    lineHeight: 19,
+    lineHeight: 18,
     fontWeight: '500'
   },
 
-  // Player Strip Row
+  // Complete Player Strip Row (Striker, Non-Striker, Bowler, Fielder)
   playerStripRow: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#f1f5f9',
     borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    marginBottom: 12
+    paddingVertical: 7,
+    paddingHorizontal: 9,
+    marginBottom: 10
   },
   playerStripCol: {
     flex: 1
   },
   playerStripLabel: {
-    fontSize: 9.5,
+    fontSize: 9,
     fontWeight: '800',
     color: '#64748b',
     marginBottom: 1
   },
   playerStripValue: {
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '800',
     color: '#0f172a'
   },
   playerStripDivider: {
     width: 1,
-    height: 24,
+    height: 22,
     backgroundColor: '#cbd5e1',
-    marginHorizontal: 8
+    marginHorizontal: 6
   },
 
   // Tip Box
@@ -546,32 +641,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff6ff',
     borderColor: '#bfdbfe',
     borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 16
+    gap: 7,
+    marginBottom: 14
   },
   tipIcon: {
-    fontSize: 15
+    fontSize: 14
   },
   tipText: {
-    fontSize: 11.5,
+    fontSize: 11,
     color: '#1e40af',
     flex: 1,
-    lineHeight: 16
+    lineHeight: 15
   },
 
-  // Buttons
+  // Action Buttons
   buttonRow: {
     flexDirection: 'row',
     gap: 10
   },
   editBallBtn: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderRadius: 10,
     backgroundColor: '#f0f9ff',
     borderWidth: 1.5,
@@ -581,12 +676,12 @@ const styles = StyleSheet.create({
   },
   editBallBtnText: {
     color: '#0284c7',
-    fontSize: 13,
+    fontSize: 12.5,
     fontWeight: '700'
   },
   okBtn: {
     flex: 1.2,
-    paddingVertical: 12,
+    paddingVertical: 11,
     borderRadius: 10,
     backgroundColor: '#f59e0b',
     alignItems: 'center',
@@ -602,7 +697,7 @@ const styles = StyleSheet.create({
   },
   okBtnText: {
     color: '#1e293b',
-    fontSize: 14,
+    fontSize: 13.5,
     fontWeight: '900',
     letterSpacing: 0.5
   }
