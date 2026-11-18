@@ -35,6 +35,7 @@ import Header from '../src/layouts/Header';
 import BroadcastLiveBallAction from '../src/components/common/BroadcastLiveBallAction';
 import { VPLEventBanner, VPLSoundControls } from '../src/components/common/VPLEventBanner';
 import { mapBallToEvents, normalizeExtraType, normalizeDismissal } from '../src/utils/vplEventMapper';
+import VideoPreloader from '../src/components/common/VideoPreloader';
 
 // ─── ASSET REFERENCES ──────────────────────────────────────────────────────────
 const IMG_LOGO = require('../assets/logo_transparent.png');
@@ -191,6 +192,7 @@ export default function HomeScreen() {
 
   // Authentication Session State (JWT Bearer / Cookie)
   const [sessionUser, setSessionUser] = useState<any>(() => getCurrentUser());
+  const [showIntroVideo, setShowIntroVideo] = useState<boolean>(false);
 
   useEffect(() => {
     // 1. Check local session cache
@@ -990,6 +992,24 @@ export default function HomeScreen() {
                 activeOpacity={0.85}
               >
                 <Text style={styles.heroBtnWhiteText}>📡 Live Scorecard</Text>
+              </TouchableOpacity>
+
+              {/* 4. Watch Intro Video (Professional Preloader Replay) */}
+              <TouchableOpacity
+                style={[
+                  styles.heroBtnWhite,
+                  { backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: 'rgba(245, 158, 11, 0.7)' },
+                  isMobile && {
+                    flex: 1,
+                    minWidth: 140,
+                    maxWidth: 200,
+                    justifyContent: 'center',
+                  }
+                ]}
+                onPress={() => setShowIntroVideo(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.heroBtnWhiteText, { color: '#fbbf24', fontWeight: '800' }]}>🎬 Watch Intro</Text>
               </TouchableOpacity>
             </View>
 
@@ -3476,6 +3496,11 @@ export default function HomeScreen() {
           });
         }}
       />
+
+      {/* Full-Screen Video Preloader / Intro Player */}
+      {showIntroVideo && (
+        <VideoPreloader onComplete={() => setShowIntroVideo(false)} />
+      )}
     </View>
   );
 }
