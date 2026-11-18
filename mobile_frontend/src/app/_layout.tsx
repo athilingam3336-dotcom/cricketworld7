@@ -8,12 +8,9 @@ import '../utils/sweetalert';
 
 export default function RootLayout() {
   const [showPreloader, setShowPreloader] = useState<boolean>(() => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      try {
-        return !sessionStorage.getItem('cfvd_preloader_seen');
-      } catch (_e) {
-        return false;
-      }
+    if (Platform.OS === 'web') {
+      // index.html executes the initial web preloader natively before JS bundle hydration
+      return false;
     }
     return true;
   });

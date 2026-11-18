@@ -18,9 +18,11 @@ interface VideoPreloaderProps {
 
 export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
   const [isDismissed, setIsDismissed] = useState<boolean>(false);
-  const [isMuted, setIsMuted] = useState<boolean>(true);
+  const [showHint, setShowHint] = useState<boolean>(false);
   const [progress, setProgress] = useState<number>(0);
   const fadeAnim = useRef(new Animated.Value(1)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const flashAnim = useRef(new Animated.Value(0)).current;
   const webVideoRef = useRef<HTMLVideoElement | null>(null);
 
   const handleDismiss = (immediate = false) => {
@@ -41,11 +43,30 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
       return;
     }
 
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 600,
-      useNativeDriver: Platform.OS !== 'web',
-    }).start(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 800,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+      Animated.timing(scaleAnim, {
+        toValue: 1.14,
+        duration: 800,
+        useNativeDriver: Platform.OS !== 'web',
+      }),
+      Animated.sequence([
+        Animated.timing(flashAnim, {
+          toValue: 0.95,
+          duration: 220,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(flashAnim, {
+          toValue: 0,
+          duration: 580,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]),
+    ]).start(() => {
       if (onComplete) onComplete();
     });
   };
@@ -56,18 +77,49 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
       handleDismiss();
     }, 9500);
 
+    // Try unmuted audio on web immediately, register gesture listeners if blocked
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const activateSound = () => {
+        if (webVideoRef.current) {
+          webVideoRef.current.muted = false;
+          webVideoRef.current.volume = 1.0;
+          if (webVideoRef.current.paused) {
+            webVideoRef.current.play().catch(() => {});
+          }
+        }
+        setShowHint(false);
+      };
+
+      const events = ['click', 'touchstart', 'pointerdown', 'keydown'];
+      events.forEach((evt) => {
+        window.addEventListener(evt, activateSound, { capture: true, once: true });
+      });
+
+      if (webVideoRef.current) {
+        webVideoRef.current.muted = false;
+        webVideoRef.current.volume = 1.0;
+        const playPromise = webVideoRef.current.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(() => {
+            if (webVideoRef.current) {
+              webVideoRef.current.muted = true;
+              webVideoRef.current.play().catch(() => {});
+              setShowHint(true);
+            }
+          });
+        }
+      }
+
+      return () => {
+        clearTimeout(timer);
+        events.forEach((evt) => {
+          window.removeEventListener(evt, activateSound, true);
+        });
+      };
+    }
+
     return () => clearTimeout(timer);
   }, []);
-
-  const toggleSound = () => {
-    if (Platform.OS === 'web' && webVideoRef.current) {
-      const nextMuted = !webVideoRef.current.muted;
-      webVideoRef.current.muted = nextMuted;
-      setIsMuted(nextMuted);
-    } else {
-      setIsMuted((prev) => !prev);
-    }
-  };
 
   const handleTimeUpdate = (e: any) => {
     const video = e.target;
@@ -81,7 +133,7 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
     return null;
   }
 
-  // Native WebView implementation for iOS / Android
+  // Native WebView implementation for iOS / Android (unmuted stadium sound)
   const nativeHtml = `
     <!DOCTYPE html>
     <html>
@@ -94,12 +146,14 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
         </style>
       </head>
       <body>
-        <video id="v" autoplay ${isMuted ? 'muted' : ''} playsinline preload="auto">
+        <video id="v" autoplay playsinline preload="auto">
           <source src="http://localhost:8081/preloader.mp4" type="video/mp4" />
           <source src="http://localhost:5000/uploads/preloader.mp4" type="video/mp4" />
         </video>
         <script>
           var v = document.getElementById('v');
+          v.muted = false;
+          v.volume = 1.0;
           v.addEventListener('ended', function() {
             window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ENDED' }));
           });
@@ -108,17 +162,32 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'PROGRESS', pct: (v.currentTime / v.duration) * 100 }));
             }
           });
-          v.play().catch(function() {
-            v.muted = true;
-            v.play();
-          });
+          var playPromise = v.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(function() {
+              v.muted = true;
+              v.play();
+              window.addEventListener('touchstart', function() {
+                v.muted = false;
+                v.volume = 1.0;
+              }, { once: true });
+            });
+          }
         </script>
       </body>
     </html>
   `;
 
   return (
-    <Animated.View style={[styles.overlay, { opacity: fadeAnim }]}>
+    <Animated.View
+      style={[
+        styles.overlay,
+        {
+          opacity: fadeAnim,
+          transform: [{ scale: scaleAnim }],
+        },
+      ]}
+    >
       <StatusBar barStyle="light-content" backgroundColor="#020612" translucent />
 
       {/* Main Video Presentation */}
@@ -127,14 +196,13 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
           <video
             ref={webVideoRef}
             autoPlay
-            muted={isMuted}
             playsInline
             preload="auto"
             style={{
               width: '100%',
               height: '100%',
               objectFit: 'contain',
-              backgroundColor: '#020612'
+              backgroundColor: '#020612',
             }}
             src="/preloader.mp4"
             onEnded={() => handleDismiss()}
@@ -170,19 +238,30 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
         </View>
 
         <View style={styles.actionRow}>
-          {Platform.OS === 'web' && (
-            <TouchableOpacity style={styles.soundBtn} onPress={toggleSound} activeOpacity={0.8}>
-              <Text style={{ fontSize: 13 }}>{isMuted ? '🔇' : '🔊'}</Text>
-              <Text style={styles.soundBtnText}>{isMuted ? 'UNMUTE' : 'MUTE'}</Text>
-            </TouchableOpacity>
-          )}
+          {/* Always-on Unmuted Stadium Sound Badge */}
+          <View style={styles.soundBadge}>
+            <Text style={{ fontSize: 13 }}>🔊</Text>
+            <Text style={styles.soundBadgeText}>STADIUM SOUND ON</Text>
+          </View>
 
-          <TouchableOpacity style={styles.skipBtn} onPress={() => handleDismiss()} activeOpacity={0.85}>
-            <Text style={styles.skipBtnText}>SKIP INTRO</Text>
-            <Text style={styles.skipBtnClose}>✕</Text>
+          {/* Enter Stadium Button */}
+          <TouchableOpacity
+            style={styles.skipBtn}
+            onPress={() => handleDismiss()}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.skipBtnText}>ENTER STADIUM</Text>
+            <Text style={styles.skipBtnClose}>➔</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Sound Interaction Hint */}
+      {showHint && (
+        <View style={styles.soundHintBadge}>
+          <Text style={styles.soundHintText}>🔊 TAP ANYWHERE FOR FULL STADIUM SOUND</Text>
+        </View>
+      )}
 
       {/* Bottom Title & Synchronized Golden Progress Line */}
       <View style={styles.bottomBar}>
@@ -193,6 +272,17 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
           <View style={[styles.progressBar, { width: `${progress}%` }]} />
         </View>
       </View>
+
+      {/* Stadium Flash Overlay during dismiss transition */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.flashOverlay,
+          {
+            opacity: flashAnim,
+          },
+        ]}
+      />
     </Animated.View>
   );
 }
@@ -256,22 +346,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10
   },
-  soundBtn: {
+  soundBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: 'rgba(15, 23, 42, 0.8)',
+    backgroundColor: 'rgba(245, 158, 11, 0.18)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderColor: 'rgba(245, 158, 11, 0.65)',
     paddingVertical: 7,
     paddingHorizontal: 14,
     borderRadius: 9999
   },
-  soundBtnText: {
-    color: '#f8fafc',
-    fontSize: 11.5,
-    fontWeight: '700',
-    letterSpacing: 0.5
+  soundBadgeText: {
+    color: '#fbbf24',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6
+  },
+  soundHintBadge: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 100 : 70,
+    backgroundColor: 'rgba(15, 23, 42, 0.9)',
+    borderWidth: 1.5,
+    borderColor: '#f59e0b',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 9999,
+    zIndex: 20
+  },
+  soundHintText: {
+    color: '#fef08a',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.6
+  },
+  flashOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(251, 191, 36, 0.7)',
+    zIndex: 9999999
   },
   skipBtn: {
     flexDirection: 'row',
@@ -331,3 +447,4 @@ const styles = StyleSheet.create({
     borderRadius: 3
   }
 });
+
