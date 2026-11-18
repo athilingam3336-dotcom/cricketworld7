@@ -822,52 +822,77 @@ export default function HomeScreen() {
         contentContainerStyle={styles.mainScrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ─── 1. OASO-INSPIRED CINEMATIC HERO SECTION (BOOTSTRAP CONTAINER) ──────────────── */}
+        {/* ─── 1. PRESTIGIOUS ATHLETIC HERO SECTION ──────────────── */}
         <View style={styles.oasoHeroSection}>
-          {/* Deep Athletic Dark Atmosphere (No Background Image) */}
+          {/* Deep Athletic Light Gradient matching Clean Federation Theme */}
           <LinearGradient
             colors={[
-              '#040a1b',
-              '#09173d',
-              '#030818'
+              '#ffffff',
+              '#fbf9f4',
+              '#f6f2e9'
             ]}
             start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
+            end={{ x: 0, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
+
+          {/* Subtle Decorative Atmosphere Rings */}
+          <View style={styles.heroDecoRing1} pointerEvents="none" />
+          <View style={styles.heroDecoRing2} pointerEvents="none" />
 
           {/* Bootstrap Responsive Container */}
           <View style={[styles.container, containerResponsiveStyle, styles.oasoHeroContainer]}>
             <View style={[styles.oasoHeroRow, isMobile && styles.oasoHeroRowMobile]}>
               
-              {/* Left Column: Bold OASO Headline & Actions */}
+              {/* Left Column: Bold Headline & Actions */}
               <View style={[styles.oasoHeroContentCol, isMobile && styles.oasoHeroContentColMobile]}>
                 
                 {/* Overline Badge */}
                 <View style={[styles.oasoOverlineBadge, isMobile && { alignSelf: 'center' }]}>
                   <View style={styles.oasoPulseGoldDot} />
                   <Text style={styles.oasoOverlineText}>CRICKET FEDERATION OF VIRUDHUNAGAR DISTRICT</Text>
+                  <View style={styles.oasoAffiliatedBadge}>
+                    <Text style={styles.oasoAffiliatedBadgeText}>OFFICIAL UNIT</Text>
+                  </View>
                 </View>
 
                 {/* Big, Condensed Bold Headline matching OASO Typography */}
                 <Text style={[styles.oasoHeroTitle, isMobile && styles.oasoHeroTitleMobile]}>
-                  CHASING{'\n'}CRICKET{'\n'}EXCELLENCE{'\n'}TOGETHER
+                  CHASING{'\n'}
+                  <Text style={{ color: '#b45309' }}>CRICKET{'\n'}EXCELLENCE</Text>{'\n'}
+                  TOGETHER
                 </Text>
 
                 {/* Punchy Tagline / Extra Headline Content */}
                 <View style={[{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }, isMobile && { justifyContent: 'center' }]}>
-                  <Ionicons name="flash" size={13} color="#f5c43d" style={{ marginRight: 6 }} />
+                  <Ionicons name="flash" size={14} color="#d97706" style={{ marginRight: 6 }} />
                   <Text style={[styles.oasoHeroTagline, isMobile && { textAlign: 'center' }, { marginBottom: 0 }]}>
                     EMPOWERING TALENT • FOSTERING PASSION • UNITING CHAMPIONS
                   </Text>
                 </View>
 
-                {/* Subtitle in soft slate/white */}
+                {/* Subtitle in soft slate */}
                 <Text style={[styles.oasoHeroSubtitle, isMobile && styles.oasoHeroSubtitleMobile]}>
                   Governing, developing, and fostering grassroots, collegiate, and competitive cricket across Srivilliputhur, Sivakasi, Rajapalayam, Sattur, Aruppukottai, and Virudhunagar under the official authority of CFVD.
                 </Text>
 
-                {/* Action Buttons (NO BLUE!) */}
+                {/* Highlight Chips Row */}
+                <View style={[styles.oasoHighlightsRow, isMobile && { justifyContent: 'center' }]}>
+                  <View style={styles.oasoHighlightChip}>
+                    <Text style={styles.oasoHighlightEmoji}>🏆</Text>
+                    <Text style={styles.oasoHighlightText}>District League 2026-27</Text>
+                  </View>
+                  <View style={styles.oasoHighlightChip}>
+                    <Text style={styles.oasoHighlightEmoji}>⚡</Text>
+                    <Text style={styles.oasoHighlightText}>Live Digital Scoring</Text>
+                  </View>
+                  <View style={styles.oasoHighlightChip}>
+                    <Text style={styles.oasoHighlightEmoji}>🏏</Text>
+                    <Text style={styles.oasoHighlightText}>12+ Sanctioned Clubs</Text>
+                  </View>
+                </View>
+
+                {/* Action Buttons */}
                 <View
                   style={[
                     styles.heroButtonsRow,
@@ -880,7 +905,7 @@ export default function HomeScreen() {
                     }
                   ]}
                 >
-                  {/* 1. Match Centre Live (Deep Navy with Gold border - NO BLUE!) */}
+                  {/* 1. Match Centre Live */}
                   <TouchableOpacity
                     style={[
                       styles.oasoBtnPrimary,
@@ -898,7 +923,7 @@ export default function HomeScreen() {
                     <Text style={styles.oasoBtnPrimaryText}>Match Centre Live</Text>
                   </TouchableOpacity>
 
-                  {/* 2. Live Scorecard (Crisp Glass White Outline - NO BLUE!) */}
+                  {/* 2. Live Scorecard */}
                   <TouchableOpacity
                     style={[
                       styles.oasoBtnSecondary,
@@ -915,24 +940,35 @@ export default function HomeScreen() {
                     }}
                     activeOpacity={0.85}
                   >
-                    <Ionicons name="radio" size={14} color="#ffffff" style={{ marginRight: 6 }} />
+                    <Ionicons name="radio" size={15} color="#0a2540" style={{ marginRight: 6 }} />
                     <Text style={styles.oasoBtnSecondaryText}>Live Scorecard</Text>
+                  </TouchableOpacity>
+
+                  {/* 3. Standings & Points Table */}
+                  <TouchableOpacity
+                    style={[
+                      styles.oasoBtnTertiary,
+                      isMobile && {
+                        flex: 1,
+                        minWidth: 140,
+                        maxWidth: 200,
+                        justifyContent: 'center',
+                      }
+                    ]}
+                    onPress={() => scrollToSection('pointsTable')}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="trophy-outline" size={15} color="#b45309" style={{ marginRight: 6 }} />
+                    <Text style={styles.oasoBtnTertiaryText}>Points Table</Text>
                   </TouchableOpacity>
                 </View>
 
-                {/* OASO-Style Progress Indicator Line Accent at Bottom */}
-                {/* <View style={[styles.oasoProgressRow, isMobile && { justifyContent: 'center' }]}>
-                  <View style={styles.oasoBarActive} />
-                  <View style={styles.oasoBarInactive} />
-                  <View style={styles.oasoBarInactive} />
-                  <Text style={styles.oasoProgressLabel}>01 / 03 • OFFICIAL DISTRICT LEAGUE 2026-27</Text>
-                </View> */}
-
               </View>
 
-              {/* Right Column: CFVD Crest inside Container (Zero Top Clipping!) */}
+              {/* Right Column: CFVD Crest inside Container */}
               <View style={[styles.oasoHeroCrestCol, isMobile && styles.oasoHeroCrestColMobile]}>
                 <View style={styles.oasoCrestAuraRing} />
+                <View style={styles.oasoCrestAuraRingInner} />
                 <Image
                   source={IMG_LOGO}
                   style={[
@@ -944,6 +980,10 @@ export default function HomeScreen() {
                   ]}
                   resizeMode="contain"
                 />
+                <View style={styles.oasoCrestFloatingBadge}>
+                  <Ionicons name="shield-checkmark" size={13} color="#059669" style={{ marginRight: 5 }} />
+                  <Text style={styles.oasoCrestFloatingText}>Official District Governing Body • CFVD</Text>
+                </View>
               </View>
 
             </View>
@@ -4471,14 +4511,36 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
 
-  // OASO-Style Cinematic Dark Hero Section (Ref: Image 2)
+  // Prestigious Athletic Light Hero Section
   oasoHeroSection: {
     position: 'relative',
-    backgroundColor: '#030818',
+    backgroundColor: '#ffffff',
     overflow: 'hidden',
-    paddingVertical: Platform.OS === 'web' ? 52 : 36,
+    paddingVertical: Platform.OS === 'web' ? 56 : 40,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(212, 175, 55, 0.25)',
+    borderBottomColor: '#e2e8f0',
+  },
+  heroDecoRing1: {
+    position: 'absolute',
+    top: -120,
+    right: -80,
+    width: 600,
+    height: 600,
+    borderRadius: 300,
+    backgroundColor: 'rgba(217, 119, 6, 0.04)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(217, 119, 6, 0.08)',
+  },
+  heroDecoRing2: {
+    position: 'absolute',
+    bottom: -150,
+    left: -100,
+    width: 500,
+    height: 500,
+    borderRadius: 250,
+    backgroundColor: 'rgba(10, 37, 64, 0.03)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(10, 37, 64, 0.06)',
   },
   oasoHeroContainer: {
     zIndex: 2,
@@ -4507,56 +4569,69 @@ const styles = StyleSheet.create({
   oasoOverlineBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(212, 175, 55, 0.45)',
-    borderWidth: 1,
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+    borderWidth: 1.2,
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 5,
     marginBottom: 16,
+    gap: 6,
   },
   oasoPulseGoldDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#ffc107',
-    marginRight: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#d97706',
   },
   oasoOverlineText: {
-    color: '#f5c43d',
+    color: '#92400e',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.8,
   },
-  oasoHeroTitle: {
-    color: '#ffffff',
-    fontSize: Platform.OS === 'web' ? 66 : 42,
+  oasoAffiliatedBadge: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 4,
+  },
+  oasoAffiliatedBadgeText: {
+    fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1.8,
-    lineHeight: Platform.OS === 'web' ? 70 : 46,
+    color: '#b45309',
+    letterSpacing: 0.5,
+  },
+  oasoHeroTitle: {
+    color: '#0a2540',
+    fontSize: Platform.OS === 'web' ? 62 : 38,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    lineHeight: Platform.OS === 'web' ? 66 : 42,
     textTransform: 'uppercase',
-    marginBottom: 10,
+    marginBottom: 12,
     textAlign: 'left',
   },
   oasoHeroTitleMobile: {
-    fontSize: 34,
-    lineHeight: 38,
+    fontSize: 32,
+    lineHeight: 36,
     textAlign: 'center',
   },
   oasoHeroTagline: {
-    color: '#f5c43d',
-    fontSize: Platform.OS === 'web' ? 14 : 11.5,
+    color: '#b45309',
+    fontSize: Platform.OS === 'web' ? 13.5 : 11,
     fontWeight: '800',
-    letterSpacing: 1.2,
+    letterSpacing: 1.1,
     textTransform: 'uppercase',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   oasoHeroSubtitle: {
-    color: '#cbd5e1',
+    color: '#475569',
     fontSize: 14.5,
     lineHeight: 23,
     fontWeight: '400',
-    marginBottom: 20,
+    marginBottom: 18,
     maxWidth: 620,
     textAlign: 'left',
   },
@@ -4569,41 +4644,46 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 24,
+    marginBottom: 22,
   },
   oasoHighlightChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    borderColor: 'rgba(255, 255, 255, 0.15)',
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 18,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 20,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
   oasoHighlightEmoji: {
-    fontSize: 11,
+    fontSize: 12,
     marginRight: 6,
   },
   oasoHighlightText: {
-    fontSize: 11.5,
+    fontSize: 12,
     fontWeight: '700',
-    color: '#f1f5f9',
+    color: '#1e293b',
   },
   oasoBtnPrimary: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0e184e',
-    borderColor: '#d4af37',
+    backgroundColor: '#0a2540',
+    borderColor: '#f59e0b',
     borderWidth: 1.5,
     paddingHorizontal: 22,
     height: 48,
-    borderRadius: 6,
-    shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.4,
-    elevation: 3,
+    borderRadius: 8,
+    shadowColor: '#0a2540',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
   },
   oasoBtnPrimaryText: {
     color: '#ffffff',
@@ -4615,43 +4695,40 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.08)',
-    borderColor: 'rgba(255, 255, 255, 0.85)',
+    backgroundColor: '#ffffff',
+    borderColor: '#0a2540',
     borderWidth: 1.5,
     paddingHorizontal: 20,
     height: 48,
-    borderRadius: 6,
+    borderRadius: 8,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
   },
   oasoBtnSecondaryText: {
-    color: '#ffffff',
+    color: '#0a2540',
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '800',
     letterSpacing: 0.3,
   },
-  oasoProgressRow: {
+  oasoBtnTertiary: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginTop: 6,
+    justifyContent: 'center',
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+    borderWidth: 1.2,
+    paddingHorizontal: 18,
+    height: 48,
+    borderRadius: 8,
   },
-  oasoBarActive: {
-    width: 32,
-    height: 3,
-    backgroundColor: '#d4af37',
-    borderRadius: 2,
-  },
-  oasoBarInactive: {
-    width: 14,
-    height: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
-    borderRadius: 2,
-  },
-  oasoProgressLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(255, 255, 255, 0.7)',
-    letterSpacing: 0.8,
-    marginLeft: 6,
+  oasoBtnTertiaryText: {
+    color: '#92400e',
+    fontSize: 13.5,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   oasoHeroCrestCol: {
     flex: 1,
@@ -4662,7 +4739,7 @@ const styles = StyleSheet.create({
   },
   oasoHeroCrestColMobile: {
     width: '100%',
-    marginTop: 28,
+    marginTop: 24,
     paddingVertical: 0,
   },
   oasoCrestAuraRing: {
@@ -4670,15 +4747,45 @@ const styles = StyleSheet.create({
     width: 440,
     height: 440,
     borderRadius: 220,
-    backgroundColor: 'rgba(212, 175, 55, 0.08)',
+    backgroundColor: 'rgba(217, 119, 6, 0.05)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(217, 119, 6, 0.15)',
+  },
+  oasoCrestAuraRingInner: {
+    position: 'absolute',
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    backgroundColor: 'rgba(10, 37, 64, 0.03)',
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.25)',
+    borderColor: 'rgba(10, 37, 64, 0.08)',
   },
   oasoCrestImage: {
     width: '100%',
-    maxWidth: 500,
-    height: 500,
-    maxHeight: 500,
+    maxWidth: 460,
+    height: 460,
+    maxHeight: 460,
+    ...(Platform.OS === 'web' ? ({ filter: 'drop-shadow(0 14px 28px rgba(10, 37, 64, 0.12))' } as any) : {}),
+  },
+  oasoCrestFloatingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: -20,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  oasoCrestFloatingText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#334155',
   },
 
   // Hero Section (Prestigious Athletic Federation Atmosphere)
