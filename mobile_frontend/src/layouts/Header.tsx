@@ -54,7 +54,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   useEffect(() => {
     if (propIsMobile !== undefined) return;
-    const sub = Dimensions.addEventListener('change', ({ window }) => {
+    const sub = Dimensions.addEventListener('change', ({ window }: { window: any }) => {
       setWindowWidth(window.width);
     });
     return () => sub?.remove();

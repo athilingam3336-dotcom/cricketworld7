@@ -19,12 +19,12 @@ import {
   Platform,
   Dimensions,
   Animated,
-  StatusBar,
   ActivityIndicator,
   Alert,
   Linking,
   useWindowDimensions
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppNavigation } from '../src/navigation/AppNavigator';
@@ -266,7 +266,7 @@ export default function HomeScreen() {
   }, [pulseAnim]);
 
   // Section Scroll Reference
-  const mainScrollRef = useRef<ScrollView>(null);
+  const mainScrollRef = useRef<any>(null);
   const [sectionPositions, setSectionPositions] = useState<Record<string, number>>({});
 
   const scrollToSection = (secName: string) => {
@@ -593,7 +593,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.rootContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#040a1b" />
+      <StatusBar style="light" />
 
       {/* FIXED BRIGHT ATMOSPHERIC BACKGROUND */}
       <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' as const }]}>

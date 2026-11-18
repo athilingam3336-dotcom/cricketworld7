@@ -19,7 +19,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  StatusBar,
   ActivityIndicator,
   Modal,
   Alert,
@@ -27,6 +26,7 @@ import {
   Linking,
   useWindowDimensions
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { TeamApi, getCurrentUser, ScorerApi } from '../../services/api';
 import { showError, showSuccess } from '../../utils/sweetalert';
 import {
@@ -1193,7 +1193,7 @@ export default function TeamDashboardScreen({ onExit, initialParams }: TeamDashb
 
   return (
     <View style={styles.rootContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#071026" />
+      <StatusBar style="light" />
 
       {/* ───────────────────────────────────────────────────────────── */}
       {/* 1. TOP HEADER BAR (Full width across top of viewport)          */}

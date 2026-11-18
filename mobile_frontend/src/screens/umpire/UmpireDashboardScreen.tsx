@@ -22,7 +22,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  StatusBar,
   ActivityIndicator,
   Modal,
   Alert,
@@ -30,6 +29,7 @@ import {
   Dimensions,
   Image
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import SharedBackground from '../../components/scorer/SharedBackground';
 import { UmpireApi, getCurrentUser } from '../../services/api';
@@ -161,7 +161,7 @@ export default function UmpireDashboardScreen({ onExit, initialParams }: UmpireD
   const isDesktop = windowWidth >= 768;
 
   useEffect(() => {
-    const sub = Dimensions.addEventListener('change', ({ window }) => {
+    const sub = Dimensions.addEventListener('change', ({ window }: { window: any }) => {
       setWindowWidth(window.width);
     });
     return () => sub?.remove();
@@ -442,7 +442,7 @@ export default function UmpireDashboardScreen({ onExit, initialParams }: UmpireD
   return (
     <SharedBackground>
       <SafeAreaView style={styles.safeContainer} edges={['top', 'left', 'right']}>
-        <StatusBar barStyle="dark-content" backgroundColor="#fdfbf7" />
+        <StatusBar style="dark" />
 
         {/* BRIGHT FEDERATION HEADER */}
         <View style={styles.header}>

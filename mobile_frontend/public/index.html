@@ -721,22 +721,38 @@
         });
 
         // ============================================================
-        // SOUND ENGINE: ALWAYS UNMUTED AUDIO (CANNOT BE MUTED)
+        // SOUND ENGINE: GUARANTEED MOBILE & WEB UNMUTED STADIUM AUDIO
         // ============================================================
-        video.muted = false;
-        video.volume = 1.0;
+        var soundBadge = document.getElementById('cfvd-sound-badge');
+        var soundStatusText = document.getElementById('cfvd-sound-status-text');
 
         function forceEnableStadiumAudio() {
-          video.muted = false;
-          video.volume = 1.0;
-          if (video.paused) {
-            video.play().catch(function() {});
-          }
+          try {
+            video.muted = false;
+            video.volume = 1.0;
+            var p = video.play();
+            if (p !== undefined) {
+              p.catch(function(e) {
+                console.warn('[CFVD Audio] Retry play error:', e);
+              });
+            }
+          } catch(e) {}
           if (soundHint) soundHint.style.display = 'none';
+          if (soundStatusText) soundStatusText.textContent = 'SOUND ON';
+          if (soundBadge) {
+            soundBadge.style.borderColor = 'rgba(245, 158, 11, 0.9)';
+            soundBadge.style.background = 'rgba(245, 158, 11, 0.28)';
+          }
         }
 
-        // Global gesture listener to immediately activate unmuted sound if browser policy restricts autoplay
-        var gestureEvents = ['click', 'touchstart', 'pointerdown', 'keydown'];
+        if (soundBadge) {
+          soundBadge.style.cursor = 'pointer';
+          soundBadge.addEventListener('click', forceEnableStadiumAudio);
+          soundBadge.addEventListener('touchend', forceEnableStadiumAudio);
+        }
+
+        // Global touch & click listener for mobile devices to unmute on first gesture
+        var gestureEvents = ['touchstart', 'touchend', 'click', 'pointerdown', 'keydown'];
         function handleUserGesture() {
           forceEnableStadiumAudio();
           gestureEvents.forEach(function(evt) {
@@ -747,40 +763,69 @@
           window.addEventListener(evt, handleUserGesture, { capture: true, once: true });
         });
 
+        // Also tapping the preloader video directly un-mutes audio on mobile
+        preloader.addEventListener('touchstart', handleUserGesture, { passive: true, once: true });
+        preloader.addEventListener('click', handleUserGesture, { passive: true, once: true });
+
         if (soundHint) {
           soundHint.addEventListener('click', function(e) {
+            e.stopPropagation();
+            forceEnableStadiumAudio();
+          });
+          soundHint.addEventListener('touchend', function(e) {
             e.stopPropagation();
             forceEnableStadiumAudio();
           });
         }
 
         // Attempt initial unmuted play
+        video.muted = false;
+        video.volume = 1.0;
         var playPromise = video.play();
         if (playPromise !== undefined) {
           playPromise.catch(function(err) {
-            // Browser autoplay policy restricted unmuted playback until first user interaction
-            console.warn('[CFVD Preloader] Autoplay audio waiting for first gesture:', err);
+            // Mobile browser policy restricted sound before first touch: play muted temporarily and display activation hint
+            console.warn('[CFVD Preloader] Autoplay audio waiting for mobile gesture:', err);
             video.muted = true;
             video.play().then(function() {
               if (soundHint) soundHint.style.display = 'block';
+              if (soundStatusText) soundStatusText.textContent = 'TAP FOR SOUND';
             }).catch(function() {});
           });
         }
 
+        // ============================================================
+        // BAIL LOCK AUDIO SYNC: AT ~6.9s WHEN THE BAILS FIX INTO PLACE
+        // WITH THE CLACK SOUND, THE WEBSITE LOCKS INTO POSITION!
+        // ============================================================
+        var transitionTriggered = false;
         video.addEventListener('timeupdate', function() {
           if (video.duration && progressBar) {
             var pct = (video.currentTime / video.duration) * 100;
             progressBar.style.width = Math.min(100, pct) + '%';
           }
+
+          // Exact Synchronization: When bails lock into the wickets with the clack sound (~6.9s),
+          // trigger the stadium flash and fix the website into place smoothly!
+          if (video.currentTime >= 6.9 && !transitionTriggered) {
+            transitionTriggered = true;
+            window.__dismissCfvdPreloader(false);
+          }
         });
 
         video.addEventListener('ended', function() {
-          window.__dismissCfvdPreloader(false);
+          if (!transitionTriggered) {
+            transitionTriggered = true;
+            window.__dismissCfvdPreloader(false);
+          }
         });
 
         // Safety fallback timeout after 9.5s
         setTimeout(function() {
-          window.__dismissCfvdPreloader(false);
+          if (!transitionTriggered) {
+            transitionTriggered = true;
+            window.__dismissCfvdPreloader(false);
+          }
         }, 9500);
       })();
     </script>

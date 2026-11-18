@@ -6,9 +6,9 @@ import {
   StyleSheet,
   Platform,
   Animated,
-  Dimensions,
-  StatusBar
+  Dimensions
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { WebView } from 'react-native-webview';
 
 interface VideoPreloaderProps {
@@ -126,6 +126,10 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
     if (video && video.duration) {
       const pct = (video.currentTime / video.duration) * 100;
       setProgress(Math.min(100, pct));
+      // Exact synchronization: trigger website reveal at 6.9s when bails lock in with sound
+      if (video.currentTime >= 6.9) {
+        handleDismiss();
+      }
     }
   };
 
@@ -160,6 +164,9 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
           v.addEventListener('timeupdate', function() {
             if (v.duration) {
               window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'PROGRESS', pct: (v.currentTime / v.duration) * 100 }));
+              if (v.currentTime >= 6.9) {
+                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ENDED' }));
+              }
             }
           });
           var playPromise = v.play();
@@ -188,7 +195,7 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
         },
       ]}
     >
-      <StatusBar barStyle="light-content" backgroundColor="#020612" translucent />
+      <StatusBar style="light" />
 
       {/* Main Video Presentation (Edge-to-Edge Full Screen Coverage) */}
       <View style={styles.videoWrapper}>

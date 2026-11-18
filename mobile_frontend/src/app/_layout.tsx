@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Stack } from 'expo-router';
-import { StatusBar, Platform } from 'react-native';
+import { Platform } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 import VideoPreloader from '../components/common/VideoPreloader';
@@ -18,7 +19,7 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ErrorBoundary>
-        <StatusBar barStyle="light-content" backgroundColor="#020612" />
+        <StatusBar style="light" />
         <Stack
           screenOptions={{
             headerShown: false,
