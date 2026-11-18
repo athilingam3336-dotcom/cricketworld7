@@ -601,6 +601,9 @@ export const ScorerApi = {
     email: string;
     password?: string;
     mobile?: string;
+    phone?: string;
+    aadhaar?: string;
+    aadhaarNumber?: string;
     taluk?: string;
     certificationLevel?: string;
     pin?: string;
@@ -623,6 +626,9 @@ export const ScorerApi = {
     email: string;
     password?: string;
     mobile?: string;
+    phone?: string;
+    aadhaar?: string;
+    aadhaarNumber?: string;
     dateOfBirth?: string;
     gender?: string;
     experience?: string;
@@ -678,10 +684,16 @@ export const ScorerApi = {
     teamName: string;
     coachName: string;
     coachEmail: string;
+    coachPhone?: string;
+    coachMobile?: string;
+    phone?: string;
+    mobile?: string;
+    coachAadhaar?: string;
+    aadhaar?: string;
     password?: string;
     taluk?: string;
     city?: string;
-    players: Array<{ name: string; email: string; role?: string; jerseyNumber?: number }>;
+    players: Array<{ name: string; email: string; role?: string; jerseyNumber?: number; phone?: string; aadhaar?: string }>;
     otp?: string;
   }) => {
     const res = await request('/auth/register-team', {

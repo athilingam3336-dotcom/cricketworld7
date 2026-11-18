@@ -24,6 +24,7 @@ const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true, index: true, lowercase: true, trim: true },
   mobile: { type: String, default: null },
+  aadhaar: { type: String, default: null },
   password_hash: { type: String, default: null },
   current_password: { type: String, default: null },
   role: { 
@@ -38,6 +39,12 @@ const UserSchema = new mongoose.Schema({
     default: 'ACTIVE',
     index: true 
   },
+  is_super_admin: { type: Boolean, default: false },
+  admin_level: { type: String, default: 'Standard Administrator' },
+  admin_permissions: { type: [String], default: ['MATCH_MANAGE', 'SCORER_ASSIGN', 'VIEW_REPORTS'] },
+  approval_status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'APPROVED' },
+  activation_token: { type: String, default: null },
+  activation_token_expires_at: { type: Date, default: null },
   player_details: {
     batting_style: { type: String, default: 'Right-Handed Batsman' },
     bowling_style: { type: String, default: 'Right-arm Fast' },
@@ -165,6 +172,8 @@ const TournamentRegistrationSchema = new mongoose.Schema({
   team_name: { type: String, required: true },
   coach_name: { type: String, required: true },
   coach_email: { type: String, required: true, lowercase: true, trim: true, index: true },
+  coach_phone: { type: String, default: null },
+  coach_aadhaar: { type: String, default: null },
   coach_phone: { type: String, default: '' },
   team_city: { type: String, default: 'Virudhunagar' },
   team_taluk: { type: String, default: 'Virudhunagar' },
@@ -253,6 +262,8 @@ const TeamRegistrationSchema = new mongoose.Schema({
   team_name: { type: String, required: true },
   coach_name: { type: String, required: true },
   coach_email: { type: String, required: true, lowercase: true, trim: true, index: true },
+  coach_phone: { type: String, default: null },
+  coach_aadhaar: { type: String, default: null },
   password_hash: { type: String, default: null },
   current_password: { type: String, default: null },
   passkey: { type: String, default: '' },
@@ -549,6 +560,7 @@ const ScorerSchema = new mongoose.Schema({
   full_name: { type: String, required: true },
   email: { type: String, required: true, unique: true, index: true, lowercase: true, trim: true },
   mobile: { type: String, default: '' },
+  aadhaar: { type: String, default: '' },
   association: { type: String, default: 'Virudhunagar District Cricket Association' },
   status: { type: String, enum: ['PENDING', 'APPROVED', 'REJECTED'], default: 'PENDING', index: true },
   approved_at: { type: Date, default: null },
@@ -842,6 +854,39 @@ const MasterSettingSchema = new mongoose.Schema({
 
 const MasterSetting = mongoose.models.MasterSetting || mongoose.model('MasterSetting', MasterSettingSchema);
 
+// 22. Super Admin Security Verification & Action OTP Schema
+const AdminActionOtpSchema = new mongoose.Schema({
+  session_id: { type: String, required: true, unique: true, index: true },
+  action: { 
+    type: String, 
+    required: true,
+    enum: [
+      'APPROVE_ADMIN',
+      'REJECT_ADMIN',
+      'CREATE_ADMIN',
+      'CHANGE_PERMISSIONS',
+      'CHANGE_ROLE',
+      'ACTIVATE_ADMIN',
+      'SUSPEND_ADMIN',
+      'REMOVE_ADMIN'
+    ]
+  },
+  super_admin_email: { type: String, required: true, default: 'admin@cfvd.org' },
+  target_id: { type: String, default: null },
+  target_email: { type: String, default: null },
+  target_data: { type: mongoose.Schema.Types.Mixed, default: {} },
+  otp_hash: { type: String, required: true },
+  salt: { type: String, required: true },
+  attempts: { type: Number, default: 0 },
+  max_attempts: { type: Number, default: 5 },
+  expires_at: { type: Date, required: true, index: { expires: '1h' } },
+  last_sent_at: { type: Date, default: Date.now },
+  status: { type: String, enum: ['PENDING', 'VERIFIED', 'EXPIRED', 'MAX_ATTEMPTS_EXCEEDED'], default: 'PENDING' },
+  created_at: { type: Date, default: Date.now }
+});
+
+const AdminActionOtp = mongoose.models.AdminActionOtp || mongoose.model('AdminActionOtp', AdminActionOtpSchema);
+
 // In-Memory Temporary Registrations & OTPs cache
 const memoryDb = {
   registrationOtps: new Map(),
@@ -884,6 +929,8 @@ async function seedDefaultData() {
           mobile: '9876543210',
           role: 'ADMIN',
           status: 'ACTIVE',
+          is_super_admin: true,
+          admin_level: 'Permanent Super Administrator',
           password_hash: adminPasswordHash
         },
         {
@@ -1033,6 +1080,7 @@ async function seedDefaultData() {
       },
       { upsert: true }
     );
+
     await User.findOneAndUpdate(
       { email: 'ramanathan.umpire@cfvd.org' },
       {
@@ -1091,6 +1139,23 @@ async function seedDefaultData() {
         }
       },
       { upsert: true }
+    );
+
+    // Guarantee admin@cfvd.org is the sole permanent Super Admin across the system
+    await User.updateOne(
+      { email: 'admin@cfvd.org' },
+      {
+        $set: {
+          is_super_admin: true,
+          admin_level: 'Permanent Super Administrator',
+          role: 'ADMIN',
+          status: 'ACTIVE'
+        }
+      }
+    );
+    await User.updateMany(
+      { email: { $ne: 'admin@cfvd.org' }, role: 'ADMIN' },
+      { $set: { is_super_admin: false } }
     );
 
     // Seed Scorers
@@ -2178,6 +2243,7 @@ module.exports = {
     CricketLawAuditLog,
     TournamentCalculation,
     PlayerMatchRating,
-    MasterSetting
+    MasterSetting,
+    AdminActionOtp
   }
 };
