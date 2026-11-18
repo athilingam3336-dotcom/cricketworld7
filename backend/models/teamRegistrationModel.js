@@ -82,10 +82,16 @@ class TeamRegistrationModel {
       }
       seenPlayerEmails.add(pEmail);
 
+      const pPhone = p.phone || p.mobile ? String(p.phone || p.mobile).replace(/\D/g, '') : null;
+      const pAadhaar = p.aadhaar ? String(p.aadhaar).replace(/\D/g, '') : null;
+
       squadPlayers.push({
         jersey_number: p.jerseyNumber || p.jersey_number || (index + 1),
         name: pName,
         email: pEmail,
+        phone: pPhone,
+        mobile: pPhone,
+        aadhaar: pAadhaar,
         role: p.role || 'BATTER',
         status: 'PENDING'
       });
@@ -444,6 +450,9 @@ class TeamRegistrationModel {
               team_id: teamId,
               name: p.name,
               email: p.email,
+              phone: p.phone || p.mobile || null,
+              mobile: p.phone || p.mobile || null,
+              aadhaar: p.aadhaar || null,
               role: p.role || 'BATTER',
               jersey_number: p.jersey_number || (i + 1),
               status: 'ACTIVE'
@@ -459,13 +468,15 @@ class TeamRegistrationModel {
             id: playerId,
             name: p.name,
             email: p.email,
+            mobile: p.phone || p.mobile || null,
+            aadhaar: p.aadhaar || null,
             role: 'PLAYER',
             status: 'ACTIVE'
           });
         } else {
           await db.models.User.updateOne(
             { email: p.email },
-            { $set: { status: 'ACTIVE', role: 'PLAYER', updated_at: new Date() } }
+            { $set: { status: 'ACTIVE', role: 'PLAYER', mobile: p.phone || p.mobile || existingUser.mobile || null, aadhaar: p.aadhaar || existingUser.aadhaar || null, updated_at: new Date() } }
           );
         }
       }

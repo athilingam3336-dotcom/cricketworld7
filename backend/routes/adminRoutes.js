@@ -800,5 +800,21 @@ router.post('/master-settings', (req, res) => masterSettingController.createSett
 router.put('/master-settings/:id', (req, res) => masterSettingController.updateSetting(req, res));
 router.delete('/master-settings/:id', (req, res) => masterSettingController.deleteSetting(req, res));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ACCESS CONTROL & DUAL-ADMIN APPROVAL SYSTEM
+// ─────────────────────────────────────────────────────────────────────────────
+const adminAccessController = require('../controllers/adminAccessController');
+
+router.get('/access/admins', (req, res) => adminAccessController.getAdmins(req, res));
+router.get('/access/candidates', (req, res) => adminAccessController.getCandidates(req, res));
+router.post('/access/promote/request', (req, res) => adminAccessController.requestPromote(req, res));
+router.post('/access/requests/:id/verify', (req, res) => adminAccessController.verifyDualOtp(req, res));
+router.post('/access/requests/:id/resend', (req, res) => adminAccessController.resendDualOtp(req, res));
+router.post('/access/promote/:id/candidate-verify', (req, res) => adminAccessController.verifyCandidateOtp(req, res));
+router.post('/access/remove/request', (req, res) => adminAccessController.requestRemove(req, res));
+router.post('/access/remove/:id/verify', (req, res) => adminAccessController.verifyRemove(req, res));
+router.get('/access/requests', (req, res) => adminAccessController.getRequests(req, res));
+router.get('/access/audit', (req, res) => adminAccessController.getAudit(req, res));
+
 module.exports = router;
 
