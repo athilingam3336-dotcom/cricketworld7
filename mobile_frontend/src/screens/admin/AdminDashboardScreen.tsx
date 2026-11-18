@@ -612,6 +612,7 @@ export default function AdminDashboardScreen({ onExit, initialParams }: AdminDas
   const [tournamentDropdownOpen, setTournamentDropdownOpen] = useState<boolean>(false);
   const [formatDropdownOpen, setFormatDropdownOpen] = useState<boolean>(false);
   const [scorerDropdownOpen, setScorerDropdownOpen] = useState<boolean>(false);
+  const [scorerSearch, setScorerSearch] = useState<string>('');
   const [tournamentSearchQuery, setTournamentSearchQuery] = useState<string>('');
   const [teamSearchQueryA, setTeamSearchQueryA] = useState<string>('');
   const [teamSearchQueryB, setTeamSearchQueryB] = useState<string>('');

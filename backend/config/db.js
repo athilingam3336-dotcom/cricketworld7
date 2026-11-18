@@ -29,7 +29,7 @@ const UserSchema = new mongoose.Schema({
   current_password: { type: String, default: null },
   role: { 
     type: String, 
-    enum: ['ADMIN', 'COACH', 'TEAM', 'PLAYER', 'SCORER', 'UMPIRE', 'CONTENT', 'USER'], 
+    enum: ['SUPER_ADMIN', 'ADMIN', 'COACH', 'TEAM', 'PLAYER', 'SCORER', 'UMPIRE', 'CONTENT', 'USER'], 
     default: 'USER',
     index: true 
   },
@@ -39,6 +39,9 @@ const UserSchema = new mongoose.Schema({
     default: 'ACTIVE',
     index: true 
   },
+  token_version: { type: Number, default: 0 },
+  role_changed_at: { type: Date, default: null },
+  role_changed_by: { type: String, default: null },
   is_super_admin: { type: Boolean, default: false },
   admin_level: { type: String, default: 'Standard Administrator' },
   admin_permissions: { type: [String], default: ['MATCH_MANAGE', 'SCORER_ASSIGN', 'VIEW_REPORTS'] },
@@ -367,6 +370,8 @@ const MatchSchema = new mongoose.Schema({
   result_summary: { type: String, default: null },
   player_of_match: { type: String, default: null },
   assigned_scorer_id: { type: String, default: 'SCR-101' },
+  scorer_name: { type: String, default: 'Official Scorer' },
+  assigned_scorer_name: { type: String, default: '' },
   umpire1_id: { type: String, default: 'UMP-101', index: true },
   umpire2_id: { type: String, default: 'UMP-102', index: true },
   umpire1_name: { type: String, default: 'Thiru. K. Sundaram' },
@@ -892,6 +897,42 @@ const AdminActionOtpSchema = new mongoose.Schema({
 });
 
 const AdminActionOtp = mongoose.models.AdminActionOtp || mongoose.model('AdminActionOtp', AdminActionOtpSchema);
+
+// 23. Dual-Admin Approval & Role System (AdminRequest)
+const AdminRequestSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true, index: true },
+  type: { type: String, enum: ['PROMOTE', 'REMOVE'], required: true, index: true },
+  target_user_id: { type: String, required: true },
+  target_email: { type: String, required: true, lowercase: true, trim: true },
+  target_name: { type: String, default: '' },
+  requested_by_id: { type: String, required: true },
+  approver1_id: { type: String, required: true },
+  approver2_id: { type: String, required: true },
+  approver1_otp_hash: { type: String, required: true },
+  approver2_otp_hash: { type: String, required: true },
+  approver1_verified: { type: Boolean, default: false },
+  approver2_verified: { type: Boolean, default: false },
+  candidate_otp_hash: { type: String, default: null },
+  candidate_verified: { type: Boolean, default: false },
+  attempts: { type: Number, default: 0 },
+  status: {
+    type: String,
+    enum: ['PENDING', 'APPROVED', 'EXECUTING', 'COMPLETED', 'REJECTED', 'EXPIRED', 'LOCKED'],
+    default: 'PENDING',
+    index: true
+  },
+  expires_at: { type: Date, required: true, index: { expires: 0 } },
+  created_at: { type: Date, default: Date.now },
+  ip_address: { type: String, default: '' }
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+
+// Only one open request per target user at a time
+AdminRequestSchema.index(
+  { target_user_id: 1 },
+  { unique: true, partialFilterExpression: { status: { $in: ['PENDING', 'APPROVED', 'EXECUTING'] } } }
+);
+
+const AdminRequest = mongoose.models.AdminRequest || mongoose.model('AdminRequest', AdminRequestSchema);
 
 // In-Memory Temporary Registrations & OTPs cache
 const memoryDb = {
@@ -2250,6 +2291,7 @@ module.exports = {
     TournamentCalculation,
     PlayerMatchRating,
     MasterSetting,
-    AdminActionOtp
+    AdminActionOtp,
+    AdminRequest
   }
 };

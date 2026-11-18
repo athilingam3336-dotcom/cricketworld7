@@ -833,45 +833,6 @@ async function rescheduleMatch(matchId, { newDate, newTime, reason }, adminEmail
     details: `Rescheduled from ${prevDate} ${prevTime} to ${cleanDate} ${cleanTime}. Reason: ${cleanReason}`
   });
 
-<<<<<<< HEAD
-  // Dispatch Notifications to Team A, Team B, Scorer, and Umpires
-  if (db.models.Notification) {
-    const notifs = [
-      {
-        recipient_role: 'TEAM',
-        recipient_id: match.team_a_id,
-        title: '📅 Match Rescheduled',
-        message: `Your fixture vs ${match.team_b_name || match.team_b_id} has been rescheduled to ${cleanDate} at ${cleanTime} at ${match.venue}.`
-      },
-      {
-        recipient_role: 'TEAM',
-        recipient_id: match.team_b_id,
-        title: '📅 Match Rescheduled',
-        message: `Your fixture vs ${match.team_a_name || match.team_a_id} has been rescheduled to ${cleanDate} at ${cleanTime} at ${match.venue}.`
-      },
-      {
-        recipient_role: 'SCORER',
-        recipient_id: match.assigned_scorer_id,
-        title: '📅 Fixture Rescheduled',
-        message: `Match #${match.id} (${match.team_a_name} vs ${match.team_b_name}) has been rescheduled to ${cleanDate} at ${cleanTime}.`
-      }
-    ];
-
-    for (const n of notifs) {
-      try {
-        await db.models.Notification.create({
-          id: `NOTIF-RESCHED-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          type: 'MATCH_RESCHEDULED',
-          recipient_role: n.recipient_role,
-          recipient_id: n.recipient_id,
-          title: n.title,
-          message: n.message,
-          reference_id: match.id,
-          status: 'UNREAD'
-        });
-      } catch (_e) { }
-    }
-=======
   // Dispatch targeted Notifications strictly to Team A, Team B, and their squad players
   try {
     await dispatchMatchScheduleNotifications(db, match, {
@@ -881,7 +842,7 @@ async function rescheduleMatch(matchId, { newDate, newTime, reason }, adminEmail
     });
   } catch (notifErr) {
     console.warn('Failed to dispatch match reschedule notification:', notifErr.message);
->>>>>>> abe2efad5f5abb6b2a0c7beeeb6d4c0587462ae0
+  }
   }
 
   return match.toObject();

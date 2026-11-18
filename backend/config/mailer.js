@@ -21,7 +21,6 @@ const SMTP_FROM = process.env.SMTP_FROM
 
 const SUPER_ADMIN_EMAIL = (process.env.SUPER_ADMIN_EMAIL || 'admin@cfvd.org').toLowerCase().trim();
 
-<<<<<<< HEAD
 let activeTransporter = null;
 let transporterType = 'NONE'; // 'GMAIL' | 'ETHEREAL' | 'NONE'
 
@@ -45,25 +44,6 @@ function createPrimaryTransporter() {
     });
   }
   return null;
-=======
-if (SMTP_USER && SMTP_PASSWORD) {
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST.includes('gmail.com') ? 'smtp.gmail.com' : SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_SECURE,
-    family: 4, // Force IPv4 to prevent 90-second Windows IPv6 DNS timeout
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASSWORD
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
-  console.log(`📧 Nodemailer SMTP initialized for: ${SMTP_USER} (IPv4 direct TLS)`);
-} else {
-  console.log('ℹ️ Nodematiler: SMTP credentials not set.');
->>>>>>> abe2efad5f5abb6b2a0c7beeeb6d4c0587462ae0
 }
 
 /**
@@ -476,6 +456,163 @@ async function sendPlayerTeamEmail({ toEmail, playerName, teamNames }) {
   return { success: true, message: `Dispatched` };
 }
 
+/**
+ * Send Dual-Admin Security Approval OTP Email (Faithfully matching Image 3)
+ */
+async function sendDualAdminApprovalEmail({
+  toEmail,
+  approverName = 'Administrator',
+  actionType = 'PROMOTE',
+  candidateEmail,
+  targetName = '',
+  requestedByEmail = 'admin@cfvd.org',
+  otp,
+  dateIST = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' })
+}) {
+  const isRevoke = actionType === 'REMOVE';
+  const actionLabel = isRevoke ? 'Revoke Administrator Privileges' : 'Grant Administrator Privileges';
+  const headerSubtitle = isRevoke ? 'Admin Revocation Authorization' : 'Admin Promotion Authorization';
+  const subject = `CRICKET FEDERATION – ${headerSubtitle} [Code: ${otp}]`;
+
+  const textContent = `CRICKET FEDERATION OF VIRUDHUNAGAR DISTRICT\n${headerSubtitle}\n\nAction: ${actionLabel}\nCandidate Email: ${candidateEmail}\nApproving Admin: ${approverName}\nRequested by: ${requestedByEmail}\nDate & Time: ${dateIST}\n\nYour 6-digit approval authorization code is:\n${otp}\n\nCode expires in 10 minutes.\nBoth administrators must authorize this action before completion.`;
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${headerSubtitle}</title>
+</head>
+<body style="margin: 0; padding: 20px; background-color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="background-color: #0f172a; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="max-width: 520px; background-color: #18181b; border-radius: 14px; overflow: hidden; border: 1px solid #27272a; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+          
+          <!-- Header Banner (Red/Burgundy matching Image 3) -->
+          <tr>
+            <td style="background-color: #991b1b; padding: 24px 20px; text-align: center;">
+              <h2 style="margin: 0; color: #ffffff; font-size: 19px; font-weight: 800; letter-spacing: 0.8px; text-transform: uppercase;">
+                CRICKET FEDERATION
+              </h2>
+              <div style="color: #fecaca; font-size: 13.5px; font-weight: 600; margin-top: 5px;">
+                ${headerSubtitle}
+              </div>
+            </td>
+          </tr>
+
+          <!-- Action Details Table -->
+          <tr>
+            <td style="padding: 24px 22px;">
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="10" style="background-color: #27272a; border-radius: 10px; font-size: 13px; color: #e4e4e7; margin-bottom: 22px;">
+                <tr style="border-bottom: 1px solid #3f3f46;">
+                  <td style="color: #a1a1aa; width: 38%; font-weight: 600;">Action:</td>
+                  <td style="color: #ffffff; font-weight: 700;">${actionLabel}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #3f3f46;">
+                  <td style="color: #a1a1aa; font-weight: 600;">${isRevoke ? 'Target Email:' : 'Candidate Email:'}</td>
+                  <td style="color: #60a5fa; font-weight: 700;">${candidateEmail}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #3f3f46;">
+                  <td style="color: #a1a1aa; font-weight: 600;">Approving Admin:</td>
+                  <td style="color: #ffffff; font-weight: 700;">${approverName}</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #3f3f46;">
+                  <td style="color: #a1a1aa; font-weight: 600;">Requested by:</td>
+                  <td style="color: #ffffff; font-weight: 700;">${requestedByEmail}</td>
+                </tr>
+                <tr>
+                  <td style="color: #a1a1aa; font-weight: 600;">Date & Time:</td>
+                  <td style="color: #e4e4e7; font-weight: 600;">${dateIST}</td>
+                </tr>
+              </table>
+
+              <!-- OTP Prompt -->
+              <div style="text-align: center; color: #d4d4d8; font-size: 13.5px; margin-bottom: 12px; font-weight: 600;">
+                Your 6-digit approval authorization code is:
+              </div>
+
+              <!-- OTP Box (matching Image 3: bordered, rounded, bold peach/coral digits) -->
+              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 12px;">
+                <tr>
+                  <td align="center">
+                    <div style="display: inline-block; padding: 18px 36px; border: 2px dashed #ef4444; border-radius: 12px; background-color: #27272a; text-align: center;">
+                      <span style="font-family: 'Courier New', Courier, monospace; font-size: 40px; font-weight: 900; letter-spacing: 12px; color: #fb923c; margin-right: -12px;">
+                        ${otp}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <div style="text-align: center; color: #ef4444; font-size: 11.5px; font-weight: 600; margin-bottom: 20px;">
+                Tap & hold or double tap to copy code
+              </div>
+
+              <!-- Security Expiry Footer -->
+              <div style="text-align: center; color: #9ca3af; font-size: 12px; line-height: 1.5; border-top: 1px solid #27272a; padding-top: 16px;">
+                ⏱️ Code expires in <strong>10 minutes</strong>.<br>
+                Both administrators must authorize this action before candidate verification.
+              </div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+
+  const recipients = [toEmail];
+  if (SMTP_USER && !recipients.includes(SMTP_USER)) {
+    recipients.push(SMTP_USER);
+  }
+
+  const trans = await getTransporter();
+  if (trans) {
+    try {
+      await trans.sendMail({
+        from: SMTP_FROM,
+        to: recipients.join(', '),
+        subject,
+        text: textContent,
+        html: htmlContent
+      });
+      console.log(`✅ Dual-Admin authorization email dispatched to [${recipients.join(', ')}] (Code: ${otp})`);
+      return { success: true, message: `Dispatched authorization code to ${toEmail}` };
+    } catch (err) {
+      console.error('❌ Failed to dispatch dual admin approval email:', err.message);
+      return { success: false, message: err.message };
+    }
+  }
+  return { success: true, message: 'Dispatched (simulated)' };
+}
+
+/**
+ * Send Candidate Verification Email (Step 3: Verify & Grant)
+ */
+async function sendCandidateVerificationEmail({ toEmail, candidateName = 'Candidate', otp }) {
+  const subject = `CRICKET FEDERATION – Administrator Access Verification [Code: ${otp}]`;
+  const textContent = `Hello ${candidateName},\n\nYou have been approved for Administrator privileges on the Cricket Federation portal by existing administrators.\n\nYour 6-digit confirmation code is: ${otp}\n\nEnter this code on the verification screen to activate your Administrator account.\nThis code expires in 10 minutes.`;
+
+  const trans = await getTransporter();
+  if (trans) {
+    try {
+      await trans.sendMail({
+        from: SMTP_FROM,
+        to: toEmail,
+        subject,
+        text: textContent
+      });
+      return { success: true, message: `Candidate verification sent to ${toEmail}` };
+    } catch (err) {
+      return { success: false, message: err.message };
+    }
+  }
+  return { success: true, message: 'Dispatched (simulated)' };
+}
+
 module.exports = {
   getTransporter,
   verifySmtpConnection,
@@ -483,5 +620,7 @@ module.exports = {
   sendAdminApprovalEmail,
   sendOtpEmail,
   sendPlayerTeamEmail,
+  sendDualAdminApprovalEmail,
+  sendCandidateVerificationEmail,
   SUPER_ADMIN_EMAIL
 };
