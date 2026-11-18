@@ -49,7 +49,8 @@ export function getPasswordCriteria(password: string): PasswordCriteriaStatus {
 
 /**
  * Validates an email address.
- * Checks for required presence, '@' symbol, domain '.', and standard format.
+ * Rule: Only letters, numbers, and allowed characters (_, @, .) are permitted.
+ * No other special characters allowed. Must have valid email structure.
  */
 export function validateEmail(email: string, customEmptyMessage?: string): ValidationResult {
   const clean = (email || '').trim();
@@ -61,6 +62,14 @@ export function validateEmail(email: string, customEmptyMessage?: string): Valid
     };
   }
 
+  // Only letters, digits, and _, @, . are allowed
+  if (/[^a-zA-Z0-9_.@]/.test(clean)) {
+    return {
+      isValid: false,
+      error: 'Email can only contain letters, numbers, and allowed characters: "_" , "@" , "." (no other special characters).'
+    };
+  }
+
   if (!clean.includes('@')) {
     return {
       isValid: false,
@@ -68,11 +77,135 @@ export function validateEmail(email: string, customEmptyMessage?: string): Valid
     };
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const atCount = (clean.match(/@/g) || []).length;
+  if (atCount !== 1) {
+    return {
+      isValid: false,
+      error: 'Email address must contain exactly one "@" symbol.'
+    };
+  }
+
+  const [localPart, domainPart] = clean.split('@');
+  if (!localPart || !domainPart) {
+    return {
+      isValid: false,
+      error: 'Please enter a valid email format (e.g. name@domain.com).'
+    };
+  }
+
+  if (!domainPart.includes('.')) {
+    return {
+      isValid: false,
+      error: 'Email domain must contain a "." (e.g. domain.com).'
+    };
+  }
+
+  const emailRegex = /^[a-zA-Z0-9_.]+@[a-zA-Z0-9]+(\.[a-zA-Z0-9]+)*\.[a-zA-Z]{2,}$/;
   if (!emailRegex.test(clean)) {
     return {
       isValid: false,
       error: 'Please enter a valid email address format with "@" and domain (e.g. name@domain.com).'
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Validates a person's name (Player, Coach, Scorer, Umpire).
+ * Rule: Must contain only letters and spaces. No numbers or special characters allowed.
+ */
+export function validateName(name: string, fieldName = 'Name'): ValidationResult {
+  const clean = (name || '').trim();
+
+  if (!clean) {
+    return {
+      isValid: false,
+      error: `${fieldName} is required.`
+    };
+  }
+
+  if (clean.length < 3) {
+    return {
+      isValid: false,
+      error: `${fieldName} must be at least 3 letters.`
+    };
+  }
+
+  if (/[0-9]/.test(clean)) {
+    return {
+      isValid: false,
+      error: `${fieldName} must not contain numbers.`
+    };
+  }
+
+  if (/[^a-zA-Z\s]/.test(clean)) {
+    return {
+      isValid: false,
+      error: `${fieldName} must not contain special characters. Only letters and spaces are allowed.`
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Validates a team / club name.
+ * Rule: Only letters, numbers, underscore (_), and spaces allowed. No other special characters.
+ */
+export function validateTeamName(teamName: string, fieldName = 'Team Name'): ValidationResult {
+  const clean = (teamName || '').trim();
+
+  if (!clean) {
+    return {
+      isValid: false,
+      error: `${fieldName} is required.`
+    };
+  }
+
+  if (clean.length < 3) {
+    return {
+      isValid: false,
+      error: `${fieldName} must be at least 3 characters.`
+    };
+  }
+
+  if (/[^a-zA-Z0-9_\s]/.test(clean)) {
+    return {
+      isValid: false,
+      error: `${fieldName} can only contain letters, numbers, spaces, and underscore (_). Other special characters are not allowed.`
+    };
+  }
+
+  return { isValid: true };
+}
+
+/**
+ * Validates umpire experience.
+ * Rule: Must only contain numbers (digits 0-9).
+ */
+export function validateExperience(exp: string, fieldName = 'Umpire Experience'): ValidationResult {
+  const clean = (exp || '').trim();
+
+  if (!clean) {
+    return {
+      isValid: false,
+      error: `${fieldName} is required.`
+    };
+  }
+
+  if (!/^\d+$/.test(clean)) {
+    return {
+      isValid: false,
+      error: `${fieldName} must contain numbers only.`
+    };
+  }
+
+  const num = parseInt(clean, 10);
+  if (num < 0 || num > 60) {
+    return {
+      isValid: false,
+      error: 'Please enter a valid experience between 0 and 60 years.'
     };
   }
 

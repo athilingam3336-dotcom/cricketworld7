@@ -24,10 +24,13 @@ import {
   Alert,
   Platform,
   Linking,
-  useWindowDimensions
+  useWindowDimensions,
+  PanResponder
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { TeamApi, getCurrentUser, ScorerApi } from '../../services/api';
+import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
+import { TeamApi, getCurrentUser, ScorerApi, SOCKET_URL } from '../../services/api';
 import { showError, showSuccess } from '../../utils/sweetalert';
 import {
   RefreshIcon,
@@ -187,8 +190,40 @@ export default function TeamDashboardScreen({ onExit, initialParams }: TeamDashb
   const [editHomeGround, setEditHomeGround] = useState<string>('');
   const [editCaptain, setEditCaptain] = useState<string>('');
   const [editViceCaptain, setEditViceCaptain] = useState<string>('');
+  const [editPhoto, setEditPhoto] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
   const [profileFeedback, setProfileFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+  // Photo / Logo Crop Modal State
+  const [isCropModalVisible, setIsCropModalVisible] = useState<boolean>(false);
+  const [rawImageToCrop, setRawImageToCrop] = useState<string | null>(null);
+  const [cropZoom, setCropZoom] = useState<number>(1);
+  const [cropPan, setCropPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [cropRotation, setCropRotation] = useState<number>(0);
+  const [imageNaturalDimensions, setImageNaturalDimensions] = useState<{ width: number; height: number }>({ width: 300, height: 300 });
+  const [isCropping, setIsCropping] = useState<boolean>(false);
+
+  const cropPanRef = React.useRef(cropPan);
+  cropPanRef.current = cropPan;
+  const startPanRef = React.useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const panResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => {
+          startPanRef.current = { ...cropPanRef.current };
+        },
+        onPanResponderMove: (_evt, gestureState) => {
+          setCropPan({
+            x: Math.round(startPanRef.current.x + gestureState.dx),
+            y: Math.round(startPanRef.current.y + gestureState.dy)
+          });
+        }
+      }),
+    []
+  );
 
   // Player Add/Edit Modal States (Registration Style)
   const [addPlayerModalVisible, setAddPlayerModalVisible] = useState<boolean>(false);
@@ -253,6 +288,7 @@ export default function TeamDashboardScreen({ onExit, initialParams }: TeamDashb
           setEditHomeGround(prof.homeGround || prof.home_ground || 'Kamarajar Stadium Sports Complex, Virudhunagar');
           setEditCaptain(prof.captain || '');
           setEditViceCaptain(prof.viceCaptain || prof.vice_captain || '');
+          setEditPhoto(prof.photo || prof.logo || prof.image_path || null);
         }
       } catch (e: any) {
         console.warn('Profile fetch note:', e?.message || e);
@@ -416,7 +452,221 @@ export default function TeamDashboardScreen({ onExit, initialParams }: TeamDashb
     return () => clearInterval(timer);
   }, [matches, selectedScorecardMatchId]);
 
-  // Save Profile Updates (Safe fields only)
+  // Resolve full URI for team photo / logo (handles base64 data URLs, absolute URLs, relative upload paths)
+  const resolvePhotoUrl = (photoUri?: string | null): string | null => {
+    if (!photoUri || typeof photoUri !== 'string') return null;
+    const trimmed = photoUri.trim();
+    if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null;
+    if (trimmed.startsWith('data:image/') || trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('blob:')) {
+      return trimmed;
+    }
+    const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+    const base = SOCKET_URL || 'http://localhost:5000';
+    return `${base}${cleanPath}`;
+  };
+
+  // Open Interactive Photo Crop Modal
+  const openCropModal = (imageUri: string) => {
+    if (!imageUri) return;
+    if (Platform.OS === 'web') {
+      const img = new (window as any).Image();
+      img.onload = () => {
+        setImageNaturalDimensions({
+          width: img.naturalWidth || 300,
+          height: img.naturalHeight || 300
+        });
+        setCropZoom(1);
+        setCropPan({ x: 0, y: 0 });
+        setCropRotation(0);
+        setRawImageToCrop(imageUri);
+        setIsCropModalVisible(true);
+      };
+      img.src = imageUri;
+    } else {
+      Image.getSize(
+        imageUri,
+        (w, h) => {
+          setImageNaturalDimensions({ width: w, height: h });
+          setCropZoom(1);
+          setCropPan({ x: 0, y: 0 });
+          setCropRotation(0);
+          setRawImageToCrop(imageUri);
+          setIsCropModalVisible(true);
+        },
+        () => {
+          setImageNaturalDimensions({ width: 300, height: 300 });
+          setCropZoom(1);
+          setCropPan({ x: 0, y: 0 });
+          setCropRotation(0);
+          setRawImageToCrop(imageUri);
+          setIsCropModalVisible(true);
+        }
+      );
+    }
+  };
+
+  const handleResetCrop = () => {
+    setCropZoom(1);
+    setCropPan({ x: 0, y: 0 });
+    setCropRotation(0);
+  };
+
+  const handleCloseCropModal = () => {
+    setIsCropModalVisible(false);
+    setRawImageToCrop(null);
+  };
+
+  const handleApplyCrop = async () => {
+    if (!rawImageToCrop) return;
+    setIsCropping(true);
+
+    try {
+      if (Platform.OS === 'web') {
+        const img = new (window as any).Image();
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = rawImageToCrop;
+        });
+
+        const CROP_APERTURE = 240;
+        const OUTPUT_SIZE = 300;
+        const canvas = document.createElement('canvas');
+        canvas.width = OUTPUT_SIZE;
+        canvas.height = OUTPUT_SIZE;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Could not initialize canvas context');
+
+        const ratio = OUTPUT_SIZE / CROP_APERTURE;
+        const baseScale = Math.max(
+          CROP_APERTURE / (img.naturalWidth || 1),
+          CROP_APERTURE / (img.naturalHeight || 1)
+        );
+
+        ctx.clearRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
+
+        ctx.translate(
+          OUTPUT_SIZE / 2 + cropPan.x * ratio,
+          OUTPUT_SIZE / 2 + cropPan.y * ratio
+        );
+
+        ctx.rotate((cropRotation * Math.PI) / 180);
+
+        const drawW = img.naturalWidth * baseScale * cropZoom * ratio;
+        const drawH = img.naturalHeight * baseScale * cropZoom * ratio;
+        ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+
+        const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.88);
+        setEditPhoto(croppedDataUrl);
+        setIsCropModalVisible(false);
+        setRawImageToCrop(null);
+        setProfileFeedback({
+          message: 'Team logo cropped successfully! Click "Save Changes" to store directly in DB.',
+          type: 'success'
+        });
+      } else {
+        setEditPhoto(rawImageToCrop);
+        setIsCropModalVisible(false);
+        setRawImageToCrop(null);
+        setProfileFeedback({
+          message: 'Team logo selected! Click "Save Changes" to store directly in DB.',
+          type: 'success'
+        });
+      }
+    } catch (err: any) {
+      console.error('Error cropping image:', err);
+      Alert.alert('Crop Error', 'Failed to crop team logo. Please try again.');
+    } finally {
+      setIsCropping(false);
+    }
+  };
+
+  const handleOpenEditProfile = () => {
+    if (profile) {
+      setEditCoachPhone(profile.coachPhone || profile.coach_phone || '');
+      setEditCertification(profile.certification || profile.coach_certification || 'BCCI / TNCA Level 2 Certified');
+      setEditHomeGround(profile.homeGround || profile.home_ground || 'Kamarajar Stadium Sports Complex, Virudhunagar');
+      setEditCaptain(profile.captain || '');
+      setEditViceCaptain(profile.viceCaptain || profile.vice_captain || '');
+      setEditPhoto(profile.photo || profile.logo || profile.image_path || null);
+    }
+    setProfileFeedback(null);
+    setIsEditProfileVisible(true);
+  };
+
+  const handleTakePhoto = async () => {
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.setAttribute('capture', 'environment');
+      input.onchange = (e: any) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const raw = ev.target?.result as string;
+          if (raw) openCropModal(raw);
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
+      return;
+    }
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Camera Permission Required', 'Please allow camera access to take a photo.');
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      allowsEditing: false,
+      quality: 0.9,
+      base64: true
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      const asset = result.assets[0];
+      const uri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+      openCropModal(uri);
+    }
+  };
+
+  const handlePickPhoto = async () => {
+    if (Platform.OS === 'web') {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = (e: any) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const raw = ev.target?.result as string;
+          if (raw) openCropModal(raw);
+        };
+        reader.readAsDataURL(file);
+      };
+      input.click();
+      return;
+    }
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please allow photo library access to upload a team logo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.9,
+      base64: true
+    });
+    if (!result.canceled && result.assets?.[0]) {
+      const asset = result.assets[0];
+      const uri = asset.base64 ? `data:image/jpeg;base64,${asset.base64}` : asset.uri;
+      openCropModal(uri);
+    }
+  };
+
+  // Save Profile Updates (Safe fields + Direct DB Logo/Photo storage)
   const handleSaveProfile = async () => {
     setProfileFeedback(null);
     setIsSavingProfile(true);
@@ -427,25 +677,26 @@ export default function TeamDashboardScreen({ onExit, initialParams }: TeamDashb
         certification: editCertification.trim(),
         homeGround: editHomeGround.trim(),
         captain: editCaptain.trim(),
-        viceCaptain: editViceCaptain.trim()
+        viceCaptain: editViceCaptain.trim(),
+        photo: editPhoto,
+        logo: editPhoto,
+        image_path: editPhoto
       };
 
       const res = await TeamApi.updateProfile(updates);
-      if (res && res.profile) {
-        setProfile(res.profile);
-        setProfileFeedback({ message: '✓ Team Profile updated successfully!', type: 'success' });
-        setTimeout(() => {
-          setIsEditProfileVisible(false);
-          setProfileFeedback(null);
-        }, 1200);
-      } else {
-        setProfile((prev: any) => ({ ...prev, ...updates }));
-        setProfileFeedback({ message: '✓ Team Profile saved!', type: 'success' });
-        setTimeout(() => {
-          setIsEditProfileVisible(false);
-          setProfileFeedback(null);
-        }, 1200);
-      }
+      const savedObj = res?.profile || res?.team || updates;
+      setProfile((prev: any) => ({
+        ...prev,
+        ...savedObj,
+        photo: editPhoto,
+        logo: editPhoto,
+        image_path: editPhoto
+      }));
+      setProfileFeedback({ message: '✓ Team Profile & Logo stored directly in DB!', type: 'success' });
+      setTimeout(() => {
+        setIsEditProfileVisible(false);
+        setProfileFeedback(null);
+      }, 1200);
     } catch (err: any) {
       setProfileFeedback({ message: err?.message || 'Failed to update profile.', type: 'error' });
     } finally {
@@ -1242,9 +1493,17 @@ export default function TeamDashboardScreen({ onExit, initialParams }: TeamDashb
             accessibilityLabel="Coach Profile"
           >
             <View style={styles.coachAvatarCircle}>
-              <Text style={styles.coachAvatarText}>
-                {(coachName || teamName || 'C').charAt(0).toUpperCase()}
-              </Text>
+              {resolvePhotoUrl(profile?.photo || profile?.logo || profile?.image_path) ? (
+                <Image
+                  source={{ uri: resolvePhotoUrl(profile.photo || profile.logo || profile.image_path)! }}
+                  style={{ width: 34, height: 34, borderRadius: 17 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={styles.coachAvatarText}>
+                  {(coachName || teamName || 'C').charAt(0).toUpperCase()}
+                </Text>
+              )}
             </View>
             {isDesktop && (
               <View style={{ marginLeft: 8 }}>
@@ -1283,6 +1542,7 @@ export default function TeamDashboardScreen({ onExit, initialParams }: TeamDashb
             setActiveTab(tab);
             if (!isDesktop) setIsMobileSidebarOpen(false);
           }}
+          teamPhoto={resolvePhotoUrl(profile?.photo || profile?.logo || profile?.image_path)}
           teamName={teamName}
           coachName={coachName}
           teamId={teamId}
@@ -1755,8 +2015,18 @@ export default function TeamDashboardScreen({ onExit, initialParams }: TeamDashb
 
                           return (
                             <View key={player.id || idx} style={styles.squadPlayerCard}>
-                              <View style={styles.squadJerseyCircle}>
-                                <Text style={styles.squadJerseyText}>{player.jersey || player.jerseyNumber || player.jersey_number || (idx + 1)}</Text>
+                              <View style={styles.squadAvatarPhotoFrame}>
+                                {resolvePhotoUrl(player.photo || player.image || player.image_path) ? (
+                                  <Image
+                                    source={{ uri: resolvePhotoUrl(player.photo || player.image || player.image_path)! }}
+                                    style={styles.squadAvatarPhotoImg}
+                                    resizeMode="cover"
+                                  />
+                                ) : (
+                                  <View style={styles.squadJerseyCircle}>
+                                    <Text style={styles.squadJerseyText}>{player.jersey || player.jerseyNumber || player.jersey_number || (idx + 1)}</Text>
+                                  </View>
+                                )}
                               </View>
                               <View style={{ flex: 1, marginLeft: 12 }}>
                                 <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
@@ -3090,15 +3360,72 @@ export default function TeamDashboardScreen({ onExit, initialParams }: TeamDashb
                 )}
 
                 {/* ══════════════════════════════════════════════════════════ */}
-                {/* 10. PROFILE TAB (COACH MANAGEMENT)                         */}
+                {/* 10. PROFILE TAB (TEAM & COACH MANAGEMENT)                   */}
                 {/* ══════════════════════════════════════════════════════════ */}
                 {activeTab === 'profile' && (
                   <View>
+                    {/* Team Crest & Official Brand Card */}
+                    <View style={[styles.card, { marginBottom: 16 }]}>
+                      <View style={styles.cardHeader}>
+                        <View>
+                          <Text style={styles.cardTitle}>Team Crest & Club Identity</Text>
+                          <Text style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                            Official team emblem stored directly in MongoDB database
+                          </Text>
+                        </View>
+                        <TouchableOpacity style={styles.editBtnSmall} onPress={handleOpenEditProfile}>
+                          <Text style={styles.editBtnSmallText}>Update Logo & Details ✏️</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <View style={styles.teamProfileHeroRow}>
+                        <View style={styles.teamLogoBigFrame}>
+                          {resolvePhotoUrl(profile?.photo || profile?.logo || profile?.image_path) ? (
+                            <Image
+                              source={{ uri: resolvePhotoUrl(profile.photo || profile.logo || profile.image_path)! }}
+                              style={styles.teamLogoBigImg}
+                              resizeMode="cover"
+                            />
+                          ) : (
+                            <View style={styles.teamLogoBigPlaceholder}>
+                              <Text style={styles.teamLogoBigInitial}>
+                                {(teamName || 'T').charAt(0).toUpperCase()}
+                              </Text>
+                            </View>
+                          )}
+                          <TouchableOpacity
+                            style={styles.logoEditBadgeBtn}
+                            onPress={handleOpenEditProfile}
+                            activeOpacity={0.85}
+                          >
+                            <Ionicons name="camera" size={13} color="#ffffff" />
+                            <Text style={styles.logoEditBadgeText}>Edit</Text>
+                          </TouchableOpacity>
+                        </View>
+
+                        <View style={{ flex: 1, marginLeft: 16 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={styles.teamProfileHeroTitle}>{teamName}</Text>
+                            <View style={styles.verifiedMiniBadge}>
+                              <Ionicons name="checkmark-circle" size={13} color="#15803d" />
+                              <Text style={styles.verifiedMiniBadgeText}>AFFILIATED</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.teamProfileHeroSub}>
+                            {division} District • Official ID: <Text style={{ color: '#0f172a', fontWeight: '700' }}>{teamId}</Text>
+                          </Text>
+                          <Text style={styles.teamProfileHeroGround}>
+                            📍 {homeGround}
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+
                     {/* Coach & Management Details */}
                     <View style={styles.card}>
                       <View style={styles.cardHeader}>
                         <Text style={styles.cardTitle}>Head Coach & Management Profile</Text>
-                        <TouchableOpacity style={styles.editBtnSmall} onPress={() => setIsEditProfileVisible(true)}>
+                        <TouchableOpacity style={styles.editBtnSmall} onPress={handleOpenEditProfile}>
                           <Text style={styles.editBtnSmallText}>Edit Details ✏️</Text>
                         </TouchableOpacity>
                       </View>
@@ -3313,6 +3640,66 @@ export default function TeamDashboardScreen({ onExit, initialParams }: TeamDashb
                 </View>
               )}
 
+              {/* Team Logo / Crest Picker (Direct DB Storage) */}
+              <View style={styles.logoPickerSection}>
+                <Text style={styles.inputLabel}>Team Emblem / Club Logo (Stored directly in Database)</Text>
+                <View style={styles.logoPickerRow}>
+                  <View style={styles.logoPreviewFrame}>
+                    {editPhoto ? (
+                      <Image
+                        source={{ uri: editPhoto }}
+                        style={styles.logoPreviewImg}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={styles.logoPreviewPlaceholder}>
+                        <Text style={styles.logoPreviewInitial}>
+                          {(teamName || 'T').charAt(0).toUpperCase()}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={{ flex: 1, gap: 8 }}>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      <TouchableOpacity style={styles.btnPickLogo} onPress={handlePickPhoto} activeOpacity={0.8}>
+                        <Ionicons name="images-outline" size={14} color="#1e40af" style={{ marginRight: 5 }} />
+                        <Text style={styles.btnPickLogoText}>Choose Image</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.btnCameraLogo} onPress={handleTakePhoto} activeOpacity={0.8}>
+                        <Ionicons name="camera-outline" size={14} color="#065f46" style={{ marginRight: 5 }} />
+                        <Text style={styles.btnCameraLogoText}>Camera</Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {editPhoto ? (
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                        <TouchableOpacity
+                          onPress={() => openCropModal(editPhoto)}
+                          activeOpacity={0.8}
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                        >
+                          <Ionicons name="crop-outline" size={13} color="#b45309" />
+                          <Text style={{ color: '#b45309', fontSize: 12, fontWeight: '700' }}>Crop & Adjust</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => setEditPhoto(null)}
+                          activeOpacity={0.8}
+                          style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                        >
+                          <Ionicons name="trash-outline" size={13} color="#dc2626" />
+                          <Text style={{ color: '#dc2626', fontSize: 12, fontWeight: '700' }}>Remove Logo</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <Text style={{ color: '#64748b', fontSize: 11.5 }}>
+                        Upload official emblem to store directly in DB
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              </View>
+
               {/* Locked Field: Team Name */}
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Registered Team Name (Locked by Association)</Text>
@@ -3417,6 +3804,155 @@ export default function TeamDashboardScreen({ onExit, initialParams }: TeamDashb
                 </TouchableOpacity>
               </View>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ───────────────────────────────────────────────────────────── */}
+      {/* MODAL: TEAM LOGO INTERACTIVE CROP MODAL                      */}
+      {/* ───────────────────────────────────────────────────────────── */}
+      <Modal
+        visible={isCropModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCloseCropModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.cropModalContainer, { maxWidth: 440, padding: 0, overflow: 'hidden' }]}>
+            {/* Header */}
+            <View style={styles.cropModalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={styles.cropIconBadge}>
+                  <Ionicons name="crop-outline" size={17} color="#b45309" />
+                </View>
+                <View>
+                  <Text style={styles.cropModalTitle}>Crop Team Emblem</Text>
+                  <Text style={styles.cropModalSubTitle}>Pan, zoom &amp; fit crest inside circular frame</Text>
+                </View>
+              </View>
+              <TouchableOpacity onPress={handleCloseCropModal} style={{ padding: 4 }} activeOpacity={0.7}>
+                <CloseIcon size={18} color="#64748b" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Viewport Frame */}
+            <View style={styles.cropViewportWrapper}>
+              <View
+                style={styles.cropContainer}
+                {...panResponder.panHandlers}
+              >
+                {rawImageToCrop ? (
+                  <View
+                    style={{
+                      position: 'absolute',
+                      left: 130 + cropPan.x,
+                      top: 130 + cropPan.y,
+                      transform: [
+                        { scale: cropZoom },
+                        { rotate: `${cropRotation}deg` }
+                      ]
+                    }}
+                  >
+                    <Image
+                      source={{ uri: rawImageToCrop }}
+                      style={{
+                        width: (imageNaturalDimensions.width || 300) * (240 / Math.max(1, Math.min(imageNaturalDimensions.width || 300, imageNaturalDimensions.height || 300))),
+                        height: (imageNaturalDimensions.height || 300) * (240 / Math.max(1, Math.min(imageNaturalDimensions.width || 300, imageNaturalDimensions.height || 300))),
+                        marginLeft: -((imageNaturalDimensions.width || 300) * (240 / Math.max(1, Math.min(imageNaturalDimensions.width || 300, imageNaturalDimensions.height || 300)))) / 2,
+                        marginTop: -((imageNaturalDimensions.height || 300) * (240 / Math.max(1, Math.min(imageNaturalDimensions.width || 300, imageNaturalDimensions.height || 300)))) / 2
+                      }}
+                      resizeMode="cover"
+                    />
+                  </View>
+                ) : null}
+
+                {/* Dark Outer Cutout Mask */}
+                <View style={styles.cropOverlayDarkCutout} pointerEvents="none" />
+
+                {/* Circular Boundary with Dashed Amber Border */}
+                <View style={styles.cropCircleBorder} pointerEvents="none">
+                  <View style={styles.cropGridH1} />
+                  <View style={styles.cropGridH2} />
+                  <View style={styles.cropGridV1} />
+                  <View style={styles.cropGridV2} />
+                </View>
+
+                {/* Drag Hint Badge */}
+                <View style={styles.cropDragHintBadge} pointerEvents="none">
+                  <Ionicons name="move-outline" size={12} color="#ffffff" />
+                  <Text style={styles.cropDragHintText}>Drag emblem to adjust position</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Interactive Control Panel */}
+            <View style={styles.cropControlsContainer}>
+              {/* Row 1: Zoom Controls, Rotate & Reset */}
+              <View style={styles.cropControlRow}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text style={styles.cropControlLabel}>Zoom</Text>
+                  <View style={styles.cropZoomButtonGroup}>
+                    <TouchableOpacity
+                      style={styles.cropMiniBtn}
+                      onPress={() => setCropZoom(z => Math.max(0.5, parseFloat((z - 0.15).toFixed(2))))}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="remove-outline" size={15} color="#334155" />
+                    </TouchableOpacity>
+                    <Text style={styles.cropZoomValueText}>{Math.round(cropZoom * 100)}%</Text>
+                    <TouchableOpacity
+                      style={styles.cropMiniBtn}
+                      onPress={() => setCropZoom(z => Math.min(3.0, parseFloat((z + 0.15).toFixed(2))))}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons name="add-outline" size={15} color="#334155" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <TouchableOpacity
+                    style={styles.cropToolBtn}
+                    onPress={() => setCropRotation(r => (r + 90) % 360)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons name="refresh-outline" size={13} color="#b45309" />
+                    <Text style={styles.cropToolBtnText}>Rotate</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.cropToolBtn}
+                    onPress={handleResetCrop}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.cropToolBtnText}>Reset</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            {/* Footer Actions */}
+            <View style={styles.cropModalFooter}>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnCancel]}
+                onPress={handleCloseCropModal}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalBtnCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, styles.modalBtnSave, isCropping && { opacity: 0.6 }]}
+                onPress={handleApplyCrop}
+                disabled={isCropping}
+                activeOpacity={0.8}
+              >
+                {isCropping ? (
+                  <ActivityIndicator size="small" color="#0f172a" />
+                ) : (
+                  <Text style={styles.modalBtnSaveText}>Apply &amp; Use Emblem</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -6050,5 +6586,355 @@ const styles: any = StyleSheet.create({
     color: '#b45309',
     textAlign: 'center',
     fontWeight: '600'
+  },
+
+  // ── Team Crest, Emblem & Logo Styles ───────────────────
+  teamProfileHeroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    marginTop: 8
+  },
+  teamLogoBigFrame: {
+    position: 'relative',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#071026',
+    borderWidth: 3,
+    borderColor: '#d4af37',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden'
+  },
+  teamLogoBigImg: {
+    width: 74,
+    height: 74,
+    borderRadius: 37
+  },
+  teamLogoBigPlaceholder: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    backgroundColor: '#071026',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  teamLogoBigInitial: {
+    color: '#f59e0b',
+    fontSize: 32,
+    fontWeight: '900'
+  },
+  logoEditBadgeBtn: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    left: 0,
+    height: 22,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3
+  },
+  logoEditBadgeText: {
+    color: '#ffffff',
+    fontSize: 9.5,
+    fontWeight: '700'
+  },
+  teamProfileHeroTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#0f172a'
+  },
+  teamProfileHeroSub: {
+    fontSize: 12.5,
+    color: '#64748b',
+    marginTop: 3
+  },
+  teamProfileHeroGround: {
+    fontSize: 12,
+    color: '#475569',
+    marginTop: 4
+  },
+  logoPickerSection: {
+    marginBottom: 16,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9'
+  },
+  logoPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginTop: 8
+  },
+  logoPreviewFrame: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    backgroundColor: '#071026',
+    borderWidth: 2,
+    borderColor: '#d4af37',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden'
+  },
+  logoPreviewImg: {
+    width: 64,
+    height: 64,
+    borderRadius: 32
+  },
+  logoPreviewPlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  logoPreviewInitial: {
+    color: '#f59e0b',
+    fontSize: 26,
+    fontWeight: '900'
+  },
+  btnPickLogo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8
+  },
+  btnPickLogoText: {
+    color: '#1e40af',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  btnCameraLogo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1,
+    borderColor: '#a7f3d0',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8
+  },
+  btnCameraLogoText: {
+    color: '#065f46',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  // Crop Modal Styles
+  cropModalContainer: {
+    width: '95%',
+    maxWidth: 440,
+    backgroundColor: '#ffffff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 10
+  },
+  cropModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9'
+  },
+  cropIconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#fef3c7',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  cropModalTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0f172a'
+  },
+  cropModalSubTitle: {
+    fontSize: 11,
+    color: '#64748b'
+  },
+  cropViewportWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    backgroundColor: '#020617'
+  },
+  cropContainer: {
+    width: 260,
+    height: 260,
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    overflow: 'hidden',
+    position: 'relative'
+  },
+  cropOverlayDarkCutout: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)'
+  },
+  cropCircleBorder: {
+    position: 'absolute',
+    width: 240,
+    height: 240,
+    left: 10,
+    top: 10,
+    borderRadius: 120,
+    borderWidth: 2,
+    borderColor: '#f59e0b',
+    borderStyle: 'dashed',
+    overflow: 'hidden'
+  },
+  cropGridH1: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 80,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)'
+  },
+  cropGridH2: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 160,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)'
+  },
+  cropGridV1: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 80,
+    width: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)'
+  },
+  cropGridV2: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 160,
+    width: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)'
+  },
+  cropDragHintBadge: {
+    position: 'absolute',
+    bottom: 12,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10
+  },
+  cropDragHintText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '600'
+  },
+  cropControlsContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#f8fafc',
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    gap: 10
+  },
+  cropControlRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  cropControlLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569'
+  },
+  cropZoomButtonGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2
+  },
+  cropMiniBtn: {
+    padding: 3
+  },
+  cropZoomValueText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#0f172a',
+    minWidth: 40,
+    textAlign: 'center'
+  },
+  cropToolBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6
+  },
+  cropToolBtnText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#334155'
+  },
+  cropModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#e2e8f0',
+    backgroundColor: '#ffffff'
+  },
+  squadAvatarPhotoFrame: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#071026',
+    borderWidth: 1.5,
+    borderColor: '#d4af37',
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden'
+  },
+  squadAvatarPhotoImg: {
+    width: 44,
+    height: 44,
+    borderRadius: 22
   }
 });

@@ -595,6 +595,8 @@ export default function AdminDashboardScreen({ onExit, initialParams }: AdminDas
   }, [scheduleForm.match_date, scheduleForm.match_time]);
   const [umpire1DropdownOpen, setUmpire1DropdownOpen] = useState<boolean>(false);
   const [umpire2DropdownOpen, setUmpire2DropdownOpen] = useState<boolean>(false);
+  const [umpireSearch1, setUmpireSearch1] = useState<string>('');
+  const [umpireSearch2, setUmpireSearch2] = useState<string>('');
   const [googleMapsModalOpen, setGoogleMapsModalOpen] = useState<boolean>(false);
   const [mapsSearchQuery, setMapsSearchQuery] = useState<string>('');
   const [scheduleFormError, setScheduleFormError] = useState<string | null>(null);
@@ -951,6 +953,41 @@ export default function AdminDashboardScreen({ onExit, initialParams }: AdminDas
 
     return list;
   }, [venuesList, scheduleForm?.venue]);
+
+  // Comprehensive registered and dynamic umpires for selection
+  const availableUmpires = useMemo(() => {
+    const list: any[] = [];
+    const seen = new Set<string>();
+
+    (officialsList || []).forEach((o: any) => {
+      const r = (o.role || o.type || '').toUpperCase();
+      if (!r || r.includes('UMP') || r.includes('OFFIC')) {
+        const id = o.id || o.umpireId;
+        if (id && !seen.has(id)) {
+          seen.add(id);
+          list.push({
+            id,
+            name: o.name || o.umpireName || id,
+            role: o.role || 'Official Umpire'
+          });
+        }
+      }
+    });
+
+    (umpires || []).forEach((u: any) => {
+      const id = u.umpireId || u.id;
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        list.push({
+          id,
+          name: u.umpireName || u.name || id,
+          role: u.qualification || u.specialization || 'Registered Panel Umpire'
+        });
+      }
+    });
+
+    return list;
+  }, [officialsList, umpires]);
 
   // Dynamic Time Delay calculator for Weather / Rain adjustments
   const applyDynamicTimeDelay = (minutesToAdd: number) => {
@@ -5554,7 +5591,7 @@ export default function AdminDashboardScreen({ onExit, initialParams }: AdminDas
                   </View>
 
                   {/* Venue and Stadium Selection with Google Maps Integration */}
-                  <View style={[styles.colFormCard, { marginTop: 14 }]}>
+                  <View style={[styles.formSectionCard, { marginTop: 14 }]}>
                     <View style={styles.fieldLabelRow}>
                       <Text style={styles.formFieldLabel}>Select Ground</Text>
                       {scheduleForm.venue ? (
@@ -5980,7 +6017,7 @@ export default function AdminDashboardScreen({ onExit, initialParams }: AdminDas
                   )}
 
                   {/* Match Format & Overs Limit */}
-                  <View style={[styles.colFormCard, { marginTop: 14 }]}>
+                  <View style={[styles.formSectionCard, { marginTop: 14 }]}>
                     <Text style={styles.formFieldLabel}>Match Format & Overs Limit *</Text>
                     <View style={styles.twoColFormGrid}>
                       <View style={{ flex: 1 }}>
@@ -6034,8 +6071,8 @@ export default function AdminDashboardScreen({ onExit, initialParams }: AdminDas
                     </View>
                   </View>
 
-                  {/* Scorer & Match Umpires */}
-                  <View style={[styles.colFormCard, { marginTop: 14 }]}>
+                  {/* Match Scorer */}
+                  <View style={[styles.formSectionCard, { marginTop: 14 }]}>
                     <Text style={styles.formFieldLabel}>Match Scorer *</Text>
                     {(() => {
                       const scorers = officialsList.filter((o: any) => {
@@ -6089,106 +6126,142 @@ export default function AdminDashboardScreen({ onExit, initialParams }: AdminDas
                         </View>
                       );
                     })()}
+                  </View>
 
-                    {/* DYNAMIC UMPIRES SELECTION (Field Umpire 1 & Square Leg Umpire 2) */}
-                    <View style={{ marginTop: 14 }}>
-                      <Text style={styles.formFieldLabel}>Match Umpires (Dynamic Selection)</Text>
-                      <View style={styles.twoColFormGrid}>
-                        {/* Field Umpire 1 */}
-                        <View style={styles.colFormCard}>
-                          <Text style={[styles.formFieldLabel, { fontSize: 11.5, color: '#475569' }]}>⚖️ Field Umpire 1 (Lead)</Text>
-                          <TextInput
-                            style={styles.formTextInputCompact}
-                            placeholder="Type or select Umpire 1..."
-                            placeholderTextColor="#94a3b8"
-                            value={scheduleForm.umpire1_name || ''}
-                            onChangeText={(val) => setScheduleForm(prev => ({ ...prev, umpire1_name: val, umpire1_id: val }))}
-                          />
+                  {/* DYNAMIC UMPIRES SELECTION (Field Umpire 1 & Square Leg Umpire 2) */}
+                  <View style={{ marginTop: 14 }}>
+                    <Text style={styles.formFieldLabel}>Match Umpires (Dynamic Selection)</Text>
+                    <View style={styles.twoColFormGrid}>
+                      {/* Field Umpire 1 */}
+                      <View style={styles.colFormCard}>
+                        <Text style={[styles.formFieldLabel, { fontSize: 11.5, color: '#475569' }]}>⚖️ Field Umpire 1 (Lead)</Text>
+                        <TextInput
+                          style={styles.formTextInputCompact}
+                          placeholder="Type or select Umpire 1..."
+                          placeholderTextColor="#94a3b8"
+                          value={scheduleForm.umpire1_name || ''}
+                          onChangeText={(val) => setScheduleForm(prev => ({ ...prev, umpire1_name: val, umpire1_id: val }))}
+                        />
+                        <View style={{ marginTop: 6 }}>
                           <TouchableOpacity
                             style={styles.dropdownToggleSmall}
                             onPress={() => {
                               setUmpire1DropdownOpen(!umpire1DropdownOpen);
                               setUmpire2DropdownOpen(false);
                             }}
+                            activeOpacity={0.8}
                           >
                             <Text style={styles.dropdownToggleSmallText}>
                               {umpire1DropdownOpen ? '▲ Hide Registered Umpires' : '▼ Select from Umpires'}
                             </Text>
                           </TouchableOpacity>
-
-                          {umpire1DropdownOpen && (
-                            <View style={styles.dropdownTablePanelCompact}>
-                              <ScrollView style={styles.dropdownTableScrollCompact} nestedScrollEnabled={true}>
-                                {officialsList
-                                  .filter(o => !o.role || (o.role || '').toUpperCase().includes('UMP') || (o.role || '').toUpperCase().includes('OFFIC'))
-                                  .map(u => (
-                                    <TouchableOpacity
-                                      key={`u1-${u.id}`}
-                                      style={styles.dropdownTableRowCompact}
-                                      onPress={() => {
-                                        setScheduleForm(prev => ({ ...prev, umpire1_id: u.id, umpire1_name: u.name }));
-                                        setUmpire1DropdownOpen(false);
-                                      }}
-                                    >
-                                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#0f172a' }}>⚖️ {u.name}</Text>
-                                      <Text style={{ fontSize: 11, color: '#64748b' }}>{u.role || 'Official Umpire'} • {u.id}</Text>
-                                    </TouchableOpacity>
-                                  ))}
-                              </ScrollView>
-                            </View>
-                          )}
                         </View>
 
-                        {/* Field Umpire 2 */}
-                        <View style={styles.colFormCard}>
-                          <Text style={[styles.formFieldLabel, { fontSize: 11.5, color: '#475569' }]}>⚖️ Field Umpire 2 (Square Leg)</Text>
-                          <TextInput
-                            style={styles.formTextInputCompact}
-                            placeholder="Type or select Umpire 2..."
-                            placeholderTextColor="#94a3b8"
-                            value={scheduleForm.umpire2_name || ''}
-                            onChangeText={(val) => setScheduleForm(prev => ({ ...prev, umpire2_name: val, umpire2_id: val }))}
-                          />
+                        {umpire1DropdownOpen && (
+                          <View style={styles.dropdownTablePanelCompact}>
+                            <View style={styles.dropdownSearchWrapCompact}>
+                              <Text style={{ fontSize: 12, marginRight: 6 }}>🔍</Text>
+                              <TextInput
+                                style={styles.dropdownSearchInputCompact}
+                                placeholder="Search umpires..."
+                                placeholderTextColor="#94a3b8"
+                                value={umpireSearch1}
+                                onChangeText={setUmpireSearch1}
+                              />
+                            </View>
+                            <ScrollView style={styles.dropdownTableScrollCompact} nestedScrollEnabled={true}>
+                              {availableUmpires
+                                .filter(u => !umpireSearch1 || (u.name || '').toLowerCase().includes(umpireSearch1.toLowerCase()))
+                                .map(u => (
+                                  <TouchableOpacity
+                                    key={`u1-${u.id}`}
+                                    style={styles.dropdownTableRowCompact}
+                                    onPress={() => {
+                                      setScheduleForm(prev => ({ ...prev, umpire1_id: u.id, umpire1_name: u.name }));
+                                      setUmpire1DropdownOpen(false);
+                                    }}
+                                  >
+                                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#0f172a' }}>⚖️ {u.name}</Text>
+                                    <Text style={{ fontSize: 11, color: '#64748b' }}>{u.role || 'Official Umpire'} • {u.id}</Text>
+                                  </TouchableOpacity>
+                                ))}
+                              {availableUmpires.filter(u => !umpireSearch1 || (u.name || '').toLowerCase().includes(umpireSearch1.toLowerCase())).length === 0 && (
+                                <View style={{ padding: 10, alignItems: 'center' }}>
+                                  <Text style={{ fontSize: 11.5, color: '#94a3b8' }}>No matching umpires found.</Text>
+                                </View>
+                              )}
+                            </ScrollView>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Field Umpire 2 */}
+                      <View style={styles.colFormCard}>
+                        <Text style={[styles.formFieldLabel, { fontSize: 11.5, color: '#475569' }]}>⚖️ Field Umpire 2 (Square Leg)</Text>
+                        <TextInput
+                          style={styles.formTextInputCompact}
+                          placeholder="Type or select Umpire 2..."
+                          placeholderTextColor="#94a3b8"
+                          value={scheduleForm.umpire2_name || ''}
+                          onChangeText={(val) => setScheduleForm(prev => ({ ...prev, umpire2_name: val, umpire2_id: val }))}
+                        />
+                        <View style={{ marginTop: 6 }}>
                           <TouchableOpacity
                             style={styles.dropdownToggleSmall}
                             onPress={() => {
                               setUmpire2DropdownOpen(!umpire2DropdownOpen);
                               setUmpire1DropdownOpen(false);
                             }}
+                            activeOpacity={0.8}
                           >
                             <Text style={styles.dropdownToggleSmallText}>
                               {umpire2DropdownOpen ? '▲ Hide Registered Umpires' : '▼ Select from Umpires'}
                             </Text>
                           </TouchableOpacity>
-
-                          {umpire2DropdownOpen && (
-                            <View style={styles.dropdownTablePanelCompact}>
-                              <ScrollView style={styles.dropdownTableScrollCompact} nestedScrollEnabled={true}>
-                                {officialsList
-                                  .filter(o => !o.role || (o.role || '').toUpperCase().includes('UMP') || (o.role || '').toUpperCase().includes('OFFIC'))
-                                  .map(u => (
-                                    <TouchableOpacity
-                                      key={`u2-${u.id}`}
-                                      style={styles.dropdownTableRowCompact}
-                                      onPress={() => {
-                                        setScheduleForm(prev => ({ ...prev, umpire2_id: u.id, umpire2_name: u.name }));
-                                        setUmpire2DropdownOpen(false);
-                                      }}
-                                    >
-                                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#0f172a' }}>⚖️ {u.name}</Text>
-                                      <Text style={{ fontSize: 11, color: '#64748b' }}>{u.role || 'Official Umpire'} • {u.id}</Text>
-                                    </TouchableOpacity>
-                                  ))}
-                              </ScrollView>
-                            </View>
-                          )}
                         </View>
+
+                        {umpire2DropdownOpen && (
+                          <View style={styles.dropdownTablePanelCompact}>
+                            <View style={styles.dropdownSearchWrapCompact}>
+                              <Text style={{ fontSize: 12, marginRight: 6 }}>🔍</Text>
+                              <TextInput
+                                style={styles.dropdownSearchInputCompact}
+                                placeholder="Search umpires..."
+                                placeholderTextColor="#94a3b8"
+                                value={umpireSearch2}
+                                onChangeText={setUmpireSearch2}
+                              />
+                            </View>
+                            <ScrollView style={styles.dropdownTableScrollCompact} nestedScrollEnabled={true}>
+                              {availableUmpires
+                                .filter(u => !umpireSearch2 || (u.name || '').toLowerCase().includes(umpireSearch2.toLowerCase()))
+                                .map(u => (
+                                  <TouchableOpacity
+                                    key={`u2-${u.id}`}
+                                    style={styles.dropdownTableRowCompact}
+                                    onPress={() => {
+                                      setScheduleForm(prev => ({ ...prev, umpire2_id: u.id, umpire2_name: u.name }));
+                                      setUmpire2DropdownOpen(false);
+                                    }}
+                                  >
+                                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#0f172a' }}>⚖️ {u.name}</Text>
+                                    <Text style={{ fontSize: 11, color: '#64748b' }}>{u.role || 'Official Umpire'} • {u.id}</Text>
+                                  </TouchableOpacity>
+                                ))}
+                              {availableUmpires.filter(u => !umpireSearch2 || (u.name || '').toLowerCase().includes(umpireSearch2.toLowerCase())).length === 0 && (
+                                <View style={{ padding: 10, alignItems: 'center' }}>
+                                  <Text style={{ fontSize: 11.5, color: '#94a3b8' }}>No matching umpires found.</Text>
+                                </View>
+                              )}
+                            </ScrollView>
+                          </View>
+                        )}
                       </View>
                     </View>
                   </View>
 
                   {/* Optional Match Notes & Preferences */}
-                  <View style={[styles.colFormCard, { marginTop: 14 }]}>
+                  <View style={[styles.formSectionCard, { marginTop: 14 }]}>
                     <Text style={styles.formFieldLabel}>Match Notes (Optional)</Text>
                     <TextInput
                       style={styles.formTextAreaCompact}
@@ -9175,6 +9248,7 @@ const styles: any = StyleSheet.create({
     fontWeight: '800'
   },
   twoColFormGrid: {
+    width: '100%',
     flexDirection: 'row',
     gap: 14,
     flexWrap: 'wrap',
@@ -10514,6 +10588,14 @@ const styles: any = StyleSheet.create({
   colFormCard: {
     flex: 1,
     minWidth: 280,
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 12
+  },
+  formSectionCard: {
+    width: '100%',
     backgroundColor: '#ffffff',
     borderRadius: 10,
     borderWidth: 1,

@@ -768,7 +768,7 @@ export default function PlayerDashboardScreen({ onExit, initialParams }: PlayerD
           onSelectTab={setActiveTab}
           playerName={playerName}
           playerRole={playerRole}
-          playerPhoto={profile?.photo || profile?.image_path || null}
+          playerPhoto={resolvePhotoUrl(profile?.photo || profile?.image_path) || null}
           jerseyNumber={profile?.jerseyNumber ?? ''}
           squadCount={squad.length}
           matchesCount={matches.length}
@@ -837,9 +837,9 @@ export default function PlayerDashboardScreen({ onExit, initialParams }: PlayerD
                     activeOpacity={0.8}
                     accessibilityLabel="Player Profile"
                   >
-                    {profile?.photo || profile?.image_path || profile?.avatar ? (
+                    {resolvePhotoUrl(profile?.photo || profile?.image_path || profile?.avatar) ? (
                       <Image
-                        source={{ uri: profile.photo || profile.image_path || profile.avatar }}
+                        source={{ uri: resolvePhotoUrl(profile.photo || profile.image_path || profile.avatar)! }}
                         style={[styles.headerAvatarCircle, isMobileS && { width: 32, height: 32, borderRadius: 16 }]}
                         resizeMode="cover"
                       />
@@ -1592,9 +1592,9 @@ export default function PlayerDashboardScreen({ onExit, initialParams }: PlayerD
                 {/* Profile Photo & Player Identity Showcase */}
                 <View style={styles.profileAvatarCardRow}>
                   <View style={styles.profileAvatarLargeFrame}>
-                    {profile?.photo || profile?.image_path ? (
+                    {resolvePhotoUrl(profile?.photo || profile?.image_path) ? (
                       <Image
-                        source={{ uri: profile.photo || profile.image_path }}
+                        source={{ uri: resolvePhotoUrl(profile.photo || profile.image_path)! }}
                         style={styles.profileAvatarLargeImg}
                         resizeMode="cover"
                       />

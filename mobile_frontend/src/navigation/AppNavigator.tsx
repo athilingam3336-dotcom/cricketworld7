@@ -16,6 +16,8 @@ export type AppScreenName =
   | 'Player'
   | 'Coach'
   | 'Team'
+  | 'TeamDetail'
+  | 'PlayerDetail'
   | 'Content';
 
 export interface ScreenAccessResult {
@@ -148,7 +150,9 @@ export const useAppNavigation = () => {
     if (path.includes('login')) return 'Login';
     if (path.includes('register')) return 'Registration';
     if (path.includes('admin')) return 'Admin';
+    if (path.includes('team-detail') || path.includes('team-profile')) return 'TeamDetail';
     if (path.includes('team') || path.includes('coach')) return 'Team';
+    if (path.includes('player-detail') || path.includes('player-profile')) return 'PlayerDetail';
     if (path.includes('player')) return 'Player';
     if (path.includes('umpire')) return 'Umpire';
     if (path.includes('scorer')) return 'Scorer';
@@ -183,6 +187,14 @@ export const useAppNavigation = () => {
             router.push({ pathname: '/scorecard', params: screenParams });
           }
           break;
+        case 'TeamDetail':
+          if (screenParams?.teamId || screenParams?.id) {
+            const tId = screenParams.teamId || screenParams.id;
+            router.push({ pathname: `/team-detail/${tId}` as any, params: screenParams });
+          } else {
+            router.push({ pathname: '/team-detail' as any, params: screenParams });
+          }
+          break;
         case 'Team':
         case 'Coach':
           if (screenParams?.tab || screenParams?.initialTab) {
@@ -190,6 +202,14 @@ export const useAppNavigation = () => {
             router.push({ pathname: `/team/${tab}` as any, params: screenParams });
           } else {
             router.push({ pathname: '/team', params: screenParams });
+          }
+          break;
+        case 'PlayerDetail':
+          if (screenParams?.playerId || screenParams?.id) {
+            const pId = screenParams.playerId || screenParams.id;
+            router.push({ pathname: `/player-detail/${pId}` as any, params: screenParams });
+          } else {
+            router.push({ pathname: '/player-detail' as any, params: screenParams });
           }
           break;
         case 'Player':
@@ -321,10 +341,32 @@ export default function AppNavigator({
           };
         }
       }
+      else if (p.includes('player-detail') || p.includes('player-profile')) {
+        requested = 'PlayerDetail';
+        const playerId = getQuery('playerId') || getQuery('id');
+        const playerName = getQuery('playerName') || getQuery('name');
+        if (playerId || playerName) {
+          urlParams = {
+            ...(playerId ? { playerId } : {}),
+            ...(playerName ? { playerName } : {})
+          };
+        }
+      }
       else if (p.includes('player')) {
         requested = 'Player';
         const tab = getQuery('tab');
         if (tab) urlParams = { initialTab: tab };
+      }
+      else if (p.includes('team-detail') || p.includes('team-profile')) {
+        requested = 'TeamDetail';
+        const teamId = getQuery('teamId') || getQuery('id');
+        const teamName = getQuery('teamName') || getQuery('name');
+        if (teamId || teamName) {
+          urlParams = {
+            ...(teamId ? { teamId } : {}),
+            ...(teamName ? { teamName } : {})
+          };
+        }
       }
       else if (p.includes('team') || p.includes('coach')) {
         requested = 'Team';
@@ -498,7 +540,9 @@ export default function AppNavigator({
           else if (path.includes('admin')) requested = 'Admin';
           else if (path.includes('umpire')) requested = 'Umpire';
           else if (path.includes('scorer')) requested = 'Scorer';
+          else if (path.includes('player-detail') || path.includes('player-profile')) requested = 'PlayerDetail';
           else if (path.includes('player')) requested = 'Player';
+          else if (path.includes('team-detail') || path.includes('team-profile')) requested = 'TeamDetail';
           else if (path.includes('team') || path.includes('coach')) requested = 'Team';
           else if (path.includes('login')) requested = 'Login';
           else if (path.includes('register')) requested = 'Registration';

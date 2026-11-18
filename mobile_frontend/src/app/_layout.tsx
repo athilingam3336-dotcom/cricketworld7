@@ -17,7 +17,7 @@ export default function RootLayout() {
   });
 
   return (
-    <SafeAreaProvider>
+    <SafeAreaProvider style={{ flex: 1, backgroundColor: '#020612' }}>
       <ErrorBoundary>
         <StatusBar style="light" />
         <Stack
@@ -45,4 +45,3 @@ export default function RootLayout() {
     </SafeAreaProvider>
   );
 }
-
