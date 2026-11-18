@@ -393,7 +393,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
 
     // Listen to window focus or storage/custom events to automatically pick up admin updates
     let syncHandler: any = null;
-    if (typeof window !== 'undefined') {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       syncHandler = () => loadDynamicMasterOptions();
       window.addEventListener('focus', syncHandler);
       window.addEventListener('storage', syncHandler);
@@ -402,7 +402,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
 
     return () => {
       isMounted = false;
-      if (typeof window !== 'undefined' && syncHandler) {
+      if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.removeEventListener === 'function' && syncHandler) {
         window.removeEventListener('focus', syncHandler);
         window.removeEventListener('storage', syncHandler);
         window.removeEventListener('master_settings_updated', syncHandler);
