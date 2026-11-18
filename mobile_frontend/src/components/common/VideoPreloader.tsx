@@ -9,7 +9,55 @@ import {
   Dimensions
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { WebView } from 'react-native-webview';
+import { useVideoPlayer, VideoView } from 'expo-video';
+
+const LOCAL_PRELOADER_VIDEO = require('../../../assets/videos/preloader.mp4');
+
+interface NativeVideoComponentProps {
+  onProgress: (pct: number) => void;
+  onEnded: () => void;
+}
+
+function NativeVideoComponent({ onProgress, onEnded }: NativeVideoComponentProps) {
+  const player = useVideoPlayer(LOCAL_PRELOADER_VIDEO, (p) => {
+    p.loop = false;
+    p.muted = false;
+    p.volume = 1.0;
+    p.timeUpdateEventInterval = 0.1;
+    p.play();
+  });
+
+  useEffect(() => {
+    const timeSub = player.addListener('timeUpdate', (event) => {
+      if (player.duration) {
+        const pct = (event.currentTime / player.duration) * 100;
+        onProgress(Math.min(100, pct));
+      }
+      // Exact synchronization: trigger website reveal at 6.9s when bails lock in with sound
+      if (event.currentTime >= 6.9) {
+        onEnded();
+      }
+    });
+
+    const endSub = player.addListener('playToEnd', () => {
+      onEnded();
+    });
+
+    return () => {
+      timeSub.remove();
+      endSub.remove();
+    };
+  }, [player, onProgress, onEnded]);
+
+  return (
+    <VideoView
+      player={player}
+      style={StyleSheet.absoluteFill}
+      contentFit="cover"
+      nativeControls={false}
+    />
+  );
+}
 
 interface VideoPreloaderProps {
   onComplete?: () => void;
@@ -137,54 +185,6 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
     return null;
   }
 
-  // Native WebView implementation for iOS / Android (unmuted stadium sound, edge-to-edge cover)
-  const nativeHtml = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { background: #020612; overflow: hidden; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
-          video { width: 100vw; height: 100vh; object-fit: cover; object-position: center center; }
-        </style>
-      </head>
-      <body>
-        <video id="v" autoplay playsinline webkit-playsinline preload="auto">
-          <source src="http://localhost:8081/preloader.mp4" type="video/mp4" />
-          <source src="http://localhost:5000/uploads/preloader.mp4" type="video/mp4" />
-        </video>
-        <script>
-          var v = document.getElementById('v');
-          v.muted = false;
-          v.volume = 1.0;
-          v.addEventListener('ended', function() {
-            window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ENDED' }));
-          });
-          v.addEventListener('timeupdate', function() {
-            if (v.duration) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'PROGRESS', pct: (v.currentTime / v.duration) * 100 }));
-              if (v.currentTime >= 6.9) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'ENDED' }));
-              }
-            }
-          });
-          var playPromise = v.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(function() {
-              v.muted = true;
-              v.play();
-              window.addEventListener('touchstart', function() {
-                v.muted = false;
-                v.volume = 1.0;
-              }, { once: true });
-            });
-          }
-        </script>
-      </body>
-    </html>
-  `;
-
   return (
     <Animated.View
       style={[
@@ -219,23 +219,9 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
             onTimeUpdate={handleTimeUpdate}
           />
         ) : (
-          <WebView
-            originWhitelist={['*']}
-            source={{ html: nativeHtml }}
-            style={styles.webView}
-            scrollEnabled={false}
-            allowsInlineMediaPlayback
-            mediaPlaybackRequiresUserAction={false}
-            onMessage={(event) => {
-              try {
-                const data = JSON.parse(event.nativeEvent.data);
-                if (data.type === 'ENDED') {
-                  handleDismiss();
-                } else if (data.type === 'PROGRESS') {
-                  setProgress(Math.min(100, data.pct || 0));
-                }
-              } catch (_e) {}
-            }}
+          <NativeVideoComponent
+            onProgress={(pct) => setProgress(pct)}
+            onEnded={() => handleDismiss()}
           />
         )}
       </View>
