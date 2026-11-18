@@ -14,7 +14,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { ScorerApi } from '../../services/api';
 import { showSuccess, showError, showWarning } from '../../utils/sweetalert';
-import { validateEmail, validatePassword } from '../../utils/validation';
+import { validateEmail, validatePassword, getPasswordCriteria } from '../../utils/validation';
 
 export interface ForgotPasswordModalProps {
   visible: boolean;
@@ -45,10 +45,10 @@ export default function ForgotPasswordModal({
   const [confirmPassword, setConfirmPassword] = useState('');
 
   // 4 OTP Box Refs & Focus State
-  const boxRef0 = useRef<TextInput>(null);
-  const boxRef1 = useRef<TextInput>(null);
-  const boxRef2 = useRef<TextInput>(null);
-  const boxRef3 = useRef<TextInput>(null);
+  const boxRef0 = useRef<any>(null);
+  const boxRef1 = useRef<any>(null);
+  const boxRef2 = useRef<any>(null);
+  const boxRef3 = useRef<any>(null);
   const boxRefs = [boxRef0, boxRef1, boxRef2, boxRef3];
   const [focusedBoxIndex, setFocusedBoxIndex] = useState<number | null>(null);
 
@@ -57,8 +57,12 @@ export default function ForgotPasswordModal({
   const [copiedOldPassword, setCopiedOldPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [newPasswordError, setNewPasswordError] = useState<string | null>(null);
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const passwordCriteria = getPasswordCriteria(newPassword);
 
   useEffect(() => {
     if (visible) {
@@ -71,6 +75,8 @@ export default function ForgotPasswordModal({
       setConfirmPassword('');
       setShowNewPassword(false);
       setShowConfirmPassword(false);
+      setNewPasswordError(null);
+      setConfirmPasswordError(null);
       setCurrentStep(1);
       setErrorMessage(null);
     }
@@ -246,21 +252,33 @@ export default function ForgotPasswordModal({
   // STEP 3: Reset and Encrypt Password
   const handleResetPassword = async () => {
     setErrorMessage(null);
+    setNewPasswordError(null);
+    setConfirmPasswordError(null);
     const pass = newPassword.trim();
     const conf = confirmPassword.trim();
     const combinedOtp = otpBoxes.join('').trim();
 
-    // Password validation: 1 uppercase, 2 special characters, min 8 characters
+    // Password validation: min 8 characters, 1 uppercase, 1 special character, 2 numbers
     const passCheck = validatePassword(pass);
     if (!passCheck.isValid) {
-      const err = passCheck.error || 'Password does not meet required criteria.';
+      const err = passCheck.error || 'Password must be at least 8 characters, with 1 uppercase letter, 1 special character, and 2 numbers.';
+      setNewPasswordError(err);
       setErrorMessage(err);
       showWarning('Password Requirements', err);
       return;
     }
 
+    if (!conf) {
+      const err = 'Please confirm your new password.';
+      setConfirmPasswordError(err);
+      setErrorMessage(err);
+      showWarning('Confirm Password', err);
+      return;
+    }
+
     if (pass !== conf) {
       const err = 'New password and confirm password do not match.';
+      setConfirmPasswordError(err);
       setErrorMessage(err);
       showWarning('Passwords Do Not Match', err);
       return;
@@ -467,7 +485,7 @@ export default function ForgotPasswordModal({
                 </View>
 
                 {/* OLD / CURRENT PASSWORD DISPLAY CARD */}
-                <View style={styles.oldPasswordCard}>
+                {/* <View style={styles.oldPasswordCard}>
                   <View style={styles.oldPasswordHeaderRow}>
                     <View style={styles.oldPasswordHeaderLeft}>
                       <Text style={styles.oldPasswordIcon}>🔑</Text>
@@ -517,7 +535,7 @@ export default function ForgotPasswordModal({
                     </View>
                   </View>
 
-                  {/* Keep Old Password & Log In Button */}
+                  {/* Keep Old Password & Log In Button 
                   <TouchableOpacity
                     style={styles.keepPasswordBtn}
                     onPress={handleKeepOldPassword}
@@ -529,26 +547,35 @@ export default function ForgotPasswordModal({
                   </TouchableOpacity>
                 </View>
 
-                {/* OR DIVIDER */}
+                {/* OR DIVIDER 
                 <View style={styles.orDividerContainer}>
                   <View style={styles.orLine} />
                   <View style={styles.orBadge}>
                     <Text style={styles.orText}>OR CHANGE TO A NEW PASSWORD</Text>
                   </View>
                   <View style={styles.orLine} />
-                </View>
+                </View> */}
 
                 {/* NEW PASSWORD SECTION */}
                 <Text style={styles.inputLabel}>NEW PASSWORD</Text>
-                <View style={styles.passwordWrapper}>
+                <View style={[styles.passwordWrapper, newPasswordError ? styles.inputError : null]}>
                   <TextInput
                     style={styles.passwordInput}
-                    placeholder="Enter new account password"
+                    placeholder="Enter new account password (e.g. User12@26)"
                     placeholderTextColor="#94a3b8"
                     value={newPassword}
                     onChangeText={(val) => {
                       setNewPassword(val);
                       if (errorMessage) setErrorMessage(null);
+                      if (val) {
+                        const check = validatePassword(val);
+                        setNewPasswordError(check.isValid ? null : (check.error || null));
+                      } else {
+                        setNewPasswordError(null);
+                      }
+                      if (confirmPassword) {
+                        setConfirmPasswordError(val === confirmPassword ? null : 'Passwords do not match.');
+                      }
                     }}
                     secureTextEntry={!showNewPassword}
                     autoCapitalize="none"
@@ -566,9 +593,12 @@ export default function ForgotPasswordModal({
                     />
                   </TouchableOpacity>
                 </View>
+                {newPasswordError ? (
+                  <Text style={styles.fieldErrorText}>⚠️ {newPasswordError}</Text>
+                ) : null}
 
-                <Text style={styles.inputLabel}>CONFIRM NEW PASSWORD</Text>
-                <View style={styles.passwordWrapper}>
+                <Text style={[styles.inputLabel, { marginTop: 12 }]}>CONFIRM NEW PASSWORD</Text>
+                <View style={[styles.passwordWrapper, confirmPasswordError ? styles.inputError : null]}>
                   <TextInput
                     style={styles.passwordInput}
                     placeholder="Confirm new password"
@@ -577,6 +607,11 @@ export default function ForgotPasswordModal({
                     onChangeText={(val) => {
                       setConfirmPassword(val);
                       if (errorMessage) setErrorMessage(null);
+                      if (val) {
+                        setConfirmPasswordError(val === newPassword ? null : 'Passwords do not match.');
+                      } else {
+                        setConfirmPasswordError(null);
+                      }
                     }}
                     secureTextEntry={!showConfirmPassword}
                     autoCapitalize="none"
@@ -594,12 +629,49 @@ export default function ForgotPasswordModal({
                     />
                   </TouchableOpacity>
                 </View>
+                {confirmPasswordError ? (
+                  <Text style={styles.fieldErrorText}>⚠️ {confirmPasswordError}</Text>
+                ) : null}
 
+                {/* Password Rules Pill Box (matches Registration validation exactly) */}
                 <View style={styles.criteriaBox}>
-                  <Text style={styles.criteriaTitle}>🔒 Password Requirements:</Text>
-                  <Text style={styles.criteriaItem}>• Minimum 8 characters in length</Text>
-                  <Text style={styles.criteriaItem}>• At least 1 uppercase letter (A-Z)</Text>
-                  <Text style={styles.criteriaItem}>• At least 2 special characters (e.g. !@#$%)</Text>
+                  <View style={styles.criteriaHeaderRow}>
+                    <Text style={styles.criteriaTitle}>🔒 Password Rules (Required for All Roles):</Text>
+                    {passwordCriteria.allValid && (
+                      <View style={styles.criteriaBadgeMet}>
+                        <Text style={styles.criteriaBadgeMetText}>✓ ALL RULES MET</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.pillsRow}>
+                    <View style={[styles.pillItem, passwordCriteria.minLength && styles.pillItemMet]}>
+                      <Text style={[styles.pillText, passwordCriteria.minLength && styles.pillTextMet]}>
+                        {passwordCriteria.minLength ? '✓' : '○'} Min 8 Characters
+                      </Text>
+                    </View>
+                    <View style={[styles.pillItem, passwordCriteria.hasUppercase && styles.pillItemMet]}>
+                      <Text style={[styles.pillText, passwordCriteria.hasUppercase && styles.pillTextMet]}>
+                        {passwordCriteria.hasUppercase ? '✓' : '○'} 1 Uppercase (A-Z)
+                      </Text>
+                    </View>
+                    <View style={[styles.pillItem, passwordCriteria.hasSpecialChar && styles.pillItemMet]}>
+                      <Text style={[styles.pillText, passwordCriteria.hasSpecialChar && styles.pillTextMet]}>
+                        {passwordCriteria.hasSpecialChar ? '✓' : '○'} 1 Special Char (e.g. !@#$)
+                      </Text>
+                    </View>
+                    <View style={[styles.pillItem, passwordCriteria.hasTwoNumbers && styles.pillItemMet]}>
+                      <Text style={[styles.pillText, passwordCriteria.hasTwoNumbers && styles.pillTextMet]}>
+                        {passwordCriteria.hasTwoNumbers ? '✓' : '○'} 2 Numbers (0-9)
+                      </Text>
+                    </View>
+                    {confirmPassword ? (
+                      <View style={[styles.pillItem, (newPassword && newPassword === confirmPassword) ? styles.pillItemMet : styles.pillItemError]}>
+                        <Text style={[styles.pillText, (newPassword && newPassword === confirmPassword) ? styles.pillTextMet : styles.pillTextError]}>
+                          {(newPassword && newPassword === confirmPassword) ? '✓' : '✗'} Passwords Match
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
                 </View>
 
                 <TouchableOpacity
@@ -922,21 +994,79 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 10,
-    marginTop: 4,
+    marginTop: 8,
     marginBottom: 16
   },
-  criteriaTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#334155',
-    marginBottom: 4
+  criteriaHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6
   },
-  criteriaItem: {
-    fontSize: 11.5,
-    color: '#64748b',
-    lineHeight: 17
+  criteriaTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155'
+  },
+  criteriaBadgeMet: {
+    backgroundColor: '#dcfce7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#86efac'
+  },
+  criteriaBadgeMetText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#15803d'
+  },
+  pillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6
+  },
+  pillItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#cbd5e1'
+  },
+  pillItemMet: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#86efac'
+  },
+  pillItemError: {
+    backgroundColor: '#fef2f2',
+    borderColor: '#fca5a5'
+  },
+  pillText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#64748b'
+  },
+  pillTextMet: {
+    color: '#15803d'
+  },
+  pillTextError: {
+    color: '#dc2626'
+  },
+  inputError: {
+    borderColor: '#ef4444',
+    backgroundColor: '#fff5f5'
+  },
+  fieldErrorText: {
+    color: '#ef4444',
+    fontSize: 11,
+    marginTop: 4,
+    marginBottom: 4,
+    fontWeight: '600'
   },
 
   // Old / Current Password Card

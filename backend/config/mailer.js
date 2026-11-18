@@ -86,6 +86,10 @@ async function getTransporter() {
     console.error('❌ Failed to initialize fallback SMTP:', etherealErr.message);
     return null;
   }
+  });
+  console.log(`📧 Nodemailer SMTP initialized for: ${SMTP_USER} (IPv4 direct TLS)`);
+} else {
+  console.log('ℹ️ Nodematiler: SMTP credentials not set.');
 }
 
 /**
@@ -390,6 +394,9 @@ async function sendAdminApprovalEmail({
  * Standard OTP Email for Player / User Registration
  */
 async function sendOtpEmail({ toEmail, userName, otp }) {
+  if (process.env.NODE_ENV === 'test') {
+    return { success: true, message: `[TEST MODE] OTP dispatched to ${toEmail}`, otp };
+  }
   const subject = 'Cricket Association - Your Verification OTP';
   const textContent = `Hello ${userName || 'User'},\n\nYour One-Time Password (OTP) for verification is: ${otp}\n\nThis OTP is valid for 10 minutes.\n\nCricket Federation of Virudhunagar District`;
   const htmlContent = `
@@ -427,6 +434,9 @@ async function sendOtpEmail({ toEmail, userName, otp }) {
  * Send Registered Team Details Email to Player
  */
 async function sendPlayerTeamEmail({ toEmail, playerName, teamNames }) {
+  if (process.env.NODE_ENV === 'test') {
+    return { success: true, message: `[TEST MODE] Team details dispatched to ${toEmail}` };
+  }
   const teamList = Array.isArray(teamNames) ? teamNames : [teamNames];
   const primaryTeam = teamList[0] || 'Unknown Team';
   const teamListText = teamList.join(', ');

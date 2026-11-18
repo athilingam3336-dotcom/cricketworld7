@@ -205,11 +205,17 @@ const TeamSchema = new mongoose.Schema({
   short_name: { type: String, default: 'VND' },
   city: { type: String, default: 'Virudhunagar' },
   taluk: { type: String, default: 'Virudhunagar' },
+  phone: { type: String, default: '' },
+  home_ground: { type: String, default: '' },
+  certification: { type: String, default: '' },
   coach_name: { type: String, default: '' },
   coach_email: { type: String, default: '' },
-  team_passkey_hash: { type: String, default: null },
   captain: { type: String, default: '' },
   vice_captain: { type: String, default: '' },
+  photo: { type: String, default: null },
+  image_path: { type: String, default: null },
+  logo: { type: String, default: null },
+  team_passkey_hash: { type: String, default: null },
   password_hash: { type: String, default: null },
   status: { type: String, enum: ['ACTIVE', 'APPROVED', 'PENDING', 'INACTIVE'], default: 'ACTIVE' },
   stats: {
@@ -263,6 +269,10 @@ const TeamRegistrationSchema = new mongoose.Schema({
   passkey: { type: String, default: '' },
   city: { type: String, default: 'Virudhunagar' },
   taluk: { type: String, default: 'Virudhunagar' },
+  phone: { type: String, default: '' },
+  photo: { type: String, default: null },
+  image_path: { type: String, default: null },
+  logo: { type: String, default: null },
   status: { 
     type: String, 
     enum: ['PENDING', 'APPROVED', 'REJECTED'], 
@@ -361,6 +371,17 @@ const MatchSchema = new mongoose.Schema({
   umpire_confirmed_at: { type: Date, default: null },
   team_a_playing_xi: [{ type: String }],
   team_b_playing_xi: [{ type: String }],
+  team_a_substitutes: [{ type: String }],
+  team_b_substitutes: [{ type: String }],
+  team_a_lineup: [mongoose.Schema.Types.Mixed],
+  team_b_lineup: [mongoose.Schema.Types.Mixed],
+  team_a_allocation_status: { type: String, enum: ['PENDING', 'SUBMITTED'], default: 'PENDING' },
+  team_b_allocation_status: { type: String, enum: ['PENDING', 'SUBMITTED'], default: 'PENDING' },
+  team_a_allocation_submitted_at: { type: Date, default: null },
+  team_b_allocation_submitted_at: { type: Date, default: null },
+  schedule_confirmation_status: { type: String, enum: ['PENDING', 'CONFIRMED'], default: 'PENDING' },
+  schedule_confirmed_at: { type: Date, default: null },
+  schedule_confirmed_by: { type: String, default: null },
   revised_overs: { type: Number, default: null },
   revised_target: { type: Number, default: null },
   revised_comments: { type: String, default: '' },
@@ -565,15 +586,18 @@ const TeamPlayerSchema = new mongoose.Schema({
   created_at: { type: Date, default: Date.now }
 }, { timestamps: { createdAt: 'created_at' } });
 
-// 12. Notifications Schema
+// 12. Notifications Schema (Strict Match Schedule Target Delivery)
 const NotificationSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true, index: true },
-  type: { type: String, default: 'GENERAL' },
+  type: { type: String, default: 'MATCH_SCHEDULED' },
   title: { type: String, required: true },
   message: { type: String, required: true },
   reference_id: { type: String, default: null },
-  recipient_role: { type: String, default: 'ALL' },
-  recipient_id: { type: String, default: null },
+  recipient_role: { type: String, enum: ['TEAM', 'PLAYER', 'ADMIN'], default: 'TEAM' },
+  recipient_id: { type: String, default: null, index: true },
+  recipient_email: { type: String, default: null, index: true },
+  team_id: { type: String, default: null, index: true },
+  team_name: { type: String, default: null },
   link: { type: String, default: '' },
   status: { type: String, enum: ['UNREAD', 'READ'], default: 'UNREAD' },
   created_at: { type: Date, default: Date.now }
@@ -682,9 +706,6 @@ const CricketLawSchema = new mongoose.Schema({
   last_verified_at: { type: Date, default: Date.now },
   display_order: { type: Number, default: 0 }
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
-
-CricketLawSchema.index({ law_number: 1 });
-CricketLawSchema.index({ category: 1 });
 
 const CricketLaw = mongoose.models.CricketLaw || mongoose.model('CricketLaw', CricketLawSchema);
 
@@ -1382,6 +1403,7 @@ async function seedDefaultData() {
           match_type: 'T20',
           overs_per_side: 20,
           status: 'SCHEDULED',
+          schedule_confirmation_status: 'CONFIRMED',
           assigned_scorer_id: 'SCR-101',
           umpire1_id: 'UMP-101',
           umpire2_id: 'UMP-102',
@@ -1400,6 +1422,7 @@ async function seedDefaultData() {
           match_type: 'T20',
           overs_per_side: 20,
           status: 'LIVE',
+          schedule_confirmation_status: 'CONFIRMED',
           toss_winner_id: 'TM-01',
           toss_decision: 'BAT',
           current_innings_number: 1,
@@ -1421,10 +1444,33 @@ async function seedDefaultData() {
           match_type: 'T20',
           overs_per_side: 20,
           status: 'COMPLETED',
+          schedule_confirmation_status: 'CONFIRMED',
           toss_winner_id: 'TM-01',
           toss_decision: 'BAT',
           result_summary: 'Virudhunagar Strikers won by 7 wickets',
           player_of_match: 'Dinesh Karthik',
+          assigned_scorer_id: 'SCR-101',
+          umpire1_id: 'UMP-101',
+          umpire2_id: 'UMP-102',
+          umpire1_name: 'Thiru. K. Sundaram',
+          umpire2_name: 'Thiru. M. Ramanathan'
+        },
+        {
+          id: 'M005',
+          tournament_id: 'T-2026-VPL',
+          tournament_name: 'Virudhunagar Premier League 2026',
+          team_a_id: 'TM-01',
+          team_b_id: 'TM-03',
+          venue: 'Kamarajar District Stadium',
+          match_date: '2026-10-06',
+          match_time: '02:30 PM',
+          match_type: 'T20',
+          overs_per_side: 20,
+          status: 'LIVE',
+          schedule_confirmation_status: 'CONFIRMED',
+          toss_winner_id: 'TM-03',
+          toss_decision: 'BAT',
+          current_innings_number: 1,
           assigned_scorer_id: 'SCR-101',
           umpire1_id: 'UMP-101',
           umpire2_id: 'UMP-102',
@@ -1648,20 +1694,7 @@ async function seedDefaultData() {
       ]);
     }
 
-    // Seed Notifications
-    const notifCount = await Notification.countDocuments();
-    if (notifCount === 0) {
-      await Notification.insertMany([
-        {
-          id: 'NOTIF-01',
-          type: 'TEAM_REGISTRATION',
-          title: 'New Team Registration: Sattur Super Kings',
-          message: 'Coach R. Kannan submitted team Sattur Super Kings. Awaiting administrative review.',
-          reference_id: 'TEAM-VRD-102',
-          status: 'UNREAD'
-        }
-      ]);
-    }
+    // Seed Notifications permanently disabled: only actual match scheduling creates notifications
 
     // Seed Venues
     const venueCount = await Venue.countDocuments();

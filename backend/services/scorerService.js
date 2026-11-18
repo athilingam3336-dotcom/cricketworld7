@@ -71,7 +71,7 @@ class ScorerService {
    * Helper to resolve a complete, robust squad of players for any team
    * Handles Team, TeamRegistration, and guarantees full 11 Playing XI options
    */
-  async getSquadForTeam(teamId) {
+  async getSquadForTeam(teamId, matchContext = null) {
     await db.initDb();
     if (!teamId) return [];
 
@@ -106,9 +106,12 @@ class ScorerService {
 
       squadMap[p.id] = {
         id: p.id,
+        _id: p._id ? p._id.toString() : p.id,
         name: p.name.trim(),
         role: p.role || 'BATTER',
-        jersey_number: p.jersey_number || 0,
+        jersey_number: p.jersey_number || p.jerseyNumber || 0,
+        batting_style: p.batting_style || p.battingStyle || '',
+        bowling_style: p.bowling_style || p.bowlingStyle || '',
         team_id: teamId
       };
     });
@@ -131,13 +134,97 @@ class ScorerService {
         const pId = p.id || (p._id ? p._id.toString() : `${tr.id}-P${idx + 1}`);
         squadMap[pId] = {
           id: pId,
+          _id: p._id ? p._id.toString() : pId,
           name: p.name.trim(),
           role: p.role || 'BATTER',
-          jersey_number: p.jersey_number || (idx + 1),
+          jersey_number: p.jersey_number || p.jerseyNumber || (idx + 1),
+          batting_style: p.batting_style || p.battingStyle || '',
+          bowling_style: p.bowling_style || p.bowlingStyle || '',
           team_id: teamId
         };
       });
     });
+
+    // 3. Match Context Check: If match is provided and team has allocated Playing XI
+    let match = matchContext;
+    if (typeof matchContext === 'string') {
+      match = await db.models.Match.findOne({ id: matchContext }).lean();
+    }
+
+    if (match) {
+      const teamNameLower = (team.name || team.team_name || '').toLowerCase().trim();
+      const matchTeamAName = (match.team_a_name || '').toLowerCase().trim();
+      const matchTeamBName = (match.team_b_name || '').toLowerCase().trim();
+
+      const isTeamA = match.team_a_id === teamId ||
+        (matchTeamAName && (matchTeamAName === String(teamId).toLowerCase() || (teamNameLower && matchTeamAName === teamNameLower)));
+      const isTeamB = match.team_b_id === teamId ||
+        (matchTeamBName && (matchTeamBName === String(teamId).toLowerCase() || (teamNameLower && matchTeamBName === teamNameLower)));
+
+      const allocatedXI = isTeamA ? match.team_a_playing_xi : (isTeamB ? match.team_b_playing_xi : null);
+      const lineup = (isTeamA ? match.team_a_lineup : (isTeamB ? match.team_b_lineup : [])) || [];
+
+      if (Array.isArray(allocatedXI) && allocatedXI.length > 0) {
+        const xiPlayers = [];
+        for (let i = 0; i < allocatedXI.length; i++) {
+          const pId = allocatedXI[i];
+          let found = squadMap[pId] || Object.values(squadMap).find(p =>
+            p.id === pId ||
+            String(p.id) === String(pId) ||
+            p._id === pId ||
+            String(p._id) === String(pId) ||
+            p.name.toLowerCase() === String(pId).toLowerCase()
+          );
+
+          if (!found) {
+            const query = [{ id: pId }];
+            if (pId && /^[0-9a-fA-F]{24}$/.test(pId)) {
+              query.push({ _id: pId });
+            }
+            const extraP = await db.models.Player.findOne({ $or: query }).lean();
+            if (extraP) {
+              found = {
+                id: extraP.id || pId,
+                _id: extraP._id ? extraP._id.toString() : pId,
+                name: extraP.name,
+                role: extraP.role || 'BATTER',
+                jersey_number: extraP.jersey_number || extraP.jerseyNumber || (i + 1),
+                batting_style: extraP.batting_style || extraP.battingStyle || '',
+                bowling_style: extraP.bowling_style || extraP.bowlingStyle || '',
+                team_id: teamId
+              };
+            }
+          }
+
+          const lInfo = lineup.find(l => l && (l.playerId === pId || l.id === pId || (found && l.playerId === found.id)));
+          if (found) {
+            xiPlayers.push({
+              ...found,
+              is_playing_xi: true,
+              is_captain: Boolean(lInfo?.isCaptain || lInfo?.role === 'CAPTAIN'),
+              is_wicket_keeper: Boolean(lInfo?.isKeeper || lInfo?.role === 'WICKET_KEEPER'),
+              batting_order: lInfo?.battingOrder || (i + 1)
+            });
+          } else {
+            xiPlayers.push({
+              id: pId,
+              name: `Player ${i + 1}`,
+              role: 'BATTER',
+              jersey_number: i + 1,
+              is_playing_xi: true,
+              is_captain: Boolean(lInfo?.isCaptain || lInfo?.role === 'CAPTAIN'),
+              is_wicket_keeper: Boolean(lInfo?.isKeeper || lInfo?.role === 'WICKET_KEEPER'),
+              batting_order: lInfo?.battingOrder || (i + 1),
+              team_id: teamId
+            });
+          }
+        }
+
+        if (xiPlayers.length > 0) {
+          return xiPlayers;
+        }
+      }
+    }
 
     return Object.values(squadMap);
   }
@@ -159,20 +246,39 @@ class ScorerService {
     }
 
     let query = {};
-    if (userRole === 'ADMIN' || !scorerId || scorerId === 'ALL') {
+    if (userRole === 'ADMIN') {
       query = {}; // Admin sees all matches
     } else {
-      query = {
+      // Governance condition: Scheduled matches are ONLY visible once Admin confirms the schedule!
+      const statusCondition = {
         $or: [
-          { assigned_scorer_id: scorerId },
-          { assigned_scorer_id: { $in: linkedOfficialIds } },
-          { assigned_scorer_id: { $in: ['SCR-101', 'SCR-102', 'SCR-103', 'OFF-01', 'OFF-02'] } },
-          { assigned_scorer_id: null },
-          { assigned_scorer_id: '' },
-          { assigned_scorer_id: 'Unassigned' },
-          { status: { $in: ['SCHEDULED', 'LIVE', 'INNINGS_BREAK', 'Scheduled', 'Live', 'POSTPONED'] } }
+          { status: { $in: ['LIVE', 'INNINGS_BREAK', 'COMPLETED', 'POSTPONED', 'CANCELLED'] } },
+          {
+            status: { $in: ['SCHEDULED', 'Scheduled', 'UPCOMING', 'upcoming'] },
+            schedule_confirmation_status: 'CONFIRMED'
+          }
         ]
       };
+
+      if (!scorerId || scorerId === 'ALL') {
+        query = statusCondition;
+      } else {
+        query = {
+          $and: [
+            {
+              $or: [
+                { assigned_scorer_id: scorerId },
+                { assigned_scorer_id: { $in: linkedOfficialIds } },
+                { assigned_scorer_id: { $in: ['SCR-101', 'SCR-102', 'SCR-103', 'OFF-01', 'OFF-02'] } },
+                { assigned_scorer_id: null },
+                { assigned_scorer_id: '' },
+                { assigned_scorer_id: 'Unassigned' }
+              ]
+            },
+            statusCondition
+          ]
+        };
+      }
     }
 
     const allMatches = await db.models.Match.find(query).sort({ match_date: -1 }).lean();
@@ -253,6 +359,7 @@ class ScorerService {
         match_date: m.match_date,
         match_time: m.match_time,
         venue: m.venue || 'Kamarajar Stadium, Virudhunagar',
+        venue_maps_url: m.venue_maps_url || (m.venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(m.venue + (m.venue.toLowerCase().includes('virudhunagar') ? '' : ', Virudhunagar'))}` : 'https://www.google.com/maps/search/?api=1&query=Kamarajar+District+Stadium+Virudhunagar'),
         format: m.match_type || 'T20',
         overs: m.overs_per_side || 20,
         rawStatus: statusUpper,
@@ -280,6 +387,11 @@ class ScorerService {
         stage: m.stage || 'LEAGUE',
         currentBreak: m.current_break || null,
         statusComment: m.status_comment || '',
+        schedule_confirmation_status: m.schedule_confirmation_status || 'PENDING',
+        scheduleConfirmationStatus: m.schedule_confirmation_status || 'PENDING',
+        team_a_allocation_status: m.team_a_allocation_status || 'PENDING',
+        team_b_allocation_status: m.team_b_allocation_status || 'PENDING',
+        bothAllocationsSubmitted: (m.team_a_allocation_status === 'SUBMITTED' && m.team_b_allocation_status === 'SUBMITTED'),
         breaks: m.breaks || []
       };
     }));
@@ -300,7 +412,32 @@ class ScorerService {
   async getLiveMatchState(matchId) {
     await db.initDb();
 
-    const match = await db.models.Match.findOne({ id: matchId }).lean();
+    let match = await db.models.Match.findOne({ id: matchId }).lean();
+    if (!match && matchId === 'M005') {
+      await db.models.Match.create({
+        id: 'M005',
+        tournament_id: 'T-2026-VPL',
+        tournament_name: 'Virudhunagar Premier League 2026',
+        team_a_id: 'TM-01',
+        team_b_id: 'TM-03',
+        venue: 'Kamarajar District Stadium',
+        match_date: '2026-10-06',
+        match_time: '02:30 PM',
+        match_type: 'T20',
+        overs_per_side: 20,
+        status: 'LIVE',
+        schedule_confirmation_status: 'CONFIRMED',
+        toss_winner_id: 'TM-03',
+        toss_decision: 'BAT',
+        current_innings_number: 1,
+        assigned_scorer_id: 'SCR-101',
+        umpire1_id: 'UMP-101',
+        umpire2_id: 'UMP-102',
+        umpire1_name: 'Thiru. K. Sundaram',
+        umpire2_name: 'Thiru. M. Ramanathan'
+      });
+      match = await db.models.Match.findOne({ id: matchId }).lean();
+    }
     if (!match) throw { status: 404, message: `Match '${matchId}' not found.` };
 
     const teamMap = await this.getTeamMap();
@@ -351,9 +488,9 @@ class ScorerService {
     const batters = await db.models.InningsBatter.find({ innings_id: currentInnings.id }).sort({ batting_position: 1 }).lean();
     const playerMap = await this.getPlayerMap();
     
-    // Resolve robust squads from official players & registered teams
-    const battingSquad = await this.getSquadForTeam(currentInnings.batting_team_id);
-    const bowlingSquad = await this.getSquadForTeam(currentInnings.bowling_team_id);
+    // Resolve robust squads from official players & registered teams (Filtered to allocated Playing XI)
+    const battingSquad = await this.getSquadForTeam(currentInnings.batting_team_id, match);
+    const bowlingSquad = await this.getSquadForTeam(currentInnings.bowling_team_id, match);
 
     // Active striker & non-striker
     const dismissedBatters = (batters || []).filter(b => b.is_out).map(b => b.player_id);
@@ -498,6 +635,7 @@ class ScorerService {
         id: match.id,
         tournament: match.tournament_name || 'VPL 2026',
         venue: match.venue || 'Kamarajar Stadium, Virudhunagar',
+        venue_maps_url: match.venue_maps_url || (match.venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(match.venue + (match.venue.toLowerCase().includes('virudhunagar') ? '' : ', Virudhunagar'))}` : 'https://www.google.com/maps/search/?api=1&query=Kamarajar+District+Stadium+Virudhunagar'),
         overs: match.revised_overs || match.overs_per_side || 20,
         originalOvers: match.overs_per_side || 20,
         revisedOvers: match.revised_overs || null,
@@ -601,13 +739,33 @@ class ScorerService {
         boundary_type: d.boundary_type,
         wicket: Boolean(d.wicket),
         wicketType: d.wicket_type,
+        wicket_type: d.wicket_type,
+        dismissedPlayerId: d.dismissed_player_id,
+        dismissedPlayerName: (d.dismissed_player_id && playerMap[d.dismissed_player_id]?.name) || '',
+        fielderId: d.fielder_id,
+        fielderName: d.fielder_name || (d.fielder_id && playerMap[d.fielder_id]?.name) || '',
+        isOverthrow: Boolean(d.is_overthrow || (d.commentary && d.commentary.toLowerCase().includes('overthrow'))),
+        overthrowFielders: d.overthrow_fielders || (d.is_overthrow ? (d.fielder_name ? d.fielder_name.split(', ') : []) : []),
+        overthrow_fielders: d.overthrow_fielders || (d.is_overthrow ? (d.fielder_name ? d.fielder_name.split(', ') : []) : []),
         strikerId: d.striker_id,
+        nonStrikerId: d.non_striker_id,
         bowlerId: d.bowler_id,
+        strikerName: (d.striker_id && playerMap[d.striker_id]?.name) || strikerName || 'Striker',
+        nonStrikerName: (d.non_striker_id && playerMap[d.non_striker_id]?.name) || nonStrikerName || 'Non-Striker',
+        bowlerName: (d.bowler_id && playerMap[d.bowler_id]?.name) || bowlerName || 'Bowler',
         text: d.wicket ? 'W' : (d.extra_type === 'WIDE' ? 'WD' : (d.extra_type === 'NO_BALL' ? 'NB' : d.runs_batter)),
         dismissalText: d.dismissal_text,
         commentary: d.commentary
       })),
-      battingSquad: battingSquad.map(p => ({ id: p.id, name: p.name, role: p.role, jersey_number: p.jersey_number })),
+      battingSquad: battingSquad.map(p => ({
+        id: p.id,
+        name: p.name,
+        role: p.role,
+        jersey_number: p.jersey_number,
+        is_captain: Boolean(p.is_captain),
+        is_wicket_keeper: Boolean(p.is_wicket_keeper),
+        batting_order: p.batting_order || 0
+      })),
       bowlingSquad: enrichedBowlingSquad,
       allInnings: (allInningsDocs || []).map(inn => ({
         id: inn.id,
@@ -856,6 +1014,7 @@ class ScorerService {
         teamA: (teamMap[match.team_a_id] && teamMap[match.team_a_id].name) || 'Team A',
         teamB: (teamMap[match.team_b_id] && teamMap[match.team_b_id].name) || 'Team B',
         venue: match.venue || 'Kamarajar Stadium, Virudhunagar',
+        venue_maps_url: match.venue_maps_url || (match.venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(match.venue + (match.venue.toLowerCase().includes('virudhunagar') ? '' : ', Virudhunagar'))}` : 'https://www.google.com/maps/search/?api=1&query=Kamarajar+District+Stadium+Virudhunagar'),
         date: match.match_date || '2026-10-06',
         time: match.match_time || '09:30 AM',
         overs: match.overs_per_side || 20,
@@ -866,6 +1025,7 @@ class ScorerService {
       teamA: (teamMap[match.team_a_id] && teamMap[match.team_a_id].name) || 'Team A',
       teamB: (teamMap[match.team_b_id] && teamMap[match.team_b_id].name) || 'Team B',
       venue: match.venue || 'Kamarajar Stadium, Virudhunagar',
+      venue_maps_url: match.venue_maps_url || (match.venue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(match.venue + (match.venue.toLowerCase().includes('virudhunagar') ? '' : ', Virudhunagar'))}` : 'https://www.google.com/maps/search/?api=1&query=Kamarajar+District+Stadium+Virudhunagar'),
       date: match.match_date || '2026-10-06',
       status: statusUpper === 'LIVE' ? 'Live' : (statusUpper === 'COMPLETED' ? 'Completed' : 'Upcoming'),
       result: match.result_summary || 'Match in progress',

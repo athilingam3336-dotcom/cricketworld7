@@ -19,6 +19,7 @@ import {
 import { useAppNavigation } from '../navigation/AppNavigator';
 import { ScorerApi, getCurrentUser, setCurrentUser, setAuthToken, logoutAndClearAllSessions } from '../services/api';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import GlobalSearchModal from '../components/common/GlobalSearchModal';
 
 const IMG_LOGO = require('../../assets/logo_transparent.png');
 
@@ -32,6 +33,8 @@ export interface HeaderProps {
   isMobile?: boolean;
   mobileNavOpen?: boolean;
   setMobileNavOpen?: (open: boolean) => void;
+  activeNav?: string;
+  onSelectNav?: (navId: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -44,8 +47,23 @@ export const Header: React.FC<HeaderProps> = ({
   isMobile: propIsMobile,
   mobileNavOpen: propMobileNavOpen,
   setMobileNavOpen: propSetMobileNavOpen,
+  activeNav: propActiveNav,
+  onSelectNav: propOnSelectNav,
 }) => {
   const { navigate } = useAppNavigation();
+
+  // Active Nav State (Underline style)
+  const [internalActiveNav, setInternalActiveNav] = useState<string>('home');
+  const activeNav = propActiveNav !== undefined ? propActiveNav : internalActiveNav;
+
+  // Search Modal state
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+
+  const handleNavClick = (navId: string, action: () => void) => {
+    setInternalActiveNav(navId);
+    if (propOnSelectNav) propOnSelectNav(navId);
+    action();
+  };
 
   // Screen Width for responsive layout if not provided via props
   const [windowWidth, setWindowWidth] = useState(Dimensions.get('window').width);
@@ -54,7 +72,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   useEffect(() => {
     if (propIsMobile !== undefined) return;
-    const sub = Dimensions.addEventListener('change', ({ window }) => {
+    const sub = Dimensions.addEventListener('change', ({ window }: { window: any }) => {
       setWindowWidth(window.width);
     });
     return () => sub?.remove();
@@ -79,6 +97,27 @@ export const Header: React.FC<HeaderProps> = ({
   const handleScrollToSection = (secName: string) => {
     if (propScrollToSection) {
       propScrollToSection(secName);
+    } else {
+      navigate('Home');
+      if (Platform.OS === 'web' && typeof document !== 'undefined') {
+        setTimeout(() => {
+          const idMap: Record<string, string> = {
+            matchCentre: 'cfvd-section-match-centre',
+            pointsTable: 'cfvd-section-points-table',
+            standings: 'cfvd-section-points-table',
+            tournaments: 'cfvd-section-tournaments',
+            stats: 'cfvd-section-stats',
+            playerRatings: 'cfvd-section-stats',
+            players: 'cfvd-section-players',
+            about: 'cfvd-section-about',
+            grounds: 'cfvd-section-grounds',
+            news: 'cfvd-section-news',
+          };
+          const targetId = idMap[secName] || secName;
+          const el = document.getElementById(targetId);
+          el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 350);
+      }
     }
     setIsNavOpen(false);
   };
@@ -151,60 +190,149 @@ export const Header: React.FC<HeaderProps> = ({
           </View>
         </TouchableOpacity>
 
-        {/* Desktop Navigation Links */}
+        {/* Desktop Navigation Links with Clean Underline Indicator */}
         {!isMobile && (
           <View style={styles.desktopNav}>
-            {/* Active Home Pill */}
+            {/* Home Link */}
             <TouchableOpacity
-              style={styles.navHomePill}
-              onPress={handleScrollToTop}
+              style={[
+                styles.navUnderlineItem,
+                activeNav === 'home' && styles.navUnderlineItemActive,
+              ]}
+              onPress={() => handleNavClick('home', handleScrollToTop)}
               activeOpacity={0.8}
             >
-              <Ionicons name="home" size={14} color="#ffffff" style={{ marginRight: 6 }} />
-              <Text style={styles.navHomePillText}>Home</Text>
+              <Ionicons
+                name="home"
+                size={15}
+                color={activeNav === 'home' ? '#f5c43d' : '#cbd5e1'}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.navUnderlineText,
+                  activeNav === 'home' && styles.navUnderlineTextActive,
+                ]}
+              >
+                Home
+              </Text>
             </TouchableOpacity>
 
+            {/* Match Centre Link */}
             <TouchableOpacity
-              style={styles.navLinkDropdown}
-              onPress={() => handleScrollToSection('matchCentre')}
-              activeOpacity={0.7}
+              style={[
+                styles.navUnderlineItem,
+                activeNav === 'matchCentre' && styles.navUnderlineItemActive,
+              ]}
+              onPress={() => handleNavClick('matchCentre', () => handleScrollToSection('matchCentre'))}
+              activeOpacity={0.8}
             >
-              <MaterialCommunityIcons name="cricket" size={16} color="#f5c43d" style={{ marginRight: 6 }} />
-              <Text style={styles.navDropdownText}>Match Centre</Text>
-              {/* <Ionicons name="chevron-down" size={12} color="#c0d1eb" style={{ marginLeft: 4 }} /> */}
+              <MaterialCommunityIcons
+                name="cricket"
+                size={16}
+                color={activeNav === 'matchCentre' ? '#f5c43d' : '#cbd5e1'}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.navUnderlineText,
+                  activeNav === 'matchCentre' && styles.navUnderlineTextActive,
+                ]}
+              >
+                Match Centre
+              </Text>
             </TouchableOpacity>
 
+            {/* Standings Link */}
             <TouchableOpacity
-              style={styles.navLinkDropdown}
-              onPress={() => handleScrollToSection('pointsTable')}
-              activeOpacity={0.7}
+              style={[
+                styles.navUnderlineItem,
+                activeNav === 'pointsTable' && styles.navUnderlineItemActive,
+              ]}
+              onPress={() => handleNavClick('pointsTable', () => handleScrollToSection('pointsTable'))}
+              activeOpacity={0.8}
             >
-              <Ionicons name="trophy-outline" size={15} color="#f5c43d" style={{ marginRight: 6 }} />
-              <Text style={styles.navDropdownText}>Standings</Text>
+              <Ionicons
+                name="trophy-outline"
+                size={15}
+                color={activeNav === 'pointsTable' ? '#f5c43d' : '#cbd5e1'}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.navUnderlineText,
+                  activeNav === 'pointsTable' && styles.navUnderlineTextActive,
+                ]}
+              >
+                Standings
+              </Text>
             </TouchableOpacity>
 
+            {/* Player Ratings Link */}
             <TouchableOpacity
-              style={styles.navLinkDropdown}
-              onPress={() => handleScrollToSection('stats')}
-              activeOpacity={0.7}
+              style={[
+                styles.navUnderlineItem,
+                activeNav === 'stats' && styles.navUnderlineItemActive,
+              ]}
+              onPress={() => handleNavClick('stats', () => handleScrollToSection('stats'))}
+              activeOpacity={0.8}
             >
-              <Ionicons name="star-outline" size={15} color="#f5c43d" style={{ marginRight: 6 }} />
-              <Text style={styles.navDropdownText}>Player Ratings</Text>
+              <Ionicons
+                name="star-outline"
+                size={15}
+                color={activeNav === 'stats' ? '#f5c43d' : '#cbd5e1'}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.navUnderlineText,
+                  activeNav === 'stats' && styles.navUnderlineTextActive,
+                ]}
+              >
+                Player Ratings
+              </Text>
             </TouchableOpacity>
 
+            {/* Register Link */}
             <TouchableOpacity
-              style={styles.navLinkDropdown}
-              onPress={() => navigate('Registration')}
-              activeOpacity={0.7}
+              style={[
+                styles.navUnderlineItem,
+                activeNav === 'register' && styles.navUnderlineItemActive,
+              ]}
+              onPress={() => handleNavClick('register', () => navigate('Registration'))}
+              activeOpacity={0.8}
             >
-              <Ionicons name="document-text-outline" size={15} color="#f5c43d" style={{ marginRight: 6 }} />
-              <Text style={styles.navDropdownText}>Register</Text>
+              <Ionicons
+                name="document-text-outline"
+                size={15}
+                color={activeNav === 'register' ? '#f5c43d' : '#cbd5e1'}
+                style={{ marginRight: 6 }}
+              />
+              <Text
+                style={[
+                  styles.navUnderlineText,
+                  activeNav === 'register' && styles.navUnderlineTextActive,
+                ]}
+              >
+                Register
+              </Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* Header Action Buttons */}
         <View style={[styles.headerActions, isMobile && styles.headerActionsMobile]}>
+          {/* Global Search Icon Button */}
+          <TouchableOpacity
+            style={[styles.headerSearchBtn, isMobile && styles.headerSearchBtnMobile]}
+            onPress={() => setSearchModalOpen(true)}
+            activeOpacity={0.8}
+            accessibilityLabel="Search teams and players"
+          >
+            <Ionicons name="search" size={isMobile ? 18 : 15} color="#f5c43d" />
+            {!isMobile && <Text style={styles.headerSearchBtnText}>Search</Text>}
+          </TouchableOpacity>
+
           {user ? (
             <>
               {/* On mobile show only icon, on desktop show full pill */}
@@ -315,6 +443,20 @@ export const Header: React.FC<HeaderProps> = ({
               </Text>
             </TouchableOpacity>
           )}
+          {/* Search Shortcut in Mobile Drawer */}
+          <TouchableOpacity
+            style={[styles.mobileNavItem, { backgroundColor: 'rgba(245, 196, 61, 0.1)', borderRadius: 6, paddingHorizontal: 10, marginBottom: 6 }]}
+            onPress={() => {
+              setIsNavOpen(false);
+              setSearchModalOpen(true);
+            }}
+          >
+            <Ionicons name="search" size={18} color="#f5c43d" style={{ marginRight: 10 }} />
+            <Text style={[styles.mobileNavText, { color: '#f5c43d', fontWeight: '800' }]}>
+              Search Teams & Players
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.mobileNavItem}
             onPress={handleScrollToTop}
@@ -362,6 +504,18 @@ export const Header: React.FC<HeaderProps> = ({
           </TouchableOpacity>
         </View>
       )}
+
+      {/* Global Search Modal for Teams & Players */}
+      <GlobalSearchModal
+        visible={searchModalOpen}
+        onClose={() => setSearchModalOpen(false)}
+        onSelectTeam={(team) => {
+          navigate('TeamDetail', { teamId: team.id, teamName: team.name });
+        }}
+        onSelectPlayer={(player) => {
+          navigate('PlayerDetail', { playerId: player.id, playerName: player.name });
+        }}
+      />
     </View>
   );
 };
@@ -451,8 +605,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     flex: 1,
-    gap: 12,
-    marginHorizontal: 16
+    gap: 8,
+    marginHorizontal: 16,
+    height: '100%',
+  },
+  navUnderlineItem: {
+    height: 48,
+    paddingHorizontal: 12,
+    marginHorizontal: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 3,
+    borderBottomColor: 'transparent',
+  },
+  navUnderlineItemActive: {
+    borderBottomColor: '#f5c43d', // Underline style for active nav item
+  },
+  navUnderlineText: {
+    color: '#cbd5e1',
+    fontSize: 13.5,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  navUnderlineTextActive: {
+    color: '#ffffff',
+    fontWeight: '800',
   },
   navHomePill: {
     backgroundColor: 'rgba(255, 255, 255, 0.12)',
@@ -511,6 +689,29 @@ const styles = StyleSheet.create({
   },
   headerActionsMobile: {
     gap: 6,
+  },
+  headerSearchBtn: {
+    backgroundColor: 'rgba(245, 196, 61, 0.12)',
+    borderColor: 'rgba(245, 196, 61, 0.35)',
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    height: 36,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  headerSearchBtnMobile: {
+    paddingHorizontal: 8,
+    height: 32,
+    borderRadius: 6,
+    gap: 0,
+  },
+  headerSearchBtnText: {
+    color: '#f5c43d',
+    fontSize: 13,
+    fontWeight: '700',
   },
   headerLoginBtn: {
     backgroundColor: '#f5c43d',

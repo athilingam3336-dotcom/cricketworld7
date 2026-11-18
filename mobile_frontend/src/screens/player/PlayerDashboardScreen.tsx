@@ -13,7 +13,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  StatusBar,
   ActivityIndicator,
   Modal,
   Alert,
@@ -22,6 +21,7 @@ import {
   useWindowDimensions,
   PanResponder
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { PlayerApi, ScorerApi, getCurrentUser, setCurrentUser, setAuthToken, SOCKET_URL } from '../../services/api';
@@ -75,6 +75,13 @@ export default function PlayerDashboardScreen({ onExit, initialParams }: PlayerD
     }
     return 'overview';
   });
+
+  useEffect(() => {
+    const targetTab = (initialParams?.tab || initialParams?.initialTab) as TabType;
+    if (targetTab && targetTab !== activeTab) {
+      setActiveTab(targetTab);
+    }
+  }, [initialParams?.tab, initialParams?.initialTab]);
 
   useEffect(() => {
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -753,7 +760,7 @@ export default function PlayerDashboardScreen({ onExit, initialParams }: PlayerD
 
   return (
     <View style={styles.rootContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#071026" />
+      <StatusBar style="light" />
 
       <View style={styles.layoutRoot}>
         <PlayerSidebar
@@ -761,7 +768,7 @@ export default function PlayerDashboardScreen({ onExit, initialParams }: PlayerD
           onSelectTab={setActiveTab}
           playerName={playerName}
           playerRole={playerRole}
-          playerPhoto={profile?.photo || profile?.image_path || null}
+          playerPhoto={resolvePhotoUrl(profile?.photo || profile?.image_path) || null}
           jerseyNumber={profile?.jerseyNumber ?? ''}
           squadCount={squad.length}
           matchesCount={matches.length}
@@ -830,9 +837,9 @@ export default function PlayerDashboardScreen({ onExit, initialParams }: PlayerD
                     activeOpacity={0.8}
                     accessibilityLabel="Player Profile"
                   >
-                    {profile?.photo || profile?.image_path || profile?.avatar ? (
+                    {resolvePhotoUrl(profile?.photo || profile?.image_path || profile?.avatar) ? (
                       <Image
-                        source={{ uri: profile.photo || profile.image_path || profile.avatar }}
+                        source={{ uri: resolvePhotoUrl(profile.photo || profile.image_path || profile.avatar)! }}
                         style={[styles.headerAvatarCircle, isMobileS && { width: 32, height: 32, borderRadius: 16 }]}
                         resizeMode="cover"
                       />
@@ -1428,6 +1435,33 @@ export default function PlayerDashboardScreen({ onExit, initialParams }: PlayerD
                                   <Text style={styles.badgeGoldText}>Your Match</Text>
                                 </View>
                               </View>
+                              {matchItem.isPlayerSelectedInPlayingXI && (
+                                <View style={[styles.badgeBase, { backgroundColor: '#dcfce7', borderColor: '#86efac', borderWidth: 1 }]}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                                    <Ionicons name="shield-checkmark" size={10} color="#166534" />
+                                    <Text style={[styles.badgeBaseText, { color: '#166534', fontWeight: '800' }]}>PLAYING XI</Text>
+                                  </View>
+                                </View>
+                              )}
+                              {matchItem.isPlayerSelectedAsSubstitute && (
+                                <View style={[styles.badgeBase, { backgroundColor: '#dbeafe', borderColor: '#93c5fd', borderWidth: 1 }]}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                                    <Ionicons name="swap-horizontal" size={10} color="#1d4ed8" />
+                                    <Text style={[styles.badgeBaseText, { color: '#1d4ed8', fontWeight: '800' }]}>SUBSTITUTE</Text>
+                                  </View>
+                                </View>
+                              )}
+                              {!isLive && (
+                                (matchItem.schedule_confirmation_status === 'CONFIRMED' || matchItem.is_schedule_confirmed) ? (
+                                  <View style={[styles.badgeBase, { backgroundColor: '#dcfce7', borderColor: '#86efac', borderWidth: 1 }]}>
+                                    <Text style={[styles.badgeBaseText, { color: '#166534', fontWeight: '700' }]}>✓ Schedule Confirmed</Text>
+                                  </View>
+                                ) : (
+                                  <View style={[styles.badgeBase, { backgroundColor: '#fef3c7', borderColor: '#fde68a', borderWidth: 1 }]}>
+                                    <Text style={[styles.badgeBaseText, { color: '#b45309', fontWeight: '700' }]}>⏳ Pending Allocation</Text>
+                                  </View>
+                                )
+                              )}
                             </View>
                             <Text style={styles.itemIdGradeText}>
                               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}><Ionicons name="location-outline" size={11} color="#94a3b8" /><Text style={styles.itemIdGradeText}>{matchItem.venue || 'Venue TBA'}</Text><Ionicons name="calendar-outline" size={11} color="#94a3b8" /><Text style={styles.itemIdGradeText}>{formattedDate}{matchItem.time ? ` • ${matchItem.time}` : ''} • {matchItem.format || 'T20'}</Text></View>
@@ -1558,9 +1592,9 @@ export default function PlayerDashboardScreen({ onExit, initialParams }: PlayerD
                 {/* Profile Photo & Player Identity Showcase */}
                 <View style={styles.profileAvatarCardRow}>
                   <View style={styles.profileAvatarLargeFrame}>
-                    {profile?.photo || profile?.image_path ? (
+                    {resolvePhotoUrl(profile?.photo || profile?.image_path) ? (
                       <Image
-                        source={{ uri: profile.photo || profile.image_path }}
+                        source={{ uri: resolvePhotoUrl(profile.photo || profile.image_path)! }}
                         style={styles.profileAvatarLargeImg}
                         resizeMode="cover"
                       />
@@ -1891,10 +1925,33 @@ export default function PlayerDashboardScreen({ onExit, initialParams }: PlayerD
                           <Text style={styles.matchCardTournament}>{m.tournament || 'Tournament Fixture'}</Text>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}><Ionicons name="location-outline" size={11} color="#94a3b8" /><Text style={styles.matchCardLocation}>{m.venue || 'Venue TBA'}</Text><Ionicons name="calendar-outline" size={11} color="#94a3b8" /><Text style={styles.matchCardLocation}>{m.date || 'TBA'}{m.time ? ` • ${m.time}` : ''}</Text></View>
                         </View>
-                        <View style={[styles.badgeBase, isLive ? styles.badgeLive : isCompleted ? styles.badgeCompleted : styles.badgeScheduled]}>
-                          <Text style={[styles.badgeBaseText, isLive ? styles.badgeLiveText : isCompleted ? styles.badgeCompletedText : styles.badgeScheduledText]}>
-                            {statusUpper}
-                          </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                          {m.isPlayerSelectedInPlayingXI && (
+                            <View style={[styles.badgeBase, { backgroundColor: '#dcfce7', borderColor: '#86efac', borderWidth: 1 }]}>
+                              <Text style={[styles.badgeBaseText, { color: '#166534', fontWeight: '800' }]}>⭐ Playing XI</Text>
+                            </View>
+                          )}
+                          {m.isPlayerSelectedAsSubstitute && (
+                            <View style={[styles.badgeBase, { backgroundColor: '#dbeafe', borderColor: '#93c5fd', borderWidth: 1 }]}>
+                              <Text style={[styles.badgeBaseText, { color: '#1d4ed8', fontWeight: '800' }]}>🔄 Substitute</Text>
+                            </View>
+                          )}
+                          {!isLive && !isCompleted && (
+                            (m.schedule_confirmation_status === 'CONFIRMED' || m.is_schedule_confirmed) ? (
+                              <View style={[styles.badgeBase, { backgroundColor: '#dcfce7', borderColor: '#86efac', borderWidth: 1 }]}>
+                                <Text style={[styles.badgeBaseText, { color: '#166534', fontWeight: '700' }]}>✓ Confirmed</Text>
+                              </View>
+                            ) : (
+                              <View style={[styles.badgeBase, { backgroundColor: '#fef3c7', borderColor: '#fde68a', borderWidth: 1 }]}>
+                                <Text style={[styles.badgeBaseText, { color: '#b45309', fontWeight: '700' }]}>⏳ Allocation Pending</Text>
+                              </View>
+                            )
+                          )}
+                          <View style={[styles.badgeBase, isLive ? styles.badgeLive : isCompleted ? styles.badgeCompleted : styles.badgeScheduled]}>
+                            <Text style={[styles.badgeBaseText, isLive ? styles.badgeLiveText : isCompleted ? styles.badgeCompletedText : styles.badgeScheduledText]}>
+                              {statusUpper}
+                            </Text>
+                          </View>
                         </View>
                       </View>
 
