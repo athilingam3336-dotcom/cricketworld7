@@ -402,6 +402,9 @@ class AdminDashboardController {
           jersey: p.jersey_number || '-',
           battingStyle: p.batting_style || 'RIGHT_HAND',
           bowlingStyle: p.bowling_style || 'NONE',
+          photo: p.photo || p.image_path || null,
+          image: p.photo || p.image_path || null,
+          image_path: p.image_path || p.photo || null,
           status: p.status || 'ACTIVE'
         });
       });
@@ -418,6 +421,9 @@ class AdminDashboardController {
           jersey: '-',
           battingStyle: 'RIGHT_HAND',
           bowlingStyle: 'RIGHT_ARM_MEDIUM',
+          photo: tp.photo || tp.image_path || null,
+          image: tp.photo || tp.image_path || null,
+          image_path: tp.image_path || tp.photo || null,
           status: 'ACTIVE'
         });
       });
@@ -517,6 +523,9 @@ class AdminDashboardController {
         city: t.city || 'Virudhunagar',
         coachName: t.coach_name || 'Staff Coach',
         coachEmail: t.coach_email || 'contact@cfvd.org',
+        logo: t.logo || t.photo || t.image_path || null,
+        photo: t.photo || t.logo || t.image_path || null,
+        image_path: t.image_path || t.photo || t.logo || null,
         status: (t.status || 'ACTIVE').toUpperCase(),
         playerCount: playerCounts[t.id] || (playerCounts[t.team_id] || 15)
       }));
@@ -575,6 +584,9 @@ class AdminDashboardController {
           coachName: team.coach_name,
           coachEmail: team.coach_email,
           status: team.status,
+          logo: team.logo || team.photo || team.image_path || null,
+          photo: team.photo || team.logo || team.image_path || null,
+          image_path: team.image_path || team.photo || team.logo || null,
           squad
         }
       });

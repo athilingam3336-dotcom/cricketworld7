@@ -248,31 +248,48 @@ router.get('/profile', requireTeamAuth, async (req, res) => {
     const db = require('../config/db');
     await db.initDb();
     const teamId = req.team?.id || req.user?.teamId || 'TM-01';
-    let team = await db.models.Team.findOne({ id: teamId }).lean();
-    if (!team) {
-      team = await db.models.Team.findOne({
-        $or: [
-          { coach_email: req.user?.email },
-          { name: { $regex: req.team?.name || '', $options: 'i' } }
-        ]
+    let team = await db.models.Team.findOne({
+      $or: [
+        { id: teamId },
+        { team_id: teamId },
+        ...(req.user?.email ? [{ coach_email: req.user.email.toLowerCase() }] : []),
+        ...(req.team?.name ? [{ name: { $regex: req.team.name, $options: 'i' } }] : [])
+      ]
+    }).lean();
+
+    let teamReg = null;
+    const coachEmail = (team?.coach_email || req.team?.coachEmail || req.user?.email || '').toLowerCase().trim();
+    if (coachEmail) {
+      teamReg = await db.models.TeamRegistration.findOne({ coach_email: coachEmail }).lean();
+    }
+    if (!teamReg && (team?.id || teamId)) {
+      teamReg = await db.models.TeamRegistration.findOne({
+        $or: [{ id: team?.id || teamId }, { team_name: team?.name }]
       }).lean();
     }
+
+    const image = team?.photo || team?.logo || team?.image_path || teamReg?.photo || teamReg?.logo || teamReg?.image_path || req.user?.photo || null;
+
     const profile = {
-      id: team?.id || teamId,
-      teamId: team?.id || teamId,
-      name: team?.name || req.team?.name || 'Virudhunagar Spartans',
-      teamName: team?.name || req.team?.name || 'Virudhunagar Spartans',
+      id: team?.id || teamReg?.id || teamId,
+      teamId: team?.id || teamReg?.id || teamId,
+      name: team?.name || teamReg?.team_name || req.team?.name || 'Virudhunagar Spartans',
+      teamName: team?.name || teamReg?.team_name || req.team?.name || 'Virudhunagar Spartans',
       shortName: team?.short_name || 'VND',
-      city: team?.city || 'Virudhunagar',
-      taluk: team?.taluk || 'Virudhunagar',
-      coachName: team?.coach_name || req.user?.name || 'Coach',
-      coachPhone: team?.phone || '+91 94431 23456',
-      coachEmail: team?.coach_email || req.user?.email || '',
-      captain: team?.captain || 'Suresh Kumar',
+      city: team?.city || teamReg?.city || 'Virudhunagar',
+      taluk: team?.taluk || teamReg?.taluk || 'Virudhunagar',
+      coachName: team?.coach_name || teamReg?.coach_name || req.user?.name || 'Coach',
+      coachPhone: team?.phone || teamReg?.phone || req.user?.mobile || '+91 94431 23456',
+      coachEmail: coachEmail,
+      captain: team?.captain || teamReg?.captain || 'Suresh Kumar',
       viceCaptain: team?.vice_captain || 'Vijay Anand',
-      status: team?.status || 'APPROVED',
+      status: team?.status || teamReg?.status || 'APPROVED',
       homeGround: team?.home_ground || 'Kamarajar Stadium Sports Complex, Virudhunagar',
-      certification: 'BCCI / TNCA Level 2 Certified',
+      certification: team?.certification || 'BCCI / TNCA Level 2 Certified',
+      photo: image,
+      logo: image,
+      image_path: image,
+      image: image,
       stats: await calculateTeamStatistics(db, team, teamReg, req.user, req.team)
     };
     res.json({ success: true, profile, team: profile });
@@ -283,28 +300,149 @@ router.get('/profile', requireTeamAuth, async (req, res) => {
 
 /**
  * PUT /api/team/profile
- * Update allowed team profile fields in MongoDB
+ * Update allowed team profile fields including direct photo/logo in MongoDB
  */
 router.put('/profile', requireTeamAuth, async (req, res) => {
   try {
     const db = require('../config/db');
     await db.initDb();
     const teamId = req.team?.id || req.user?.teamId || 'TM-01';
-    const { coachPhone, homeGround, captain, viceCaptain, certification } = req.body;
+    const coachEmail = (req.user?.email || req.team?.coachEmail || '').toLowerCase().trim();
+    const { coachPhone, homeGround, captain, viceCaptain, certification, photo, logo, teamLogo, image_path, image } = req.body;
+
+    const img = photo !== undefined ? photo : (logo !== undefined ? logo : (teamLogo !== undefined ? teamLogo : (image_path !== undefined ? image_path : image)));
 
     const updates = {};
     if (coachPhone !== undefined) updates.phone = coachPhone;
     if (homeGround !== undefined) updates.home_ground = homeGround;
     if (captain !== undefined) updates.captain = captain;
     if (viceCaptain !== undefined) updates.vice_captain = viceCaptain;
+    if (certification !== undefined) updates.certification = certification;
 
-    const updated = await db.models.Team.findOneAndUpdate(
-      { id: teamId },
+    if (img !== undefined) {
+      const cleanImg = img ? String(img).trim() : null;
+      updates.photo = cleanImg;
+      updates.logo = cleanImg;
+      updates.image_path = cleanImg;
+    }
+
+    let updated = await db.models.Team.findOneAndUpdate(
+      {
+        $or: [
+          { id: teamId },
+          { team_id: teamId },
+          ...(coachEmail ? [{ coach_email: coachEmail }] : [])
+        ]
+      },
       { $set: updates },
       { new: true }
     ).lean();
 
-    res.json({ success: true, message: 'Team profile updated successfully.', team: updated });
+    if (!updated && req.team?.name) {
+      updated = await db.models.Team.findOneAndUpdate(
+        { name: { $regex: new RegExp(`^${req.team.name}$`, 'i') } },
+        { $set: updates },
+        { new: true }
+      ).lean();
+    }
+
+    // Also synchronize into TeamRegistration collection
+    const regUpdates = {};
+    if (coachPhone !== undefined) regUpdates.phone = coachPhone;
+    if (captain !== undefined) regUpdates.captain = captain;
+    if (img !== undefined) {
+      regUpdates.photo = updates.photo;
+      regUpdates.logo = updates.logo;
+      regUpdates.image_path = updates.image_path;
+    }
+    if (Object.keys(regUpdates).length > 0) {
+      await db.models.TeamRegistration.updateMany(
+        {
+          $or: [
+            { id: teamId },
+            ...(coachEmail ? [{ coach_email: coachEmail }] : []),
+            ...(req.team?.name ? [{ team_name: { $regex: new RegExp(`^${req.team.name}$`, 'i') } }] : [])
+          ]
+        },
+        { $set: regUpdates }
+      );
+    }
+
+    // Also synchronize into User collection for coach account
+    if (coachEmail && img !== undefined) {
+      await db.models.User.updateMany(
+        { email: coachEmail },
+        { $set: { photo: updates.photo, image_path: updates.image_path, mobile: coachPhone || undefined } }
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'Team profile and logo updated successfully.',
+      team: updated,
+      profile: {
+        ...(updated || {}),
+        photo: updates.photo,
+        logo: updates.logo,
+        image_path: updates.image_path
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/team/upload-photo
+ * Direct upload/update for Team logo / crest photo
+ */
+router.post('/upload-photo', requireTeamAuth, async (req, res) => {
+  try {
+    const db = require('../config/db');
+    await db.initDb();
+    const photo = req.body.photo || req.body.logo || req.body.image || req.body.image_path || req.body.teamLogo;
+    const teamId = req.team?.id || req.user?.teamId || 'TM-01';
+    const coachEmail = (req.user?.email || req.team?.coachEmail || '').toLowerCase().trim();
+    const cleanImg = photo ? String(photo).trim() : null;
+
+    const updates = { photo: cleanImg, logo: cleanImg, image_path: cleanImg };
+
+    const updated = await db.models.Team.findOneAndUpdate(
+      {
+        $or: [
+          { id: teamId },
+          { team_id: teamId },
+          ...(coachEmail ? [{ coach_email: coachEmail }] : [])
+        ]
+      },
+      { $set: updates },
+      { new: true }
+    ).lean();
+
+    await db.models.TeamRegistration.updateMany(
+      {
+        $or: [
+          { id: teamId },
+          ...(coachEmail ? [{ coach_email: coachEmail }] : [])
+        ]
+      },
+      { $set: updates }
+    );
+
+    if (coachEmail) {
+      await db.models.User.updateMany(
+        { email: coachEmail },
+        { $set: { photo: cleanImg, image_path: cleanImg } }
+      );
+    }
+
+    res.json({
+      success: true,
+      message: 'Team photo uploaded successfully!',
+      photo: cleanImg,
+      logo: cleanImg,
+      team: updated
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -350,24 +488,58 @@ router.get('/squad', requireTeamAuth, async (req, res) => {
           batting_style: rp.batting_style || rp.battingStyle || 'Right Hand Bat',
           bowling_style: rp.bowling_style || rp.bowlingStyle || 'Right Arm Medium',
           mobile: rp.mobile || rp.phone || '',
+          photo: rp.photo || rp.image_path || null,
+          image_path: rp.image_path || rp.photo || null,
           status: rp.status || 'ACTIVE',
           stats: rp.stats || { runs: 0, balls: 0, wickets: 0 }
         }));
       }
     }
 
-    const squad = (players || []).map((p, idx) => ({
-      id: p.id || (p._id ? String(p._id) : `PL-${idx + 1}`),
-      name: p.name,
-      email: p.email,
-      role: p.role,
-      jerseyNumber: p.jersey_number || p.jerseyNumber || (idx + 1),
-      battingStyle: p.batting_style || p.battingStyle || 'Right Hand Bat',
-      bowlingStyle: p.bowling_style || p.bowlingStyle || 'Right Arm Medium',
-      mobile: p.mobile || p.phone || '',
-      status: p.status === 'ACTIVE' ? 'Verified' : p.status,
-      stats: p.stats || { runs: 0, balls: 0, wickets: 0 }
-    }));
+    // Pre-fetch player and user photos for any player missing photo
+    const emailsToFetch = (players || [])
+      .map(p => (p.email || '').toLowerCase().trim())
+      .filter(Boolean);
+
+    let photoMap = {};
+    if (emailsToFetch.length > 0) {
+      try {
+        const [directPList, uList] = await Promise.all([
+          db.models.Player.find({ email: { $in: emailsToFetch } }, 'email photo image_path').lean(),
+          db.models.User.find({ email: { $in: emailsToFetch } }, 'email photo image_path player_details').lean()
+        ]);
+        (directPList || []).forEach(dp => {
+          const e = (dp.email || '').toLowerCase();
+          const img = dp.photo || dp.image_path;
+          if (e && img) photoMap[e] = img;
+        });
+        (uList || []).forEach(u => {
+          const e = (u.email || '').toLowerCase();
+          const img = u.photo || u.image_path || u.player_details?.photo || u.player_details?.image_path;
+          if (e && img && !photoMap[e]) photoMap[e] = img;
+        });
+      } catch (_e) {}
+    }
+
+    const squad = (players || []).map((p, idx) => {
+      const pEmail = (p.email || '').toLowerCase().trim();
+      const resolvedPhoto = p.photo || p.image_path || photoMap[pEmail] || null;
+      return {
+        id: p.id || (p._id ? String(p._id) : `PL-${idx + 1}`),
+        name: p.name,
+        email: p.email,
+        role: p.role,
+        jerseyNumber: p.jersey_number || p.jerseyNumber || (idx + 1),
+        battingStyle: p.batting_style || p.battingStyle || 'Right Hand Bat',
+        bowlingStyle: p.bowling_style || p.bowlingStyle || 'Right Arm Medium',
+        mobile: p.mobile || p.phone || '',
+        photo: resolvedPhoto,
+        image_path: resolvedPhoto,
+        image: resolvedPhoto,
+        status: p.status === 'ACTIVE' ? 'Verified' : p.status,
+        stats: p.stats || { runs: 0, balls: 0, wickets: 0 }
+      };
+    });
     res.json({ success: true, squad });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -1037,7 +1209,8 @@ router.put('/players/:playerId', requireTeamAuth, async (req, res) => {
     const teamName = teamDoc?.name || req.team?.name || '';
 
     const { playerId } = req.params;
-    const { name, role, jerseyNumber, battingStyle, bowlingStyle, mobile, aadhaar, email } = req.body;
+    const { name, role, jerseyNumber, battingStyle, bowlingStyle, mobile, aadhaar, email, photo, image, image_path } = req.body;
+    const playerImg = photo !== undefined ? photo : (image !== undefined ? image : image_path);
 
     let updated = false;
     let savedPlayer = null;
@@ -1060,6 +1233,10 @@ router.put('/players/:playerId', requireTeamAuth, async (req, res) => {
       if (jerseyNumber !== undefined) playerDoc.jersey_number = Number(jerseyNumber);
       if (battingStyle) playerDoc.batting_style = battingStyle;
       if (bowlingStyle !== undefined) playerDoc.bowling_style = bowlingStyle;
+      if (playerImg !== undefined) {
+        playerDoc.photo = playerImg ? String(playerImg).trim() : null;
+        playerDoc.image_path = playerImg ? String(playerImg).trim() : null;
+      }
       await playerDoc.save();
       updated = true;
       savedPlayer = {
@@ -1070,7 +1247,9 @@ router.put('/players/:playerId', requireTeamAuth, async (req, res) => {
         jerseyNumber: playerDoc.jersey_number,
         battingStyle: playerDoc.batting_style,
         bowlingStyle: playerDoc.bowling_style,
-        mobile: mobile || ''
+        mobile: mobile || '',
+        photo: playerDoc.photo,
+        image_path: playerDoc.image_path
       };
     }
 
@@ -1111,6 +1290,10 @@ router.put('/players/:playerId', requireTeamAuth, async (req, res) => {
         }
         if (mobile !== undefined) p.mobile = mobile;
         if (aadhaar !== undefined) p.aadhaar = aadhaar;
+        if (playerImg !== undefined) {
+          p.photo = playerImg ? String(playerImg).trim() : null;
+          p.image_path = playerImg ? String(playerImg).trim() : null;
+        }
         teamReg.players[idx] = p;
         await teamReg.save();
         updated = true;

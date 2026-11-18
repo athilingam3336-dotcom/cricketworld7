@@ -21,7 +21,7 @@ import {
   Alert,
   Image
 } from 'react-native';
-import { ScorerApi, API_URL } from '../../services/api';
+import { ScorerApi, API_URL, resolveImageUrl } from '../../services/api';
 import { showSuccess, showError, showWarning, showConfirm } from '../../utils/sweetalert';
 
 export interface TournamentManagementProps {
@@ -1270,9 +1270,16 @@ export const TournamentManagement: React.FC<TournamentManagementProps> = ({
                     {/* Header Row */}
                     <View style={styles.regCardHeaderRow}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-                        <View style={[styles.teamCrestAvatar, { backgroundColor: crestBg }]}>
-                          <Text style={styles.teamCrestText}>{initials}</Text>
-                        </View>
+                        {resolveImageUrl(r.team_logo || r.photo || r.logo || r.image_path) ? (
+                          <Image
+                            source={{ uri: resolveImageUrl(r.team_logo || r.photo || r.logo || r.image_path)! }}
+                            style={[styles.teamCrestAvatar, { resizeMode: 'cover', overflow: 'hidden' }]}
+                          />
+                        ) : (
+                          <View style={[styles.teamCrestAvatar, { backgroundColor: crestBg }]}>
+                            <Text style={styles.teamCrestText}>{initials}</Text>
+                          </View>
+                        )}
                         <View style={{ flex: 1 }}>
                           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                             <Text style={styles.regTeamTitle}>{r.team_name}</Text>
@@ -1475,9 +1482,16 @@ export const TournamentManagement: React.FC<TournamentManagementProps> = ({
                 return (
                   <View key={t.id || t.team_id || idx} style={styles.approvedTeamCard}>
                     <View style={styles.approvedTeamTop}>
-                      <View style={[styles.teamCrestAvatar, { backgroundColor: '#059669', width: 44, height: 44 }]}>
-                        <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>{initials}</Text>
-                      </View>
+                      {resolveImageUrl(t.team_logo || t.photo || t.logo || t.image_path) ? (
+                        <Image
+                          source={{ uri: resolveImageUrl(t.team_logo || t.photo || t.logo || t.image_path)! }}
+                          style={[styles.teamCrestAvatar, { width: 44, height: 44, resizeMode: 'cover', overflow: 'hidden' }]}
+                        />
+                      ) : (
+                        <View style={[styles.teamCrestAvatar, { backgroundColor: '#059669', width: 44, height: 44 }]}>
+                          <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 16 }}>{initials}</Text>
+                        </View>
+                      )}
                       <View style={{ flex: 1 }}>
                         <Text style={styles.approvedTeamName}>{t.team_name || t.name}</Text>
                         <Text style={styles.approvedTeamTaluk}>📍 {t.team_city || t.team_taluk || t.taluk || 'Virudhunagar'}</Text>
