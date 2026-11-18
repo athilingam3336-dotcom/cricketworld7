@@ -80,7 +80,7 @@ class AdminAccessService {
 
     const mapped = admins.map(a => {
       const isCurrent = (a.id && a.id.toLowerCase() === normalizedCurrent) ||
-                        (a.email && a.email.toLowerCase() === normalizedCurrent);
+        (a.email && a.email.toLowerCase() === normalizedCurrent);
       return {
         id: a.id,
         name: a.name,
@@ -518,9 +518,9 @@ class AdminAccessService {
 
     // CRITICAL RULE: A ROLE CHANGE AFFECTS ONLY THE TARGET USER BY UNIQUE ID
     const updatedUser = await db.models.User.findOneAndUpdate(
-      { 
+      {
         id: reqDoc.target_user_id,
-        role: { $nin: ['ADMIN', 'SUPER_ADMIN'] } 
+        role: { $nin: ['ADMIN', 'SUPER_ADMIN'] }
       },
       {
         $set: {

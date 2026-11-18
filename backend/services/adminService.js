@@ -843,7 +843,6 @@ async function rescheduleMatch(matchId, { newDate, newTime, reason }, adminEmail
   } catch (notifErr) {
     console.warn('Failed to dispatch match reschedule notification:', notifErr.message);
   }
-  }
 
   return match.toObject();
 }

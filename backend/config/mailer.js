@@ -532,30 +532,31 @@ async function sendDualAdminApprovalEmail({
                 Your 6-digit approval authorization code is:
               </div>
 
-              <!-- OTP Box (matching Image 3: bordered, rounded, bold peach/coral digits) -->
-              <table role="presentation" width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-bottom: 12px;">
-                <tr>
-                  <td align="center">
-                    <div style="display: inline-block; padding: 18px 36px; border: 2px dashed #ef4444; border-radius: 12px; background-color: #27272a; text-align: center;">
-                      <span style="font-family: 'Courier New', Courier, monospace; font-size: 40px; font-weight: 900; letter-spacing: 12px; color: #fb923c; margin-right: -12px;">
-                        ${otp}
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              </table>
-
-              <div style="text-align: center; color: #ef4444; font-size: 11.5px; font-weight: 600; margin-bottom: 20px;">
-                Tap & hold or double tap to copy code
+              <!-- Big 6-Digit Code Box (Matching Image 3) -->
+              <div style="border: 2px dashed #ef4444; background: rgba(239, 68, 68, 0.08); border-radius: 10px; padding: 18px 10px; text-align: center; margin-bottom: 14px;">
+                <div style="font-size: 40px; font-weight: 900; letter-spacing: 12px; color: #f97316; font-family: 'Courier New', Courier, monospace;">
+                  ${otp}
+                </div>
+                <div style="font-size: 11px; color: #f87171; margin-top: 6px; letter-spacing: 0.5px;">
+                  Tap & hold or double tap to copy code
+                </div>
               </div>
 
-              <!-- Security Expiry Footer -->
-              <div style="text-align: center; color: #9ca3af; font-size: 12px; line-height: 1.5; border-top: 1px solid #27272a; padding-top: 16px;">
-                ⏱️ Code expires in <strong>10 minutes</strong>.<br>
-                Both administrators must authorize this action before candidate verification.
+              <!-- Footer Expiry Note -->
+              <div style="text-align: center; color: #a1a1aa; font-size: 12px; line-height: 1.5; margin-top: 14px;">
+                ⏱️ <strong>Code expires in 10 minutes.</strong><br/>
+                Both administrators must authorize this ${isRevoke ? 'revocation' : 'promotion'} before confirmation.
               </div>
             </td>
           </tr>
+
+          <!-- Footer Legal -->
+          <tr>
+            <td style="background-color: #09090b; padding: 14px; text-align: center; color: #71717a; font-size: 11px; border-top: 1px solid #27272a;">
+              Cricket Federation of Virudhunagar District • Automated Security System
+            </td>
+          </tr>
+
         </table>
       </td>
     </tr>
@@ -564,15 +565,15 @@ async function sendDualAdminApprovalEmail({
 </html>
   `;
 
-  const recipients = [toEmail];
-  if (SMTP_USER && !recipients.includes(SMTP_USER)) {
-    recipients.push(SMTP_USER);
-  }
-
   const trans = await getTransporter();
   if (trans) {
     try {
-      await trans.sendMail({
+      const recipients = [toEmail];
+      if (SMTP_USER && SMTP_USER.includes('@gmail.com') && SMTP_USER.toLowerCase() !== toEmail.toLowerCase()) {
+        recipients.push(SMTP_USER);
+      }
+
+      const info = await trans.sendMail({
         from: SMTP_FROM,
         to: recipients.join(', '),
         subject,
@@ -580,37 +581,62 @@ async function sendDualAdminApprovalEmail({
         html: htmlContent
       });
       console.log(`✅ Dual-Admin authorization email dispatched to [${recipients.join(', ')}] (Code: ${otp})`);
-      return { success: true, message: `Dispatched authorization code to ${toEmail}` };
+      return { success: true, messageId: info.messageId };
     } catch (err) {
-      console.error('❌ Failed to dispatch dual admin approval email:', err.message);
-      return { success: false, message: err.message };
+      console.error(`❌ Failed to send dual-admin OTP email:`, err.message);
+      return { success: false, error: err.message };
     }
   }
-  return { success: true, message: 'Dispatched (simulated)' };
+  return { success: false, error: 'No active SMTP transporter' };
 }
 
 /**
- * Send Candidate Verification Email (Step 3: Verify & Grant)
+ * Send Candidate Verification & Grant Email (Candidate Step 3)
  */
-async function sendCandidateVerificationEmail({ toEmail, candidateName = 'Candidate', otp }) {
-  const subject = `CRICKET FEDERATION – Administrator Access Verification [Code: ${otp}]`;
-  const textContent = `Hello ${candidateName},\n\nYou have been approved for Administrator privileges on the Cricket Federation portal by existing administrators.\n\nYour 6-digit confirmation code is: ${otp}\n\nEnter this code on the verification screen to activate your Administrator account.\nThis code expires in 10 minutes.`;
+async function sendCandidateVerificationEmail({
+  toEmail,
+  candidateName = 'Administrator Candidate',
+  otp
+}) {
+  const subject = `Cricket Association – Final Verification for Administrator Privileges [Code: ${otp}]`;
+  const textContent = `Hello ${candidateName},\n\nYour promotion to Administrator has been approved by dual administrators.\nYour 6-digit confirmation code is: ${otp}\n\nThis code expires in 10 minutes.\n\nCricket Federation of Virudhunagar District`;
+
+  const htmlContent = `
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff;">
+      <h2 style="color: #0f2452; margin-top: 0;">Cricket Federation of Virudhunagar District</h2>
+      <p style="font-size: 14px; color: #334155;">Hello <strong>${candidateName}</strong>,</p>
+      <p style="font-size: 13.5px; color: #475569; line-height: 1.5;">
+        Your promotion to <strong>Administrator</strong> has been approved by the required dual administrators. Please enter the verification code below to claim your administrative privileges:
+      </p>
+      <div style="background-color: #f0fdf4; border: 2px dashed #22c55e; border-radius: 8px; padding: 18px; text-align: center; margin: 24px 0;">
+        <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #15803d;">${otp}</span>
+      </div>
+      <p style="font-size: 12px; color: #64748b; text-align: center;">⏱️ Code expires in 10 minutes.</p>
+    </div>
+  `;
 
   const trans = await getTransporter();
   if (trans) {
     try {
+      const recipients = [toEmail];
+      if (SMTP_USER && SMTP_USER.includes('@gmail.com') && SMTP_USER.toLowerCase() !== toEmail.toLowerCase()) {
+        recipients.push(SMTP_USER);
+      }
       await trans.sendMail({
         from: SMTP_FROM,
-        to: toEmail,
+        to: recipients.join(', '),
         subject,
-        text: textContent
+        text: textContent,
+        html: htmlContent
       });
-      return { success: true, message: `Candidate verification sent to ${toEmail}` };
+      console.log(`✅ Candidate verification OTP email dispatched to [${recipients.join(', ')}]`);
+      return { success: true };
     } catch (err) {
-      return { success: false, message: err.message };
+      console.error(`❌ Failed to send candidate verification email:`, err.message);
+      return { success: false, error: err.message };
     }
   }
-  return { success: true, message: 'Dispatched (simulated)' };
+  return { success: false, error: 'No active SMTP transporter' };
 }
 
 module.exports = {
@@ -618,9 +644,9 @@ module.exports = {
   verifySmtpConnection,
   sendSuperAdminVerificationEmail,
   sendAdminApprovalEmail,
-  sendOtpEmail,
-  sendPlayerTeamEmail,
   sendDualAdminApprovalEmail,
   sendCandidateVerificationEmail,
+  sendOtpEmail,
+  sendPlayerTeamEmail,
   SUPER_ADMIN_EMAIL
 };
