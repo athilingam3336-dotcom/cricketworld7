@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, Linking } from 'react-native';
 import { useScorerNavigation } from '../../navigation/ScorerNavigationContext';
 
 export interface MatchData {
@@ -14,8 +14,17 @@ export interface MatchData {
   match_date?: string;
   match_time?: string;
   venue?: string;
+  venue_maps_url?: string;
   format?: string;
   overs?: number;
+  overs_per_side?: number;
+  revised_overs?: number;
+  revisedOvers?: number;
+  revised_target?: number;
+  revisedTarget?: number;
+  revised_comments?: string;
+  revisedComments?: string;
+  target?: number;
   stage?: string;
   status: 'Upcoming' | 'Live' | 'Completed' | string;
   scoreA?: string;
@@ -31,6 +40,20 @@ export interface MatchData {
   assigned_scorer?: string;
   scorer_name?: string;
   scorer?: string;
+}
+
+export function formatScoreWithTotalOvers(scoreStr?: string, maxOvers?: number): string {
+  if (!scoreStr || scoreStr === 'Yet to Bat' || scoreStr === 'Upcoming' || scoreStr === 'Yet to bat') {
+    return scoreStr || 'Yet to Bat';
+  }
+  if (!maxOvers) return scoreStr;
+
+  // Don't format if the overs in parentheses already contains total overs e.g. "(12.1/20 Ov)"
+  if (/\([^)]*\/\s*\d+[^)]*\)/i.test(scoreStr)) return scoreStr;
+
+  return scoreStr.replace(/\((\d+(\.\d+)?)\s*(Ov|ov|Overs)?\)/i, (_match, ov) => {
+    return `(${ov}/${maxOvers} Ov)`;
+  });
 }
 
 interface Props {
@@ -207,9 +230,17 @@ export default function MatchCard({ match, variant = 'upcoming' }: Props) {
   const teamBInit = getTeamInitial(match.teamB, match.teamBShort);
 
   // ══════════════════════════════════════════════════════════════════════════
-  // LIVE VARIANT (WITH ONGOING DAYS TRACKER)
+  // LIVE VARIANT (WITH ONGOING DAYS TRACKER & TOTAL OVERS DISPLAY)
   // ══════════════════════════════════════════════════════════════════════════
   if (isLive) {
+    const totalMatchOvers = match.revisedOvers || match.revised_overs || match.overs || match.overs_per_side || 20;
+    const isRevisedOvers = Boolean(
+      (match.revisedOvers && match.revisedOvers !== (match.overs || match.overs_per_side || 20)) ||
+      (match.revised_overs && match.revised_overs !== (match.overs || match.overs_per_side || 20))
+    );
+    const revisedTargetRuns = match.revisedTarget || match.revised_target || match.target;
+    const interruptionReason = match.revisedComments || match.revised_comments;
+
     return (
       <View style={[styles.card, styles.liveCard]}>
         <View style={styles.liveHeader}>
@@ -236,29 +267,52 @@ export default function MatchCard({ match, variant = 'upcoming' }: Props) {
         <View style={styles.liveTeamsRow}>
           <View style={styles.teamCol}>
             <Text style={styles.liveTeamName}>{match.teamA}</Text>
-            <Text style={styles.liveScore}>{match.scoreA || 'Yet to Bat'}</Text>
+            <Text style={styles.liveScore}>{formatScoreWithTotalOvers(match.scoreA, totalMatchOvers)}</Text>
           </View>
           <View style={styles.vsCol}>
             <Text style={styles.liveVs}>VS</Text>
+            <View style={[styles.liveOversBadge, isRevisedOvers && styles.liveOversBadgeRevised]}>
+              <Text style={[styles.liveOversBadgeText, isRevisedOvers && styles.liveOversBadgeTextRevised]}>
+                {isRevisedOvers ? `${totalMatchOvers} Ov (Rev)` : `${totalMatchOvers} Ov`}
+              </Text>
+            </View>
           </View>
           <View style={styles.teamColRight}>
             <Text style={styles.liveTeamNameRight}>{match.teamB}</Text>
             <Text style={[styles.liveScoreRight, { fontSize: match.scoreB ? 24 : 14, color: match.scoreB ? '#1e293b' : '#64748b' }]}>
-              {match.scoreB || 'Yet to Bat'}
+              {formatScoreWithTotalOvers(match.scoreB, totalMatchOvers)}
             </Text>
           </View>
         </View>
 
+        {(isRevisedOvers || Boolean(revisedTargetRuns)) && (
+          <View style={styles.liveRevisedBanner}>
+            <Text style={styles.liveRevisedBannerText}>
+              🌧️ REVISED: {totalMatchOvers} OVERS {revisedTargetRuns ? `• TARGET: ${revisedTargetRuns} RUNS` : ''} {interruptionReason ? `(${interruptionReason})` : ''}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.metaRow}>
-          <Text style={styles.metaText}>
-            📍 {match.venue} &bull; 🏏 {match.format || 'T20'} {timeline.formattedDate ? `&bull; 📅 Started ${timeline.formattedDate}` : ''}
-          </Text>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              const v = match.venue || 'Virudhunagar Cricket Ground';
+              const url = match.venue_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v + (v.toLowerCase().includes('virudhunagar') || v.toLowerCase().includes('sivakasi') ? '' : ', Virudhunagar'))}`;
+              if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(url, '_blank');
+              else Linking.openURL(url).catch(() => {});
+            }}
+          >
+            <Text style={styles.metaText}>
+              📍 <Text style={{ textDecorationLine: 'underline', color: '#0284c7' }}>{match.venue || 'Virudhunagar Cricket Ground'} ↗</Text> • 🏏 {match.format || 'T20'} ({isRevisedOvers ? `Curtailed to ${totalMatchOvers} Overs` : `${totalMatchOvers} Overs Match`}) {timeline.formattedDate ? `• 📅 Started ${timeline.formattedDate}` : ''}
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {/* Live Match Officials Strip */}
         <View style={styles.compactOfficialsStrip}>
           <Text style={styles.compactOfficialsText}>
-            👔 <Text style={{ fontWeight: '700' }}>Umpires:</Text> {umpire1} &amp; {umpire2} &bull; 📝 <Text style={{ fontWeight: '700' }}>Scorer:</Text> {scorerName} ({scorerId})
+            👔 <Text style={{ fontWeight: '700' }}>Umpires:</Text> {umpire1} & {umpire2} • 📝 <Text style={{ fontWeight: '700' }}>Scorer:</Text> {scorerName} ({scorerId})
           </Text>
         </View>
 
@@ -273,6 +327,8 @@ export default function MatchCard({ match, variant = 'upcoming' }: Props) {
   // COMPLETED VARIANT (CLEAN, MODERN, DECLUTTERED)
   // ══════════════════════════════════════════════════════════════════════════
   if (isCompleted) {
+    const totalMatchOvers = match.revisedOvers || match.revised_overs || match.overs || match.overs_per_side || 20;
+
     return (
       <TouchableOpacity activeOpacity={0.92} onPress={handleAction} style={[styles.card, styles.completedCardClean]}>
         {/* 1. Clean Header: Tournament + Verified Completed Pill */}
@@ -281,9 +337,19 @@ export default function MatchCard({ match, variant = 'upcoming' }: Props) {
             <Text style={styles.completedTournamentText} numberOfLines={1}>
               🏆 {(match.tournament || match.tournament_name || 'Association Championship').toUpperCase()}
             </Text>
-            <Text style={styles.completedVenueSub} numberOfLines={1}>
-              📍 {match.venue || 'Virudhunagar Cricket Ground'} {match.date ? `• 📅 ${match.date.split(' ')[0]}` : ''}
-            </Text>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => {
+                const v = match.venue || 'Virudhunagar Cricket Ground';
+                const url = match.venue_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v + (v.toLowerCase().includes('virudhunagar') || v.toLowerCase().includes('sivakasi') ? '' : ', Virudhunagar'))}`;
+                if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(url, '_blank');
+                else Linking.openURL(url).catch(() => {});
+              }}
+            >
+              <Text style={styles.completedVenueSub} numberOfLines={1}>
+                📍 <Text style={{ textDecorationLine: 'underline', color: '#0284c7' }}>{match.venue || 'Virudhunagar Cricket Ground'} ↗</Text> • 🏏 {match.format || 'T20'} ({totalMatchOvers} Ov) {match.date ? `• 📅 ${match.date.split(' ')[0]}` : ''}
+              </Text>
+            </TouchableOpacity>
           </View>
           <View style={styles.completedBadgeGreen}>
             <Text style={styles.completedBadgeGreenText}>✓ COMPLETED</Text>
@@ -296,13 +362,13 @@ export default function MatchCard({ match, variant = 'upcoming' }: Props) {
             <Text style={styles.completedTeamName} numberOfLines={1}>
               {match.teamA}
             </Text>
-            <Text style={styles.completedScoreVal}>{match.scoreA || 'Yet to Bat'}</Text>
+            <Text style={styles.completedScoreVal}>{formatScoreWithTotalOvers(match.scoreA, totalMatchOvers)}</Text>
           </View>
           <View style={[styles.completedTeamScoreRow, { marginTop: 6 }]}>
             <Text style={styles.completedTeamName} numberOfLines={1}>
               {match.teamB}
             </Text>
-            <Text style={styles.completedScoreVal}>{match.scoreB || 'Yet to Bat'}</Text>
+            <Text style={styles.completedScoreVal}>{formatScoreWithTotalOvers(match.scoreB, totalMatchOvers)}</Text>
           </View>
         </View>
 
@@ -316,7 +382,7 @@ export default function MatchCard({ match, variant = 'upcoming' }: Props) {
         {/* 4. Sleek Footer: Compact Officials & Scorecard CTA */}
         <View style={styles.completedFooterRow}>
           <Text style={styles.completedOfficialsLine} numberOfLines={1}>
-            👔 {umpire1} &amp; {umpire2} &bull; 📝 {scorerName}
+            👔 {umpire1} & {umpire2} • 📝 {scorerName}
           </Text>
           <TouchableOpacity style={styles.completedViewBtn} onPress={handleAction} activeOpacity={0.8}>
             <Text style={styles.completedViewBtnText}>SCORECARD ▶</Text>
@@ -427,12 +493,21 @@ export default function MatchCard({ match, variant = 'upcoming' }: Props) {
           </Text>
         </View>
         <View style={styles.metaInfoDivider} />
-        <View style={[styles.metaInfoItem, { flex: 1.2 }]}>
-          <Text style={styles.metaInfoLabel}>📍 VENUE &amp; GROUND</Text>
-          <Text style={styles.metaInfoVal} numberOfLines={1}>
+        <TouchableOpacity
+          style={[styles.metaInfoItem, { flex: 1.2 }]}
+          activeOpacity={0.7}
+          onPress={() => {
+            const v = match.venue || 'District Stadium, Virudhunagar';
+            const url = match.venue_maps_url || `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v + (v.toLowerCase().includes('virudhunagar') || v.toLowerCase().includes('sivakasi') ? '' : ', Virudhunagar'))}`;
+            if (Platform.OS === 'web' && typeof window !== 'undefined') window.open(url, '_blank');
+            else Linking.openURL(url).catch(() => {});
+          }}
+        >
+          <Text style={styles.metaInfoLabel}>📍 VENUE &amp; GROUND ↗</Text>
+          <Text style={[styles.metaInfoVal, { color: '#0284c7', textDecorationLine: 'underline' }]} numberOfLines={1}>
             {match.venue || 'District Stadium, Virudhunagar'}
           </Text>
-        </View>
+        </TouchableOpacity>
       </View>
 
       {/* 5. OFFICIAL MATCH GOVERNANCE (UMPIRES & SCORER) */}
@@ -993,12 +1068,48 @@ const styles = StyleSheet.create({
   },
   teamCol: { flex: 1 },
   teamColRight: { flex: 1, alignItems: 'flex-end' },
-  vsCol: { width: 30, alignItems: 'center' },
+  vsCol: { minWidth: 64, alignItems: 'center', paddingHorizontal: 4 },
   liveTeamName: { color: '#0f172a', fontSize: 14, fontWeight: '700', marginBottom: 2 },
   liveTeamNameRight: { color: '#0f172a', fontSize: 14, fontWeight: '700', marginBottom: 2, textAlign: 'right' },
   liveScore: { color: '#0f172a', fontSize: 20, fontWeight: '900' },
   liveScoreRight: { color: '#0f172a', fontSize: 20, fontWeight: '900', textAlign: 'right' },
   liveVs: { color: '#94a3b8', fontSize: 12, fontWeight: 'bold' },
+  liveOversBadge: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    marginTop: 3,
+    alignItems: 'center'
+  },
+  liveOversBadgeRevised: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#fde68a'
+  },
+  liveOversBadgeText: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#1d4ed8'
+  },
+  liveOversBadgeTextRevised: {
+    color: '#b45309'
+  },
+  liveRevisedBanner: {
+    backgroundColor: '#fffbeb',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    marginBottom: 10
+  },
+  liveRevisedBannerText: {
+    color: '#b45309',
+    fontSize: 11,
+    fontWeight: '800'
+  },
   metaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   metaText: { color: '#64748b', fontSize: 11 },
   primaryBtn: {

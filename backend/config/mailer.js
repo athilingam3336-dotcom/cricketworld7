@@ -21,6 +21,7 @@ const SMTP_FROM = process.env.SMTP_FROM
 
 const SUPER_ADMIN_EMAIL = (process.env.SUPER_ADMIN_EMAIL || 'admin@cfvd.org').toLowerCase().trim();
 
+<<<<<<< HEAD
 let activeTransporter = null;
 let transporterType = 'NONE'; // 'GMAIL' | 'ETHEREAL' | 'NONE'
 
@@ -44,6 +45,25 @@ function createPrimaryTransporter() {
     });
   }
   return null;
+=======
+if (SMTP_USER && SMTP_PASSWORD) {
+  transporter = nodemailer.createTransport({
+    host: SMTP_HOST.includes('gmail.com') ? 'smtp.gmail.com' : SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE,
+    family: 4, // Force IPv4 to prevent 90-second Windows IPv6 DNS timeout
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASSWORD
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
+  });
+  console.log(`📧 Nodemailer SMTP initialized for: ${SMTP_USER} (IPv4 direct TLS)`);
+} else {
+  console.log('ℹ️ Nodematiler: SMTP credentials not set.');
+>>>>>>> abe2efad5f5abb6b2a0c7beeeb6d4c0587462ae0
 }
 
 /**
@@ -390,6 +410,9 @@ async function sendAdminApprovalEmail({
  * Standard OTP Email for Player / User Registration
  */
 async function sendOtpEmail({ toEmail, userName, otp }) {
+  if (process.env.NODE_ENV === 'test') {
+    return { success: true, message: `[TEST MODE] OTP dispatched to ${toEmail}`, otp };
+  }
   const subject = 'Cricket Association - Your Verification OTP';
   const textContent = `Hello ${userName || 'User'},\n\nYour One-Time Password (OTP) for verification is: ${otp}\n\nThis OTP is valid for 10 minutes.\n\nCricket Federation of Virudhunagar District`;
   const htmlContent = `
@@ -427,6 +450,9 @@ async function sendOtpEmail({ toEmail, userName, otp }) {
  * Send Registered Team Details Email to Player
  */
 async function sendPlayerTeamEmail({ toEmail, playerName, teamNames }) {
+  if (process.env.NODE_ENV === 'test') {
+    return { success: true, message: `[TEST MODE] Team details dispatched to ${toEmail}` };
+  }
   const teamList = Array.isArray(teamNames) ? teamNames : [teamNames];
   const primaryTeam = teamList[0] || 'Unknown Team';
   const teamListText = teamList.join(', ');

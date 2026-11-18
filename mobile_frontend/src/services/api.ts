@@ -69,6 +69,27 @@ const getSocketUrl = () => {
 export const API_URL = getBaseUrl();
 export const SOCKET_URL = getSocketUrl();
 
+/**
+ * Resolves a full, displayable image URI from any database photo, logo, or image path.
+ * Handles full URLs (http/https), Base64 data URIs, and backend-relative static file paths.
+ */
+export const resolveImageUrl = (pathOrUrl?: string | null): string | null => {
+  if (!pathOrUrl || typeof pathOrUrl !== 'string') return null;
+  const trimmed = pathOrUrl.trim();
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null;
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:image/') ||
+    trimmed.startsWith('blob:')
+  ) {
+    return trimmed;
+  }
+  const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  const root = SOCKET_URL || getSocketUrl();
+  return `${root}${cleanPath}`;
+};
+
 let token: string | null = null;
 let currentUser: any = null;
 
@@ -261,7 +282,14 @@ async function request(endpoint: string, options: RequestInit = {}) {
     return data;
   } catch (err: any) {
     clearTimeout(timeoutId);
-    console.warn(`API Error on ${endpoint}:`, err?.message || err);
+    if (
+      endpoint.startsWith('/auth/me') &&
+      (err?.status === 401 || err?.message?.includes('401') || err?.message?.includes('Authentication token required'))
+    ) {
+      // Normal guest session validation, suppress warning
+    } else {
+      console.warn(`API Error on ${endpoint}:`, err?.message || err);
+    }
     if (err.name === 'AbortError' || err.message?.includes('aborted')) {
       const timeoutErr = new Error(
         `Connection timed out (${getBackendHost()}:5000). Please check if your mobile and computer are on the same Wi-Fi network.`
@@ -372,8 +400,7 @@ export const ScorerApi = {
   // --- REAL AUTHENTICATION & PASSWORD APIs ---
   getMe: async () => {
     const activeToken = getAuthToken();
-    const activeUser = getCurrentUser();
-    if (!activeToken && !activeUser && Platform.OS !== 'web') {
+    if (!activeToken) {
       return { success: false, message: 'No active session' };
     }
     return request('/auth/me');
@@ -385,6 +412,10 @@ export const ScorerApi = {
   },
 
   checkAuthSession: async () => {
+    const activeToken = getAuthToken();
+    if (!activeToken) {
+      return null;
+    }
     try {
       const res = await request('/auth/me');
       if (res && res.success && res.user) {
@@ -737,6 +768,10 @@ export const ScorerApi = {
   },
 
   getProfile: async () => {
+    const activeToken = getAuthToken();
+    if (!activeToken) {
+      return { success: false, message: 'No active session' };
+    }
     return request('/auth/me');
   },
 
@@ -755,6 +790,14 @@ export const ScorerApi = {
 
   searchPortal: async (query: string) => {
     return request(`/portal/search?q=${encodeURIComponent(query)}`);
+  },
+
+  getPortalTeamDetails: async (teamId: string) => {
+    return request(`/portal/teams/${encodeURIComponent(teamId)}`);
+  },
+
+  getPortalPlayerDetails: async (playerId: string) => {
+    return request(`/portal/players/${encodeURIComponent(playerId)}`);
   },
 
   submitContact: async (data: { name: string; email: string; subject?: string; message: string }) => {
@@ -840,6 +883,12 @@ export const ScorerApi = {
     return request(`/admin/matches/${matchId}`, {
       method: 'PUT',
       body: JSON.stringify(data)
+    });
+  },
+
+  confirmMatchSchedule: async (matchId: string) => {
+    return request(`/admin/matches/${matchId}/confirm-schedule`, {
+      method: 'POST'
     });
   },
 
@@ -1058,10 +1107,10 @@ export const ScorerApi = {
   // --- LIVE SCORING ENGINE ---
   getLiveState: async (matchId: string) => {
     try {
-      const res = await request(`/matches/${matchId}/live`);
+      const res = await request(`/scorer/matches/${matchId}/live`);
       if (res && res.data) return res;
     } catch (_e) {}
-    return request(`/scorer/matches/${matchId}/live`);
+    return request(`/matches/${matchId}/live`);
   },
 
   recordDelivery: async (matchId: string, delivery: any) => {
@@ -1501,10 +1550,73 @@ export const TeamApi = {
     captain?: string;
     viceCaptain?: string;
     teamLogo?: string;
+    photo?: string | null;
+    image_path?: string | null;
+    logo?: string | null;
   }) => {
     return request('/team/profile', {
       method: 'PUT',
       body: JSON.stringify(updates)
+    });
+  },
+
+  uploadPhoto: async (photo: string) => {
+    return request('/team/upload-photo', {
+      method: 'POST',
+      body: JSON.stringify({ photo, logo: photo, image_path: photo })
+    });
+  },
+
+  submitAllocation: async (matchId: string, payload: {
+    playingXI: string[];
+    substitutes: string[];
+    lineup?: any[];
+    captainId?: string;
+    viceCaptainId?: string;
+    wicketKeeperId?: string;
+  }) => {
+    return request(`/team/matches/${matchId}/allocate`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+
+
+  addPlayer: async (payload: {
+    name: string;
+    email: string;
+    role?: string;
+    jerseyNumber?: number;
+    battingStyle?: string;
+    bowlingStyle?: string;
+    mobile?: string;
+    aadhaar?: string;
+  }) => {
+    return request('/team/players', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  updatePlayer: async (playerId: string, payload: {
+    name?: string;
+    email?: string;
+    role?: string;
+    jerseyNumber?: number;
+    battingStyle?: string;
+    bowlingStyle?: string;
+    mobile?: string;
+    aadhaar?: string;
+  }) => {
+    return request(`/team/players/${playerId}`, {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  deletePlayer: async (playerId: string) => {
+    return request(`/team/players/${playerId}`, {
+      method: 'DELETE'
     });
   },
 
