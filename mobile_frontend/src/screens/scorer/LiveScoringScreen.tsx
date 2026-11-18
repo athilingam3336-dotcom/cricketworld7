@@ -887,15 +887,17 @@ export default function LiveScoringScreen() {
 
   // Real-time Network Connectivity Listener (Wi-Fi symbol green/red)
   useEffect(() => {
-    if (typeof window !== 'undefined' && typeof window.navigator !== 'undefined') {
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.addEventListener === 'function' && typeof window.navigator !== 'undefined') {
       setIsOnline(window.navigator.onLine);
       const handleOnline = () => setIsOnline(true);
       const handleOffline = () => setIsOnline(false);
       window.addEventListener('online', handleOnline);
       window.addEventListener('offline', handleOffline);
       return () => {
-        window.removeEventListener('online', handleOnline);
-        window.removeEventListener('offline', handleOffline);
+        if (typeof window.removeEventListener === 'function') {
+          window.removeEventListener('online', handleOnline);
+          window.removeEventListener('offline', handleOffline);
+        }
       };
     }
   }, []);

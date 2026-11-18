@@ -214,19 +214,21 @@ export default function HomeScreen() {
   useEffect(() => {
     // 1. Check local session cache
     const cached = getCurrentUser();
-    if (cached) setSessionUser(cached);
+    if (cached) {
+      setSessionUser(cached);
 
-    // 2. Validate session with backend /api/auth/me (validates Bearer token or HttpOnly Cookie)
-    ScorerApi.getMe()
-      .then((res: any) => {
-        if (res && res.success && res.user) {
-          setCurrentUser(res.user);
-          setSessionUser(res.user);
-        }
-      })
-      .catch(() => {
-        // Unauthenticated or expired session
-      });
+      // 2. Validate session with backend /api/auth/me (validates Bearer token or HttpOnly Cookie)
+      ScorerApi.getMe()
+        .then((res: any) => {
+          if (res && res.success && res.user) {
+            setCurrentUser(res.user);
+            setSessionUser(res.user);
+          }
+        })
+        .catch(() => {
+          // Unauthenticated or expired session
+        });
+    }
   }, []);
 
   const handleLogout = async () => {
@@ -954,9 +956,11 @@ export default function HomeScreen() {
                   style={[
                     styles.heroButtonsRow,
                     isMobile && {
+                      flexDirection: 'row',
+                      flexWrap: 'wrap',
                       justifyContent: 'center',
                       alignSelf: 'center',
-                      gap: 10,
+                      gap: 8,
                       marginBottom: 20,
                       width: '100%',
                     }
@@ -967,9 +971,10 @@ export default function HomeScreen() {
                     style={[
                       styles.oasoBtnPrimary,
                       isMobile && {
-                        flex: 1,
-                        minWidth: 140,
-                        maxWidth: 200,
+                        flex: isSmallMobile ? 0 : 1,
+                        width: isSmallMobile ? '100%' : undefined,
+                        minWidth: isSmallMobile ? '100%' : 130,
+                        maxWidth: isSmallMobile ? '100%' : 200,
                         justifyContent: 'center',
                       }
                     ]}
@@ -985,9 +990,10 @@ export default function HomeScreen() {
                     style={[
                       styles.oasoBtnSecondary,
                       isMobile && {
-                        flex: 1,
-                        minWidth: 140,
-                        maxWidth: 200,
+                        flex: isSmallMobile ? 0 : 1,
+                        width: isSmallMobile ? '100%' : undefined,
+                        minWidth: isSmallMobile ? '100%' : 130,
+                        maxWidth: isSmallMobile ? '100%' : 200,
                         justifyContent: 'center',
                       }
                     ]}
@@ -1006,9 +1012,10 @@ export default function HomeScreen() {
                     style={[
                       styles.oasoBtnTertiary,
                       isMobile && {
-                        flex: 1,
-                        minWidth: 140,
-                        maxWidth: 200,
+                        flex: isSmallMobile ? 0 : 1,
+                        width: isSmallMobile ? '100%' : undefined,
+                        minWidth: isSmallMobile ? '100%' : 130,
+                        maxWidth: isSmallMobile ? '100%' : 200,
                         justifyContent: 'center',
                       }
                     ]}
@@ -1024,8 +1031,26 @@ export default function HomeScreen() {
 
               {/* Right Column: CFVD Crest inside Container */}
               <View style={[styles.oasoHeroCrestCol, isMobile && styles.oasoHeroCrestColMobile]}>
-                <View style={styles.oasoCrestAuraRing} />
-                <View style={styles.oasoCrestAuraRingInner} />
+                <View
+                  style={[
+                    styles.oasoCrestAuraRing,
+                    isMobile && {
+                      width: Math.min(windowWidth * 0.88, 340),
+                      height: Math.min(windowWidth * 0.88, 340),
+                      borderRadius: Math.min(windowWidth * 0.88, 340) / 2
+                    }
+                  ]}
+                />
+                <View
+                  style={[
+                    styles.oasoCrestAuraRingInner,
+                    isMobile && {
+                      width: Math.min(windowWidth * 0.72, 260),
+                      height: Math.min(windowWidth * 0.72, 260),
+                      borderRadius: Math.min(windowWidth * 0.72, 260) / 2
+                    }
+                  ]}
+                />
                 
                 {/* Crest Wrapper with Stealth Hotspots */}
                 <View
@@ -4836,8 +4861,12 @@ const styles = StyleSheet.create({
   },
   oasoHeroCrestColMobile: {
     width: '100%',
+    maxWidth: '100%',
     marginTop: 24,
     paddingVertical: 0,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   oasoCrestAuraRing: {
     position: 'absolute',
