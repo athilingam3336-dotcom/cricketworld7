@@ -13,7 +13,6 @@ import {
   ScrollView,
   TouchableOpacity,
   TextInput,
-  StatusBar,
   ActivityIndicator,
   Modal,
   Alert,
@@ -22,6 +21,7 @@ import {
   useWindowDimensions,
   PanResponder
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { PlayerApi, ScorerApi, getCurrentUser, setCurrentUser, setAuthToken, SOCKET_URL } from '../../services/api';
@@ -760,7 +760,7 @@ export default function PlayerDashboardScreen({ onExit, initialParams }: PlayerD
 
   return (
     <View style={styles.rootContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#071026" />
+      <StatusBar style="light" />
 
       <View style={styles.layoutRoot}>
         <PlayerSidebar

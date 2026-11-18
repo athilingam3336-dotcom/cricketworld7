@@ -282,7 +282,14 @@ async function request(endpoint: string, options: RequestInit = {}) {
     return data;
   } catch (err: any) {
     clearTimeout(timeoutId);
-    console.warn(`API Error on ${endpoint}:`, err?.message || err);
+    if (
+      endpoint.startsWith('/auth/me') &&
+      (err?.status === 401 || err?.message?.includes('401') || err?.message?.includes('Authentication token required'))
+    ) {
+      // Normal guest session validation, suppress warning
+    } else {
+      console.warn(`API Error on ${endpoint}:`, err?.message || err);
+    }
     if (err.name === 'AbortError' || err.message?.includes('aborted')) {
       const timeoutErr = new Error(
         `Connection timed out (${getBackendHost()}:5000). Please check if your mobile and computer are on the same Wi-Fi network.`
@@ -393,8 +400,7 @@ export const ScorerApi = {
   // --- REAL AUTHENTICATION & PASSWORD APIs ---
   getMe: async () => {
     const activeToken = getAuthToken();
-    const activeUser = getCurrentUser();
-    if (!activeToken && !activeUser && Platform.OS !== 'web') {
+    if (!activeToken) {
       return { success: false, message: 'No active session' };
     }
     return request('/auth/me');
@@ -406,6 +412,10 @@ export const ScorerApi = {
   },
 
   checkAuthSession: async () => {
+    const activeToken = getAuthToken();
+    if (!activeToken) {
+      return null;
+    }
     try {
       const res = await request('/auth/me');
       if (res && res.success && res.user) {
@@ -746,6 +756,10 @@ export const ScorerApi = {
   },
 
   getProfile: async () => {
+    const activeToken = getAuthToken();
+    if (!activeToken) {
+      return { success: false, message: 'No active session' };
+    }
     return request('/auth/me');
   },
 

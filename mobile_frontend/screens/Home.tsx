@@ -19,7 +19,6 @@ import {
   Platform,
   Dimensions,
   Animated,
-  StatusBar,
   ActivityIndicator,
   Alert,
   Linking,
@@ -27,6 +26,7 @@ import {
   ViewStyle,
   DimensionValue,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppNavigation } from '../src/navigation/AppNavigator';
@@ -42,6 +42,7 @@ import Header from '../src/layouts/Header';
 import BroadcastLiveBallAction from '../src/components/common/BroadcastLiveBallAction';
 import { VPLEventBanner, VPLSoundControls } from '../src/components/common/VPLEventBanner';
 import { mapBallToEvents, normalizeExtraType, normalizeDismissal } from '../src/utils/vplEventMapper';
+import VideoPreloader from '../src/components/common/VideoPreloader';
 import BootstrapPagination from '../src/components/common/BootstrapPagination';
 import {
   Ionicons,
@@ -207,6 +208,7 @@ export default function HomeScreen() {
 
   // Authentication Session State (JWT Bearer / Cookie)
   const [sessionUser, setSessionUser] = useState<any>(() => getCurrentUser());
+  const [showIntroVideo, setShowIntroVideo] = useState<boolean>(false);
 
   useEffect(() => {
     // 1. Check local session cache
@@ -292,7 +294,7 @@ export default function HomeScreen() {
   }, [pulseAnim]);
 
   // Section Scroll Reference
-  const mainScrollRef = useRef<ScrollView>(null);
+  const mainScrollRef = useRef<any>(null);
   const [sectionPositions, setSectionPositions] = useState<Record<string, number>>({});
 
   const scrollToSection = (secName: string) => {
@@ -683,7 +685,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.rootContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#040a1b" />
+      <StatusBar style="light" />
 
       {/* SOLID CLEAN PAGE BACKGROUND (NO BACKGROUND IMAGE) */}
       <View style={[StyleSheet.absoluteFill, { backgroundColor: '#f6f2e9', pointerEvents: 'none' as const }]} />
@@ -944,6 +946,95 @@ export default function HomeScreen() {
                 />
               </View>
 
+            </View>
+            {/* Description */}
+            <Text
+              style={[
+                styles.heroDescription,
+                isMobile && {
+                  textAlign: 'center',
+                  alignSelf: 'center',
+                  fontSize: 13,
+                  lineHeight: 20,
+                  color: '#1e293b',
+                  marginBottom: 22,
+                  paddingHorizontal: 4,
+                }
+              ]}
+            >
+              Governing, developing, and fostering grassroots, collegiate, and competitive cricket across
+              Srivilliputhur, Sivakasi, Rajapalayam, Sattur, Aruppukottai, and Virudhunagar under the official
+              authority of Cricket Federation of Virudhunagar District.
+            </Text>
+
+            {/* 3 Hero Action Buttons */}
+            <View
+              style={[
+                styles.heroButtonsRow,
+                isMobile && {
+                  justifyContent: 'center',
+                  alignSelf: 'center',
+                  gap: 10,
+                  marginBottom: 24,
+                  width: '100%',
+                }
+              ]}
+            >
+              {/* 1. Match Centre Live (Solid Navy with Gold Border) */}
+              <TouchableOpacity
+                style={[
+                  styles.heroBtnNavy,
+                  isMobile && {
+                    flex: 1,
+                    minWidth: 140,
+                    maxWidth: 200,
+                    justifyContent: 'center',
+                  }
+                ]}
+                onPress={() => scrollToSection('matchCentre')}
+                activeOpacity={0.85}
+              >
+                <Animated.View style={[styles.heroRedDot, { opacity: pulseAnim }]} />
+                <Text style={styles.heroBtnNavyText}>Match Centre Live</Text>
+              </TouchableOpacity>
+
+              {/* 3. Live Scorecard (Solid Crisp White) */}
+              <TouchableOpacity
+                style={[
+                  styles.heroBtnWhite,
+                  isMobile && {
+                    flex: 1,
+                    minWidth: 140,
+                    maxWidth: 200,
+                    justifyContent: 'center',
+                  }
+                ]}
+                onPress={() => {
+                  const targetMatch = publicMatches.find(m => (m.status || '').toLowerCase() === 'live') || publicMatches[0] || { id: 'M001' };
+                  handleOpenScorecard(targetMatch);
+                }}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.heroBtnWhiteText}>📡 Live Scorecard</Text>
+              </TouchableOpacity>
+
+              {/* 4. Watch Intro Video (Professional Preloader Replay) */}
+              <TouchableOpacity
+                style={[
+                  styles.heroBtnWhite,
+                  { backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: 'rgba(245, 158, 11, 0.7)' },
+                  isMobile && {
+                    flex: 1,
+                    minWidth: 140,
+                    maxWidth: 200,
+                    justifyContent: 'center',
+                  }
+                ]}
+                onPress={() => setShowIntroVideo(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.heroBtnWhiteText, { color: '#fbbf24', fontWeight: '800' }]}>🎬 Watch Intro</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -3998,6 +4089,11 @@ export default function HomeScreen() {
           });
         }}
       />
+
+      {/* Full-Screen Video Preloader / Intro Player */}
+      {showIntroVideo && (
+        <VideoPreloader onComplete={() => setShowIntroVideo(false)} />
+      )}
     </View>
   );
 }

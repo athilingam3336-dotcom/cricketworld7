@@ -45,10 +45,10 @@ export default function ForgotPasswordModal({
   const [confirmPassword, setConfirmPassword] = useState('');
 
   // 4 OTP Box Refs & Focus State
-  const boxRef0 = useRef<TextInput>(null);
-  const boxRef1 = useRef<TextInput>(null);
-  const boxRef2 = useRef<TextInput>(null);
-  const boxRef3 = useRef<TextInput>(null);
+  const boxRef0 = useRef<any>(null);
+  const boxRef1 = useRef<any>(null);
+  const boxRef2 = useRef<any>(null);
+  const boxRef3 = useRef<any>(null);
   const boxRefs = [boxRef0, boxRef1, boxRef2, boxRef3];
   const [focusedBoxIndex, setFocusedBoxIndex] = useState<number | null>(null);
 

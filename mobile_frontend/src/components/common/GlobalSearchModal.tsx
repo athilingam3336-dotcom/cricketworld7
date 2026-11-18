@@ -62,7 +62,7 @@ export default function GlobalSearchModal({
   const [teamResults, setTeamResults] = useState<any[]>([]);
   const [playerResults, setPlayerResults] = useState<any[]>([]);
 
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<any>(null);
 
   useEffect(() => {
     if (visible) {
