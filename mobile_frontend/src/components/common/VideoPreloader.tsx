@@ -133,20 +133,20 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
     return null;
   }
 
-  // Native WebView implementation for iOS / Android (unmuted stadium sound)
+  // Native WebView implementation for iOS / Android (unmuted stadium sound, edge-to-edge cover)
   const nativeHtml = `
     <!DOCTYPE html>
     <html>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
         <style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body { background: #020612; overflow: hidden; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
-          video { width: 100%; height: 100%; object-fit: contain; }
+          video { width: 100vw; height: 100vh; object-fit: cover; object-position: center center; }
         </style>
       </head>
       <body>
-        <video id="v" autoplay playsinline preload="auto">
+        <video id="v" autoplay playsinline webkit-playsinline preload="auto">
           <source src="http://localhost:8081/preloader.mp4" type="video/mp4" />
           <source src="http://localhost:5000/uploads/preloader.mp4" type="video/mp4" />
         </video>
@@ -190,18 +190,21 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
     >
       <StatusBar barStyle="light-content" backgroundColor="#020612" translucent />
 
-      {/* Main Video Presentation */}
+      {/* Main Video Presentation (Edge-to-Edge Full Screen Coverage) */}
       <View style={styles.videoWrapper}>
         {Platform.OS === 'web' ? (
           <video
             ref={webVideoRef}
             autoPlay
             playsInline
+            // @ts-ignore
+            webkit-playsinline="true"
             preload="auto"
             style={{
               width: '100%',
               height: '100%',
-              objectFit: 'contain',
+              objectFit: 'cover',
+              objectPosition: 'center center',
               backgroundColor: '#020612',
             }}
             src="/preloader.mp4"
@@ -231,27 +234,31 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
       </View>
 
       {/* Floating Top Header Bar */}
-      <View style={styles.topBar}>
+      <View style={styles.topBar} pointerEvents="box-none">
         <View style={styles.brandBadge}>
-          <Text style={{ fontSize: 14 }}>🏏</Text>
+          <Text style={{ fontSize: 13 }}>🏏</Text>
           <Text style={styles.brandText}>CRICKET FEDERATION</Text>
         </View>
 
-        <View style={styles.actionRow}>
+        <View style={styles.actionRow} pointerEvents="box-none">
           {/* Always-on Unmuted Stadium Sound Badge */}
           <View style={styles.soundBadge}>
-            <Text style={{ fontSize: 13 }}>🔊</Text>
-            <Text style={styles.soundBadgeText}>STADIUM SOUND ON</Text>
+            <Text style={{ fontSize: 12 }}>🔊</Text>
+            <Text style={styles.soundBadgeText}>SOUND ON</Text>
           </View>
 
-          {/* Enter Stadium Button */}
+          {/* Skip Button (Instant Touch & Click Responsive) */}
           <TouchableOpacity
             style={styles.skipBtn}
             onPress={() => handleDismiss()}
-            activeOpacity={0.85}
+            // @ts-ignore
+            onClick={() => handleDismiss()}
+            // @ts-ignore
+            onTouchEnd={() => handleDismiss()}
+            activeOpacity={0.8}
           >
-            <Text style={styles.skipBtnText}>ENTER STADIUM</Text>
-            <Text style={styles.skipBtnClose}>➔</Text>
+            <Text style={styles.skipBtnText}>SKIP INTRO</Text>
+            <Text style={styles.skipBtnClose}>✕</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -316,52 +323,52 @@ const styles = StyleSheet.create({
   topBar: {
     position: 'absolute',
     top: Platform.OS === 'ios' ? 54 : 24,
-    left: 20,
-    right: 20,
+    left: 14,
+    right: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    zIndex: 10
+    zIndex: 999999,
   },
   brandBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
     backgroundColor: 'rgba(2, 6, 18, 0.75)',
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.35)',
     paddingVertical: 6,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     borderRadius: 9999
   },
   brandText: {
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '800',
-    letterSpacing: 1.2,
+    letterSpacing: 1,
     color: '#f59e0b',
     textTransform: 'uppercase'
   },
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10
+    gap: 8
   },
   soundBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: 'rgba(245, 158, 11, 0.18)',
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.65)',
-    paddingVertical: 7,
-    paddingHorizontal: 14,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
     borderRadius: 9999
   },
   soundBadgeText: {
     color: '#fbbf24',
-    fontSize: 11,
+    fontSize: 10.5,
     fontWeight: '800',
-    letterSpacing: 0.6
+    letterSpacing: 0.5
   },
   soundHintBadge: {
     position: 'absolute',
@@ -372,7 +379,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 20,
     borderRadius: 9999,
-    zIndex: 20
+    zIndex: 999999
   },
   soundHintText: {
     color: '#fef08a',
@@ -392,28 +399,29 @@ const styles = StyleSheet.create({
   skipBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
     backgroundColor: '#f59e0b',
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#fbbf24',
     paddingVertical: 7,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     borderRadius: 9999,
     shadowColor: '#f59e0b',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.45,
     shadowRadius: 10,
-    elevation: 6
+    elevation: 8,
+    zIndex: 999999,
   },
   skipBtnText: {
     color: '#020612',
-    fontSize: 11.5,
+    fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0.8
   },
   skipBtnClose: {
     color: '#020612',
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '900'
   },
   bottomBar: {

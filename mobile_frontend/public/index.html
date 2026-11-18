@@ -306,6 +306,46 @@
           box-shadow: 0 6px 30px rgba(245, 158, 11, 0.8), inset 0 0 18px rgba(245, 158, 11, 0.4);
         }
       }
+
+      /* Full Mobile & Responsive Screen Video Coverage */
+      #cfvd-preloader-video {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+        object-position: center center !important;
+        background-color: #020612 !important;
+      }
+
+      @media (max-width: 768px), (orientation: portrait), (max-aspect-ratio: 1/1) {
+        #cfvd-preloader-video {
+          width: 100vw !important;
+          height: 100vh !important;
+          height: 100dvh !important;
+          object-fit: cover !important;
+          object-position: center center !important;
+        }
+        .cfvd-top-bar-responsive {
+          top: 14px !important;
+          left: 12px !important;
+          right: 12px !important;
+        }
+        .cfvd-brand-badge-responsive {
+          padding: 6px 12px !important;
+        }
+        .cfvd-brand-title-responsive {
+          font-size: 10px !important;
+          letter-spacing: 0.8px !important;
+        }
+        .cfvd-sound-badge-responsive {
+          padding: 6px 12px !important;
+          font-size: 10.5px !important;
+        }
+        .cfvd-skip-btn-responsive {
+          padding: 8px 16px !important;
+          font-size: 11px !important;
+          min-height: 40px !important;
+        }
+      }
     </style>
   </head>
   <body class="cfvd-preloader-active">
@@ -362,18 +402,25 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        position: relative;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
         background-color: #020612;
+        overflow: hidden;
       ">
         <video
           id="cfvd-preloader-video"
           autoplay
           playsinline
+          webkit-playsinline
           preload="auto"
           style="
             width: 100%;
             height: 100%;
-            object-fit: contain;
+            object-fit: cover;
+            object-position: center center;
             background: #020612;
           "
         >
@@ -385,7 +432,7 @@
       </div>
 
       <!-- Floating Controls: Top Bar -->
-      <div style="
+      <div class="cfvd-top-bar-responsive" style="
         position: absolute;
         top: 24px;
         left: 20px;
@@ -393,14 +440,14 @@
         display: flex;
         align-items: center;
         justify-content: space-between;
-        z-index: 10;
+        z-index: 2147483647;
         pointer-events: auto;
       ">
         <!-- Brand Badge -->
-        <div style="
+        <div class="cfvd-brand-badge-responsive" style="
           display: flex;
           align-items: center;
-          gap: 10px;
+          gap: 8px;
           background: rgba(2, 6, 18, 0.75);
           backdrop-filter: blur(14px);
           -webkit-backdrop-filter: blur(14px);
@@ -408,72 +455,83 @@
           padding: 7px 16px;
           border-radius: 9999px;
           box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+          user-select: none;
         ">
-          <span style="font-size: 15px;">🏏</span>
-          <span style="
-            font-size: 11.5px;
+          <span style="font-size: 14px;">🏏</span>
+          <span class="cfvd-brand-title-responsive" style="
+            font-size: 11px;
             font-weight: 800;
-            letter-spacing: 1.2px;
+            letter-spacing: 1.1px;
             color: #f59e0b;
             text-transform: uppercase;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
           ">CRICKET FEDERATION</span>
         </div>
 
-        <div style="display: flex; align-items: center; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
           <!-- Permanent Unmuted Audio Status Badge -->
           <div
             id="cfvd-sound-badge"
+            class="cfvd-sound-badge-responsive"
             style="
               background: rgba(245, 158, 11, 0.18);
               backdrop-filter: blur(14px);
               -webkit-backdrop-filter: blur(14px);
               border: 1px solid rgba(245, 158, 11, 0.65);
               color: #fbbf24;
-              padding: 8px 16px;
+              padding: 7px 14px;
               border-radius: 9999px;
-              font-size: 11.5px;
+              font-size: 11px;
               font-weight: 800;
-              letter-spacing: 0.8px;
+              letter-spacing: 0.7px;
               display: flex;
               align-items: center;
-              gap: 8px;
+              gap: 6px;
               box-shadow: 0 0 16px rgba(245, 158, 11, 0.3);
               user-select: none;
             "
           >
-            <span style="font-size: 13px;">🔊</span>
-            <span id="cfvd-sound-status-text">STADIUM SOUND ON</span>
-            <span style="display: inline-flex; align-items: flex-end; gap: 2.5px; height: 14px;">
-              <span style="width: 2.5px; height: 6px; background: #fbbf24; border-radius: 2px; animation: cfvdSoundWave1 0.8s ease-in-out infinite;"></span>
-              <span style="width: 2.5px; height: 14px; background: #f59e0b; border-radius: 2px; animation: cfvdSoundWave2 0.6s ease-in-out infinite 0.15s;"></span>
-              <span style="width: 2.5px; height: 9px; background: #d97706; border-radius: 2px; animation: cfvdSoundWave3 0.75s ease-in-out infinite 0.3s;"></span>
+            <span style="font-size: 12px;">🔊</span>
+            <span id="cfvd-sound-status-text">SOUND ON</span>
+            <span style="display: inline-flex; align-items: flex-end; gap: 2px; height: 12px;">
+              <span style="width: 2px; height: 5px; background: #fbbf24; border-radius: 2px; animation: cfvdSoundWave1 0.8s ease-in-out infinite;"></span>
+              <span style="width: 2px; height: 12px; background: #f59e0b; border-radius: 2px; animation: cfvdSoundWave2 0.6s ease-in-out infinite 0.15s;"></span>
+              <span style="width: 2px; height: 8px; background: #d97706; border-radius: 2px; animation: cfvdSoundWave3 0.75s ease-in-out infinite 0.3s;"></span>
             </span>
           </div>
 
-          <!-- Enter Stadium / Skip Intro Button -->
+          <!-- Skip Button (Guaranteed Clickable & Tap Friendly) -->
           <button
             id="cfvd-skip-btn"
             type="button"
+            class="cfvd-skip-btn-responsive"
+            onclick="window.__dismissCfvdPreloader && window.__dismissCfvdPreloader(false)"
+            ontouchstart="window.__dismissCfvdPreloader && window.__dismissCfvdPreloader(false)"
+            ontouchend="window.__dismissCfvdPreloader && window.__dismissCfvdPreloader(false)"
             style="
               background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
               color: #020612;
-              border: 1px solid rgba(251, 191, 36, 0.9);
-              padding: 8px 20px;
+              border: 1.5px solid rgba(251, 191, 36, 0.95);
+              padding: 8px 18px;
               border-radius: 9999px;
-              font-size: 12px;
-              font-weight: 800;
+              font-size: 11.5px;
+              font-weight: 900;
               letter-spacing: 0.8px;
               cursor: pointer;
               display: flex;
               align-items: center;
-              gap: 6px;
-              box-shadow: 0 4px 18px rgba(245, 158, 11, 0.4);
-              transition: all 0.2s ease;
+              gap: 5px;
+              box-shadow: 0 4px 18px rgba(245, 158, 11, 0.5);
+              transition: all 0.15s ease;
+              user-select: none;
+              -webkit-user-select: none;
+              touch-action: manipulation;
+              pointer-events: auto !important;
+              z-index: 2147483647 !important;
             "
           >
-            <span>ENTER STADIUM</span>
-            <span style="font-size: 14px; font-weight: 900;">➔</span>
+            <span>SKIP INTRO</span>
+            <span style="font-size: 13px; font-weight: 900;">✕</span>
           </button>
         </div>
       </div>
@@ -578,11 +636,21 @@
           } catch(e) {}
 
           var root = document.getElementById('root');
+          var flash = document.getElementById('cfvd-stadium-flash');
+
+          // Pause video immediately
+          try {
+            if (video) video.pause();
+          } catch(e) {}
+
+          // Immediately unlock body scroll
+          document.body.classList.remove('cfvd-preloader-active');
+          if (root) {
+            root.classList.add('cfvd-revealing');
+          }
 
           if (immediate) {
-            document.body.classList.remove('cfvd-preloader-active');
             if (root) {
-              root.classList.remove('cfvd-revealing');
               root.style.opacity = '1';
               root.style.transform = 'none';
               root.style.filter = 'none';
@@ -591,40 +659,34 @@
             if (preloader && preloader.parentNode) {
               preloader.parentNode.removeChild(preloader);
             }
-            if (stadiumFlash && stadiumFlash.parentNode) {
-              stadiumFlash.parentNode.removeChild(stadiumFlash);
+            if (flash && flash.parentNode) {
+              flash.parentNode.removeChild(flash);
             }
-            if (video) video.pause();
             return;
           }
 
           // 1. Trigger Golden Stadium Floodlight Flash Flare
-          if (stadiumFlash) {
-            stadiumFlash.classList.add('active');
+          if (flash) {
+            flash.classList.add('active');
           }
 
           // 2. Cinematic Preloader Forward Zoom & Depth Blur Dissolve
-          preloader.style.transition = 'opacity 0.85s cubic-bezier(0.16, 1, 0.3, 1), transform 0.85s cubic-bezier(0.16, 1, 0.3, 1), filter 0.85s cubic-bezier(0.16, 1, 0.3, 1)';
-          preloader.style.opacity = '0';
-          preloader.style.transform = 'scale(1.14)';
-          preloader.style.filter = 'blur(16px)';
-          preloader.style.pointerEvents = 'none';
-
-          // 3. Grand Broadcast Website (#root) Entrance Reveal
-          document.body.classList.remove('cfvd-preloader-active');
-          if (root) {
-            root.classList.add('cfvd-revealing');
+          if (preloader) {
+            preloader.style.transition = 'opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1), transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), filter 0.65s cubic-bezier(0.16, 1, 0.3, 1)';
+            preloader.style.opacity = '0';
+            preloader.style.transform = 'scale(1.12)';
+            preloader.style.filter = 'blur(14px)';
+            preloader.style.pointerEvents = 'none';
           }
 
           setTimeout(function() {
-            if (video) video.pause();
             if (preloader && preloader.parentNode) {
               preloader.parentNode.removeChild(preloader);
             }
-            if (stadiumFlash && stadiumFlash.parentNode) {
-              stadiumFlash.parentNode.removeChild(stadiumFlash);
+            if (flash && flash.parentNode) {
+              flash.parentNode.removeChild(flash);
             }
-          }, 1100);
+          }, 650);
         };
 
         if (hasSeen) {
@@ -632,12 +694,26 @@
           return;
         }
 
-        if (skipBtn) {
-          skipBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            window.__dismissCfvdPreloader(false);
-          });
+        function triggerPreloaderSkip(e) {
+          if (e) {
+            try { e.stopPropagation(); } catch(_e) {}
+            try { e.preventDefault(); } catch(_e) {}
+          }
+          window.__dismissCfvdPreloader(false);
         }
+
+        if (skipBtn) {
+          skipBtn.addEventListener('click', triggerPreloaderSkip, { passive: false });
+          skipBtn.addEventListener('touchend', triggerPreloaderSkip, { passive: false });
+          skipBtn.addEventListener('touchstart', triggerPreloaderSkip, { passive: false });
+          skipBtn.addEventListener('pointerup', triggerPreloaderSkip, { passive: false });
+        }
+
+        window.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape') {
+            window.__dismissCfvdPreloader(false);
+          }
+        });
 
         // ============================================================
         // SOUND ENGINE: ALWAYS UNMUTED AUDIO (CANNOT BE MUTED)
