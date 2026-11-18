@@ -4,6 +4,7 @@
     "slug": "cricket-federation-virudhunagar",
     "scheme": "cfvd",
     "version": "1.0.0",
+    "sdkVersion": "58.0.0",
     "description": "Official cricket federation portal: Live ball-by-ball scorecards, tournament fixtures, team management, and wagon wheel analytics.",
     "orientation": "default",
     "icon": "./assets/icon.png",

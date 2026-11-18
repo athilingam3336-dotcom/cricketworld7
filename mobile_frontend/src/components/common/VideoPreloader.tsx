@@ -234,13 +234,13 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
       </View>
 
       {/* Floating Top Header Bar */}
-      <View style={styles.topBar} pointerEvents="box-none">
+      <View style={[styles.topBar, { pointerEvents: 'box-none' as any }]}>
         <View style={styles.brandBadge}>
           <Text style={{ fontSize: 13 }}>🏏</Text>
           <Text style={styles.brandText}>CRICKET FEDERATION</Text>
         </View>
 
-        <View style={styles.actionRow} pointerEvents="box-none">
+        <View style={[styles.actionRow, { pointerEvents: 'box-none' as any }]}>
           {/* Always-on Unmuted Stadium Sound Badge */}
           <View style={styles.soundBadge}>
             <Text style={{ fontSize: 12 }}>🔊</Text>
@@ -282,11 +282,11 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
 
       {/* Stadium Flash Overlay during dismiss transition */}
       <Animated.View
-        pointerEvents="none"
         style={[
           styles.flashOverlay,
           {
             opacity: flashAnim,
+            pointerEvents: 'none' as any,
           },
         ]}
       />
