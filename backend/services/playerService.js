@@ -179,9 +179,13 @@ class PlayerService {
     const photoInput = updates.photo !== undefined ? updates.photo : (updates.image_path !== undefined ? updates.image_path : updates.imagePath);
     if (photoInput !== undefined) {
       if (photoInput) {
-        const diskPath = savePlayerPhotoToDisk(photoInput, cleanEmail);
-        safePlayerUpdates.photo = String(photoInput).trim();
-        safePlayerUpdates.image_path = diskPath || String(photoInput).trim();
+        const photoStr = String(photoInput).trim();
+        try {
+          savePlayerPhotoToDisk(photoStr, cleanEmail);
+        } catch (_e) {}
+        // Direct DB storage in MongoDB
+        safePlayerUpdates.photo = photoStr;
+        safePlayerUpdates.image_path = photoStr;
       } else {
         safePlayerUpdates.photo = null;
         safePlayerUpdates.image_path = null;
@@ -408,6 +412,9 @@ class PlayerService {
         captain: teamDoc.captain || (squadList[0] ? squadList[0].name : 'Captain'),
         viceCaptain: teamDoc.vice_captain || (squadList[1] ? squadList[1].name : 'Vice Captain'),
         status: teamDoc.status || 'ACTIVE',
+        photo: teamDoc.photo || teamDoc.logo || teamDoc.image_path || null,
+        logo: teamDoc.logo || teamDoc.photo || teamDoc.image_path || null,
+        image_path: teamDoc.image_path || teamDoc.photo || teamDoc.logo || null,
         stats: teamDoc.stats || { matches: 0, won: 0, lost: 0, points: 0, nrr: 0.0 }
       },
       squad: squadList

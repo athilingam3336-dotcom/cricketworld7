@@ -69,6 +69,27 @@ const getSocketUrl = () => {
 export const API_URL = getBaseUrl();
 export const SOCKET_URL = getSocketUrl();
 
+/**
+ * Resolves a full, displayable image URI from any database photo, logo, or image path.
+ * Handles full URLs (http/https), Base64 data URIs, and backend-relative static file paths.
+ */
+export const resolveImageUrl = (pathOrUrl?: string | null): string | null => {
+  if (!pathOrUrl || typeof pathOrUrl !== 'string') return null;
+  const trimmed = pathOrUrl.trim();
+  if (!trimmed || trimmed === 'null' || trimmed === 'undefined') return null;
+  if (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('data:image/') ||
+    trimmed.startsWith('blob:')
+  ) {
+    return trimmed;
+  }
+  const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  const root = SOCKET_URL || getSocketUrl();
+  return `${root}${cleanPath}`;
+};
+
 let token: string | null = null;
 let currentUser: any = null;
 
@@ -743,6 +764,14 @@ export const ScorerApi = {
 
   searchPortal: async (query: string) => {
     return request(`/portal/search?q=${encodeURIComponent(query)}`);
+  },
+
+  getPortalTeamDetails: async (teamId: string) => {
+    return request(`/portal/teams/${encodeURIComponent(teamId)}`);
+  },
+
+  getPortalPlayerDetails: async (playerId: string) => {
+    return request(`/portal/players/${encodeURIComponent(playerId)}`);
   },
 
   submitContact: async (data: { name: string; email: string; subject?: string; message: string }) => {
@@ -1502,6 +1531,13 @@ export const TeamApi = {
     return request('/team/profile', {
       method: 'PUT',
       body: JSON.stringify(updates)
+    });
+  },
+
+  uploadPhoto: async (photo: string) => {
+    return request('/team/upload-photo', {
+      method: 'POST',
+      body: JSON.stringify({ photo, logo: photo, image_path: photo })
     });
   },
 
