@@ -31,6 +31,7 @@ import { io } from 'socket.io-client';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppNavigation } from '../src/navigation/AppNavigator';
 import { ScorerApi, PlayerApi, getCurrentUser, setCurrentUser, setAuthToken, logoutAndClearAllSessions, SOCKET_URL, resolveImageUrl } from '../src/services/api';
+import { getStoredAdminToken, getStoredAdminUser } from '../src/admin/services/adminApi';
 import { MatchHighlightsBanner } from '../src/components/common/MatchHighlightsBanner';
 import {
   bsColors,
@@ -255,6 +256,62 @@ export default function HomeScreen() {
       navigate('Team', { user: sessionUser, teamName: sessionUser.teamName });
     } else {
       navigate('Login');
+    }
+  };
+
+  // ─── ADMIN DEVELOPER EASTER EGG (STEALTH LOGO BALLS PATTERN) ────────────
+  // Pattern: LEFT -> RIGHT -> LEFT -> RIGHT -> CENTER (Strictly 5 taps in order)
+  const secretTapHistory = useRef<string[]>([]);
+  const secretTimeoutRef = useRef<any>(null);
+
+  const handleSecretBallTap = (ball: 'LEFT' | 'RIGHT' | 'CENTER') => {
+    if (secretTimeoutRef.current) {
+      clearTimeout(secretTimeoutRef.current);
+    }
+
+    const EXPECTED_SEQUENCE = ['LEFT', 'RIGHT', 'LEFT', 'RIGHT', 'CENTER'];
+    const currentStep = secretTapHistory.current.length;
+    const expected = EXPECTED_SEQUENCE[currentStep];
+
+    if (ball === expected) {
+      const nextHistory = [...secretTapHistory.current, ball];
+      secretTapHistory.current = nextHistory;
+
+      // When all 5 taps match perfectly:
+      if (nextHistory.length === 5) {
+        secretTapHistory.current = [];
+        // Check if user has an active authenticated admin session on this device/mobile
+        const existingToken = getStoredAdminToken();
+        const existingAdminUser = getStoredAdminUser();
+        const activeUser = getCurrentUser();
+        const isAdmin =
+          (existingAdminUser && (existingAdminUser.role || '').toUpperCase() === 'ADMIN') ||
+          (activeUser && (activeUser.role || '').toUpperCase() === 'ADMIN');
+
+        if (existingToken && isAdmin) {
+          // Already logged in previously on this device
+          navigate('Admin', { user: existingAdminUser || activeUser });
+        } else {
+          // First time or not authenticated -> MUST go to Admin Login to enter credentials
+          navigate('AdminLogin');
+        }
+        return;
+      }
+
+      // If user pauses or stops before reaching 5, reset sequence after 4.5s
+      secretTimeoutRef.current = setTimeout(() => {
+        secretTapHistory.current = [];
+      }, 4500);
+    } else {
+      // Wrong tap or out of sequence -> reset immediately!
+      secretTapHistory.current = [];
+      // If the wrong tap happened to be 'LEFT', it starts a fresh attempt at step 1
+      if (ball === 'LEFT') {
+        secretTapHistory.current = ['LEFT'];
+        secretTimeoutRef.current = setTimeout(() => {
+          secretTapHistory.current = [];
+        }, 4500);
+      }
     }
   };
 
@@ -969,17 +1026,57 @@ export default function HomeScreen() {
               <View style={[styles.oasoHeroCrestCol, isMobile && styles.oasoHeroCrestColMobile]}>
                 <View style={styles.oasoCrestAuraRing} />
                 <View style={styles.oasoCrestAuraRingInner} />
-                <Image
-                  source={IMG_LOGO}
+                
+                {/* Crest Wrapper with Stealth Hotspots */}
+                <View
                   style={[
-                    styles.oasoCrestImage,
-                    isMobile && {
-                      width: Math.min(windowWidth * 0.88, 360),
-                      height: Math.min(windowWidth * 0.88, 360),
+                    styles.stealthCrestWrapper,
+                    {
+                      width: isMobile ? Math.min(windowWidth * 0.88, 360) : 460,
+                      height: isMobile ? Math.min(windowWidth * 0.88, 360) : 460,
                     }
                   ]}
-                  resizeMode="contain"
-                />
+                >
+                  <Image
+                    source={IMG_LOGO}
+                    style={[
+                      styles.oasoCrestImage,
+                      {
+                        width: isMobile ? Math.min(windowWidth * 0.88, 360) : 460,
+                        height: isMobile ? Math.min(windowWidth * 0.88, 360) : 460,
+                      }
+                    ]}
+                    resizeMode="contain"
+                  />
+
+                  {/* Stealth Developer Mode Hotspot: Left Ball */}
+                  <TouchableOpacity
+                    activeOpacity={1}
+                    onPress={() => handleSecretBallTap('LEFT')}
+                    style={[styles.stealthBallHotspot, { left: '4%', top: '32%', width: '22%', height: '22%' }]}
+                    accessibilityRole="none"
+                    accessible={false}
+                  />
+
+                  {/* Stealth Developer Mode Hotspot: Right Ball */}
+                  <TouchableOpacity
+                    activeOpacity={1}
+                    onPress={() => handleSecretBallTap('RIGHT')}
+                    style={[styles.stealthBallHotspot, { right: '4%', top: '31%', width: '22%', height: '22%' }]}
+                    accessibilityRole="none"
+                    accessible={false}
+                  />
+
+                  {/* Stealth Developer Mode Hotspot: Center Ball (near batsman swing) */}
+                  <TouchableOpacity
+                    activeOpacity={1}
+                    onPress={() => handleSecretBallTap('CENTER')}
+                    style={[styles.stealthBallHotspot, { left: '58%', top: '16%', width: '24%', height: '24%' }]}
+                    accessibilityRole="none"
+                    accessible={false}
+                  />
+                </View>
+
                 <View style={styles.oasoCrestFloatingBadge}>
                   <Ionicons name="shield-checkmark" size={13} color="#059669" style={{ marginRight: 5 }} />
                   <Text style={styles.oasoCrestFloatingText}>Official District Governing Body • CFVD</Text>
@@ -4786,6 +4883,19 @@ const styles = StyleSheet.create({
     fontSize: 11.5,
     fontWeight: '700',
     color: '#334155',
+  },
+  stealthCrestWrapper: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    maxWidth: '100%',
+  },
+  stealthBallHotspot: {
+    position: 'absolute',
+    borderRadius: 9999,
+    backgroundColor: 'transparent',
+    zIndex: 50,
+    ...(Platform.OS === 'web' ? ({ cursor: 'default', outline: 'none', WebkitTapHighlightColor: 'transparent' } as any) : {}),
   },
 
   // Hero Section (Prestigious Athletic Federation Atmosphere)
