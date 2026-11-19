@@ -26,6 +26,7 @@ import {
   ViewStyle,
   DimensionValue,
 } from 'react-native';
+import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -292,10 +293,25 @@ export default function HomeScreen() {
 
         if (existingToken && isAdmin) {
           // Already logged in previously on this device
-          navigate('Admin', { user: existingAdminUser || activeUser });
+          try {
+            navigate('Admin', { user: existingAdminUser || activeUser });
+          } catch {
+            router.push('/admin');
+          }
         } else {
           // First time or not authenticated -> MUST go to Admin Login to enter credentials
-          navigate('AdminLogin');
+          try {
+            navigate('AdminLogin');
+          } catch {
+            router.push('/admin-login');
+          }
+          if (Platform.OS === 'web' && typeof window !== 'undefined') {
+            try {
+              router.push('/admin-login');
+            } catch {
+              window.location.href = '/admin-login';
+            }
+          }
         }
         return;
       }
@@ -1042,6 +1058,18 @@ export default function HomeScreen() {
                   ]}
                 />
                 <View
+                  pointerEvents="none"
+                  style={[
+                    styles.oasoCrestAuraRing,
+                    isMobile && {
+                      width: Math.min(windowWidth * 0.88, 340),
+                      height: Math.min(windowWidth * 0.88, 340),
+                      borderRadius: Math.min(windowWidth * 0.88, 340) / 2
+                    }
+                  ]}
+                />
+                <View
+                  pointerEvents="none"
                   style={[
                     styles.oasoCrestAuraRingInner,
                     isMobile && {
@@ -1074,31 +1102,31 @@ export default function HomeScreen() {
                     resizeMode="contain"
                   />
 
-                  {/* Stealth Developer Mode Hotspot: Left Ball */}
+                  {/* Stealth Developer Mode Hotspot: Left Ball (9 o'clock position on crest) */}
                   <TouchableOpacity
-                    activeOpacity={1}
+                    activeOpacity={0.8}
                     onPress={() => handleSecretBallTap('LEFT')}
-                    style={[styles.stealthBallHotspot, { left: '4%', top: '32%', width: '22%', height: '22%' }]}
-                    accessibilityRole="none"
-                    accessible={false}
+                    style={[styles.stealthBallHotspot, { left: '0%', top: '35%', width: '28%', height: '28%' }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Crest emblem left"
                   />
 
-                  {/* Stealth Developer Mode Hotspot: Right Ball */}
+                  {/* Stealth Developer Mode Hotspot: Right Ball (3 o'clock position on crest) */}
                   <TouchableOpacity
-                    activeOpacity={1}
+                    activeOpacity={0.8}
                     onPress={() => handleSecretBallTap('RIGHT')}
-                    style={[styles.stealthBallHotspot, { right: '4%', top: '31%', width: '22%', height: '22%' }]}
-                    accessibilityRole="none"
-                    accessible={false}
+                    style={[styles.stealthBallHotspot, { right: '0%', top: '35%', width: '28%', height: '28%' }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Crest emblem right"
                   />
 
-                  {/* Stealth Developer Mode Hotspot: Center Ball (near batsman swing) */}
+                  {/* Stealth Developer Mode Hotspot: Center Ball (in flight near batsman swing) */}
                   <TouchableOpacity
-                    activeOpacity={1}
+                    activeOpacity={0.8}
                     onPress={() => handleSecretBallTap('CENTER')}
-                    style={[styles.stealthBallHotspot, { left: '58%', top: '16%', width: '24%', height: '24%' }]}
-                    accessibilityRole="none"
-                    accessible={false}
+                    style={[styles.stealthBallHotspot, { left: '52%', top: '23%', width: '28%', height: '26%' }]}
+                    accessibilityRole="button"
+                    accessibilityLabel="Crest emblem center"
                   />
                 </View>
 
@@ -5325,8 +5353,9 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderRadius: 9999,
     backgroundColor: 'transparent',
-    zIndex: 50,
-    ...(Platform.OS === 'web' ? ({ cursor: 'default', outline: 'none', WebkitTapHighlightColor: 'transparent' } as any) : {}),
+    zIndex: 99,
+    elevation: 20,
+    ...(Platform.OS === 'web' ? ({ cursor: 'pointer', outline: 'none', WebkitTapHighlightColor: 'transparent' } as any) : {}),
   },
 
   // Hero Section (Prestigious Athletic Federation Atmosphere)

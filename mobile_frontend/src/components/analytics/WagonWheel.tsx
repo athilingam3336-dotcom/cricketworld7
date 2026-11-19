@@ -360,7 +360,8 @@ export default function WagonWheel({
   const innerCircleR = radius * 0.44; // 30-yard circle
   const pitchW = 18;
   const pitchH = 46;
-  const displaySize = isDesktop ? 420 : Math.min(Math.max(width - (isSmallScreen ? 36 : 56), 230), 380);
+  const maxMobileWheel = Math.max(Math.min(width - 80, 340), 220);
+  const displaySize = isDesktop ? 400 : maxMobileWheel;
 
   // Function to compute (x, y) coordinates for a shot
   const getCoordinates = (angleDeg: number, distancePct: number) => {
@@ -1420,7 +1421,7 @@ const styles = StyleSheet.create({
   cardContainer: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
-    padding: 16,
+    padding: 12,
     borderWidth: 2,
     borderColor: '#fde68a',
     marginVertical: 12,
@@ -1428,7 +1429,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.12,
     shadowRadius: 8,
-    elevation: 3
+    elevation: 3,
+    maxWidth: '100%',
+    overflow: 'hidden'
   },
   cardHeader: {
     flexDirection: 'row',
@@ -1776,14 +1779,18 @@ const styles = StyleSheet.create({
   wheelWrapper: {
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative'
+    position: 'relative',
+    maxWidth: '100%',
+    overflow: 'hidden'
   },
   groundContainer: {
     position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 999,
-    backgroundColor: '#02140a'
+    backgroundColor: '#02140a',
+    maxWidth: '100%',
+    overflow: 'hidden'
   },
   shotTooltip: {
     position: 'absolute',

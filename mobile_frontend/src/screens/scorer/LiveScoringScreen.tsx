@@ -14,6 +14,7 @@ import {
   ActivityIndicator,
   Image
 } from 'react-native';
+import { router } from 'expo-router';
 import { useScorerNavigation } from '../../navigation/ScorerNavigationContext';
 
 const milestoneBatsmanImage = require('../../../assets/milestone_batsman.png');
@@ -5318,8 +5319,11 @@ export default function LiveScoringScreen() {
                   }
                   if (typeof onExit === 'function') {
                     onExit('Home');
-                  } else {
-                    navigate('Dashboard');
+                  }
+                  try {
+                    router.replace('/');
+                  } catch (_e) {
+                    try { router.push('/'); } catch (_e2) {}
                   }
                 }}
               >
