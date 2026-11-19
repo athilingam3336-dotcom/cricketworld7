@@ -294,23 +294,25 @@ export default function HomeScreen() {
         if (existingToken && isAdmin) {
           // Already logged in previously on this device
           try {
-            navigate('Admin', { user: existingAdminUser || activeUser });
-          } catch {
             router.push('/admin');
+          } catch {
+            navigate('Admin', { user: existingAdminUser || activeUser });
           }
         } else {
           // First time or not authenticated -> MUST go to Admin Login to enter credentials
           try {
-            navigate('AdminLogin');
-          } catch {
             router.push('/admin-login');
+          } catch {
+            try {
+              router.push('/admin/login');
+            } catch {
+              navigate('AdminLogin');
+            }
           }
           if (Platform.OS === 'web' && typeof window !== 'undefined') {
             try {
-              router.push('/admin-login');
-            } catch {
               window.location.href = '/admin-login';
-            }
+            } catch {}
           }
         }
         return;
