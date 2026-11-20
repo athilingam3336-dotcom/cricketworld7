@@ -192,8 +192,18 @@ async function verifyMatchPermission(req, res, next) {
 }
 
 // Admin authorization helper (re-checks DB role, status, and token_version on every admin request)
-async function requireAdminAuth(req, res, next) {
+function requireAdminAuth(req, res, next) {
   verifyToken(req, res, async () => {
+    // Immediate role rejection if token is not an admin role
+    const tokenRole = req.user && req.user.role;
+    if (tokenRole && tokenRole !== 'ADMIN' && tokenRole !== 'SUPER_ADMIN' && !req.user.is_super_admin) {
+      return res.status(403).json({
+        success: false,
+        message: 'Forbidden: ADMIN authorization required.',
+        details: `Role '${tokenRole}' cannot access administrative management endpoints.`
+      });
+    }
+
     try {
       await db.initDb();
       const user = await db.models.User.findOne({
