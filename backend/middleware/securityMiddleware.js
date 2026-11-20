@@ -50,7 +50,8 @@ const generalRateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    if (req.method === 'OPTIONS') return true;
+    // All read requests (GET/HEAD) and CORS preflights are completely exempt from rate limiting
+    if (req.method === 'OPTIONS' || req.method === 'GET' || req.method === 'HEAD') return true;
     const url = req.originalUrl || req.url || '';
     return (
       url === '/' ||

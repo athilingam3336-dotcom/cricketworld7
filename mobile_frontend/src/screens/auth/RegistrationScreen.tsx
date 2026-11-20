@@ -760,10 +760,15 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
     setStatusType('info');
 
     try {
-      await ScorerApi.sendRegistrationOtp(email, name, activeRole, activeRole === 'TEAM' ? teamName.trim() : undefined);
+      const otpRes: any = await ScorerApi.sendRegistrationOtp(email, name, activeRole, activeRole === 'TEAM' ? teamName.trim() : undefined);
       setOtpSent(true);
       setResendCooldown(30);
-      const okMsg = `✓ Verification code sent to ${email}! Enter the 6-digit code below.`;
+      if (otpRes?.otp) {
+        setOtpCode(String(otpRes.otp));
+      }
+      const okMsg = otpRes?.otp
+        ? `✓ Verification Code: ${otpRes.otp} (Valid for 10 minutes)`
+        : `✓ Verification code sent to ${email}! Enter the 6-digit code below.`;
       setStatusMessage(okMsg);
       setStatusType('success');
       setOtpModalSuccess(okMsg);

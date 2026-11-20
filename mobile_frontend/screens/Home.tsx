@@ -586,10 +586,10 @@ export default function HomeScreen() {
       // Fallback to active interval
     }
 
-    // High-speed realtime background poll: every 3 seconds for rapid live match sync
+    // Background match sync poll (Socket.IO already handles real-time live events)
     const matchTimer = setInterval(() => {
       loadPublicMatches(false);
-    }, 3000);
+    }, 20000);
 
     const portalTimer = setInterval(() => {
       loadPortalData();
