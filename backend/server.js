@@ -86,7 +86,16 @@ db.initDb().catch(err => {
   console.warn('MongoDB initialization warning:', err.message);
 });
 
-// Health Check
+// Root endpoint & Health Check
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ONLINE',
+    service: 'Cricket Association Management & Scoring API',
+    version: '1.0.0',
+    health: '/api/health'
+  });
+});
+
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'OK',
