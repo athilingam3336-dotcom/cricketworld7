@@ -340,7 +340,39 @@ async function sendSuperAdminVerificationEmail({
 </html>
   `;
 
-  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  // 1. Brevo (Sendinblue) HTTPS API (Port 443 - Sends to ANY recipient without requiring custom domain)
+  const rawBrevo = process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY || '';
+  const brevoApiKey = rawBrevo.replace(/^"|"$/g, '').trim();
+  if (brevoApiKey) {
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          to: [{ email: toEmail, name: userName || 'User' }],
+          subject,
+          htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.messageId) {
+        console.log(`✅ [BREVO EMAIL DELIVERED] To: ${toEmail} | Id: ${data.messageId}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
+      } else {
+        console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+      }
+    } catch (brevoErr) {
+      console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
+    }
+  }
+
+  // 2. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
   const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
   const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
@@ -499,7 +531,39 @@ async function sendAdminApprovalEmail({
 </html>
   `;
 
-  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  // 1. Brevo (Sendinblue) HTTPS API (Port 443 - Sends to ANY recipient without requiring custom domain)
+  const rawBrevo = process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY || '';
+  const brevoApiKey = rawBrevo.replace(/^"|"$/g, '').trim();
+  if (brevoApiKey) {
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          to: [{ email: toEmail, name: userName || 'User' }],
+          subject,
+          htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.messageId) {
+        console.log(`✅ [BREVO EMAIL DELIVERED] To: ${toEmail} | Id: ${data.messageId}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
+      } else {
+        console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+      }
+    } catch (brevoErr) {
+      console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
+    }
+  }
+
+  // 2. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
   const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
   const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
@@ -573,7 +637,39 @@ async function sendOtpEmail({ toEmail, userName, otp }) {
     </div>
   `;
 
-  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  // 1. Brevo (Sendinblue) HTTPS API (Port 443 - Sends to ANY recipient without requiring custom domain)
+  const rawBrevo = process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY || '';
+  const brevoApiKey = rawBrevo.replace(/^"|"$/g, '').trim();
+  if (brevoApiKey) {
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          to: [{ email: toEmail, name: userName || 'User' }],
+          subject,
+          htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.messageId) {
+        console.log(`✅ [BREVO EMAIL DELIVERED] To: ${toEmail} | Id: ${data.messageId}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
+      } else {
+        console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+      }
+    } catch (brevoErr) {
+      console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
+    }
+  }
+
+  // 2. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
   const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
   const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
@@ -639,7 +735,39 @@ async function sendPlayerTeamEmail({ toEmail, playerName, teamNames }) {
   const subject = 'Cricket Association - Your Registered Team Details';
   const textContent = `Hello ${playerName || 'Player'},\n\nYour Registered Team Name:\n${teamListText}\n\nCricket Federation of Virudhunagar District`;
 
-  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  // 1. Brevo (Sendinblue) HTTPS API (Port 443 - Sends to ANY recipient without requiring custom domain)
+  const rawBrevo = process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY || '';
+  const brevoApiKey = rawBrevo.replace(/^"|"$/g, '').trim();
+  if (brevoApiKey) {
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          to: [{ email: toEmail, name: userName || 'User' }],
+          subject,
+          htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.messageId) {
+        console.log(`✅ [BREVO EMAIL DELIVERED] To: ${toEmail} | Id: ${data.messageId}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
+      } else {
+        console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+      }
+    } catch (brevoErr) {
+      console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
+    }
+  }
+
+  // 2. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
   const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
   const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
@@ -799,7 +927,39 @@ async function sendDualAdminApprovalEmail({
 </html>
   `;
 
-  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  // 1. Brevo (Sendinblue) HTTPS API (Port 443 - Sends to ANY recipient without requiring custom domain)
+  const rawBrevo = process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY || '';
+  const brevoApiKey = rawBrevo.replace(/^"|"$/g, '').trim();
+  if (brevoApiKey) {
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          to: [{ email: toEmail, name: userName || 'User' }],
+          subject,
+          htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.messageId) {
+        console.log(`✅ [BREVO EMAIL DELIVERED] To: ${toEmail} | Id: ${data.messageId}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
+      } else {
+        console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+      }
+    } catch (brevoErr) {
+      console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
+    }
+  }
+
+  // 2. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
   const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
   const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
@@ -883,7 +1043,39 @@ async function sendCandidateVerificationEmail({
     </div>
   `;
 
-  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  // 1. Brevo (Sendinblue) HTTPS API (Port 443 - Sends to ANY recipient without requiring custom domain)
+  const rawBrevo = process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY || '';
+  const brevoApiKey = rawBrevo.replace(/^"|"$/g, '').trim();
+  if (brevoApiKey) {
+    try {
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'api-key': brevoApiKey,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          to: [{ email: toEmail, name: userName || 'User' }],
+          subject,
+          htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.messageId) {
+        console.log(`✅ [BREVO EMAIL DELIVERED] To: ${toEmail} | Id: ${data.messageId}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
+      } else {
+        console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+      }
+    } catch (brevoErr) {
+      console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
+    }
+  }
+
+  // 2. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
   const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
   const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
