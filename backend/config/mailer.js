@@ -122,6 +122,43 @@ function resetTransporter() {
  */
 async function verifySmtpConnection() {
   const cfg = getSmtpConfig();
+
+  // Brevo API diagnostic check
+  const rawBrevo = process.env.BREVO_API_KEY || process.env.SENDINBLUE_API_KEY || '';
+  const brevoApiKey = rawBrevo.replace(/^"|"$/g, '').trim();
+  let brevoStatus = {
+    configured: Boolean(brevoApiKey),
+    masked: brevoApiKey ? `${brevoApiKey.slice(0, 8)}****${brevoApiKey.slice(-4)}` : null,
+    valid: false
+  };
+
+  if (brevoApiKey) {
+    try {
+      const resCheck = await fetch('https://api.brevo.com/v3/account', {
+        headers: { 'api-key': brevoApiKey, 'Accept': 'application/json' }
+      });
+      const data = await resCheck.json();
+      if (resCheck.ok && data.email) {
+        brevoStatus.valid = true;
+        brevoStatus.email = data.email;
+        brevoStatus.plan = data.plan;
+      } else {
+        brevoStatus.error = data.message || JSON.stringify(data);
+      }
+    } catch (e) {
+      brevoStatus.error = e.message;
+    }
+  }
+
+  if (brevoStatus.valid) {
+    return {
+      connected: true,
+      provider: 'BREVO',
+      brevo: brevoStatus,
+      message: `Brevo HTTPS API connected & verified for account ${brevoStatus.email}!`
+    };
+  }
+
   const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
   const resendKey = rawResend.replace(/^"|"$/g, '').trim();
 
@@ -365,7 +402,7 @@ async function sendSuperAdminVerificationEmail({
         return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
       } else {
         console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
-        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+        // Fall through to Resend / SMTP if Brevo fails
       }
     } catch (brevoErr) {
       console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
@@ -556,7 +593,7 @@ async function sendAdminApprovalEmail({
         return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
       } else {
         console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
-        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+        // Fall through to Resend / SMTP if Brevo fails
       }
     } catch (brevoErr) {
       console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
@@ -662,7 +699,7 @@ async function sendOtpEmail({ toEmail, userName, otp }) {
         return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
       } else {
         console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
-        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+        // Fall through to Resend / SMTP if Brevo fails
       }
     } catch (brevoErr) {
       console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
@@ -760,7 +797,7 @@ async function sendPlayerTeamEmail({ toEmail, playerName, teamNames }) {
         return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
       } else {
         console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
-        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+        // Fall through to Resend / SMTP if Brevo fails
       }
     } catch (brevoErr) {
       console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
@@ -952,7 +989,7 @@ async function sendDualAdminApprovalEmail({
         return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
       } else {
         console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
-        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+        // Fall through to Resend / SMTP if Brevo fails
       }
     } catch (brevoErr) {
       console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
@@ -1068,7 +1105,7 @@ async function sendCandidateVerificationEmail({
         return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.messageId, provider: 'BREVO' };
       } else {
         console.warn(`⚠️ Brevo API notice for ${toEmail}:`, data);
-        return { success: false, error: data.message || JSON.stringify(data), provider: 'BREVO', otp };
+        // Fall through to Resend / SMTP if Brevo fails
       }
     } catch (brevoErr) {
       console.warn(`⚠️ Brevo fetch error for ${toEmail}:`, brevoErr.message);
