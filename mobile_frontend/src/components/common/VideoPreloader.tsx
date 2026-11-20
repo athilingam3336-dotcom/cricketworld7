@@ -33,10 +33,10 @@ function NativeVideoComponent({ onProgress, onEnded }: NativeVideoComponentProps
       if (player.duration) {
         const pct = (event.currentTime / player.duration) * 100;
         onProgress(Math.min(100, pct));
-      }
-      // Exact synchronization: trigger website reveal at 6.9s when bails lock in with sound
-      if (event.currentTime >= 6.9) {
-        onEnded();
+        // Cinematic synchronization: reveal website at video climax
+        if (event.currentTime >= Math.max(player.duration - 0.4, 0)) {
+          onEnded();
+        }
       }
     });
 
