@@ -811,9 +811,9 @@
             progressBar.style.width = Math.min(100, pct) + '%';
           }
 
-          // Exact Synchronization: When bails lock into the wickets with the clack sound (~6.9s),
-          // trigger the stadium flash and fix the website into place smoothly!
-          if (video.currentTime >= 6.9 && !transitionTriggered) {
+          // Cinematic Synchronization: When the video reaches its climax,
+          // trigger the stadium flash and reveal the website smoothly!
+          if (video.duration && video.currentTime >= Math.max(video.duration - 0.4, 0) && !transitionTriggered) {
             transitionTriggered = true;
             window.__dismissCfvdPreloader(false);
           }
