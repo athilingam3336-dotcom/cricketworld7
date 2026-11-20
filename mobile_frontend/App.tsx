@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, StatusBar, Platform } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { StyleSheet, Platform, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppNavigator, { useAppNavigation, AppScreenName, checkScreenAccess } from './src/navigation/AppNavigator';
 import { getCurrentUser } from './src/services/api';
 import HomeScreen from './screens/Home';
@@ -13,6 +14,8 @@ import AdminDashboardScreen from './src/screens/admin/AdminDashboardScreen';
 import AdminLoginPage from './src/admin/pages/AdminLoginPage';
 import UmpireDashboardScreen from './src/screens/umpire/UmpireDashboardScreen';
 import ScorecardScreen from './src/screens/scorer/ScorecardScreen';
+import TeamPublicProfileScreen from './src/screens/team/TeamPublicProfileScreen';
+import PlayerPublicProfileScreen from './src/screens/player/PlayerPublicProfileScreen';
 import ErrorBoundary from './src/components/common/ErrorBoundary';
 import './src/utils/sweetalert';
 
@@ -41,11 +44,25 @@ function MainAppShell() {
         ) {
           navigate('Umpire', event.data.params);
         } else if (
+          event.data.type === 'OPEN_PLAYER_DETAIL' ||
+          event.data.type === 'OPEN_PLAYER_PROFILE' ||
+          event.data.route?.includes('player-detail') ||
+          event.data.route?.includes('player-profile')
+        ) {
+          navigate('PlayerDetail', event.data.params);
+        } else if (
           event.data.type === 'OPEN_PLAYER_DASHBOARD' ||
           event.data.type === 'OPEN_PLAYER_MODULE' ||
           event.data.route === '/player'
         ) {
           navigate('Player', event.data.params);
+        } else if (
+          event.data.type === 'OPEN_TEAM_DETAIL' ||
+          event.data.type === 'OPEN_TEAM_PROFILE' ||
+          event.data.route?.includes('team-detail') ||
+          event.data.route?.includes('team-profile')
+        ) {
+          navigate('TeamDetail', event.data.params);
         } else if (
           event.data.type === 'OPEN_COACH_DASHBOARD' ||
           event.data.type === 'OPEN_TEAM_DASHBOARD' ||
@@ -139,7 +156,27 @@ function MainAppShell() {
   }
 
   if (currentScreen === 'Scorecard') {
-    return <ScorecardScreen onExit={() => navigate('Home')} initialMatchId={params?.matchId} />;
+    return <ScorecardScreen onExit={() => navigate('Home')} initialMatchId={params?.matchId} initialParams={params} />;
+  }
+
+  if (currentScreen === 'TeamDetail') {
+    return (
+      <TeamPublicProfileScreen
+        onExit={() => navigate('Home')}
+        initialTeamId={params?.teamId || params?.id}
+        initialTeamName={params?.teamName || params?.name}
+      />
+    );
+  }
+
+  if (currentScreen === 'PlayerDetail') {
+    return (
+      <PlayerPublicProfileScreen
+        onExit={() => navigate('Home')}
+        initialPlayerId={params?.playerId || params?.id}
+        initialPlayerName={params?.playerName || params?.name}
+      />
+    );
   }
 
   const currentUser = getCurrentUser();
@@ -147,7 +184,8 @@ function MainAppShell() {
   if (currentScreen === 'Scorer') {
     const access = checkScreenAccess('Scorer', currentUser);
     if (!access.allowed) {
-      return <LoginScreen onExit={() => navigate('Home')} />;
+      navigate('Home');
+      return null;
     }
     return <ScorerNavigator onExit={(target?: any) => navigate(target || 'Home')} initialParams={params} />;
   }
@@ -155,7 +193,8 @@ function MainAppShell() {
   if (currentScreen === 'Umpire') {
     const access = checkScreenAccess('Umpire', currentUser);
     if (!access.allowed) {
-      return <LoginScreen />;
+      navigate('Home');
+      return null;
     }
     return <UmpireDashboardScreen onExit={() => navigate('Home')} initialParams={params} />;
   }
@@ -163,7 +202,8 @@ function MainAppShell() {
   if (currentScreen === 'Player') {
     const access = checkScreenAccess('Player', currentUser);
     if (!access.allowed) {
-      return <LoginScreen />;
+      navigate('Home');
+      return null;
     }
     return <PlayerDashboardScreen onExit={() => navigate('Home')} initialParams={params} />;
   }
@@ -171,7 +211,8 @@ function MainAppShell() {
   if (currentScreen === 'Team' || currentScreen === 'Coach') {
     const access = checkScreenAccess('Team', currentUser);
     if (!access.allowed) {
-      return <LoginScreen />;
+      navigate('Home');
+      return null;
     }
     return <TeamDashboardScreen onExit={() => navigate('Home')} initialParams={params} />;
   }
@@ -191,10 +232,10 @@ function MainAppShell() {
 
   // Home Screen rendered as pure React Native component (no iframe, no bundled.html)
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <StatusBar barStyle="light-content" backgroundColor="#020612" />
+    <View style={styles.container}>
+      <StatusBar style="light" />
       <HomeScreen />
-    </SafeAreaView>
+    </View>
   );
 }
 

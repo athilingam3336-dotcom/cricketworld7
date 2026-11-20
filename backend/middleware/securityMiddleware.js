@@ -78,9 +78,7 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://localhost:5000',
   'http://127.0.0.1:8081',
   'http://127.0.0.1:3000',
-  'http://127.0.0.1:5000',
-  'https://cricketassociation.onrender.com',
-  'https://cricket-backend-dqdm.onrender.com'
+  'http://127.0.0.1:5000'
 ];
 
 function getCorsOptions() {
@@ -96,17 +94,14 @@ function getCorsOptions() {
       if (allowed.includes(origin)) {
         return callback(null, true);
       }
-      // Allow any localhost, 127.0.0.1 on any port, local LAN IP, or Render deployments
+      // Allow any localhost, 127.0.0.1 on any port, or local LAN IP (Expo dev server)
       if (
         /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
-        /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin) ||
-        origin.endsWith('.onrender.com') ||
-        origin.includes('onrender.com') ||
-        origin.includes('cricketassociation')
+        /^https?:\/\/(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/.test(origin)
       ) {
         return callback(null, true);
       }
-      return callback(null, false);
+      return callback(new Error(`CORS policy violation: Origin '${origin}' is not authorized.`));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],

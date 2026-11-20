@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, Image } from 'react-native';
 import PageHeader from '../components/PageHeader';
 import DataTable, { ColumnDef } from '../components/DataTable';
 import StatusBadge from '../components/StatusBadge';
@@ -14,6 +14,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { TeamsIcon, EyeIcon, EditIcon, CloseIcon, CricketBatIcon, UsersIcon } from '../components/Icons';
 import { adminApi } from '../services/adminApi';
 import { useAdminLayout } from '../components/AdminLayout';
+import { resolveImageUrl } from '../../services/api';
 
 export const TeamsPage: React.FC = () => {
   const { showToast } = useAdminLayout();
@@ -97,21 +98,28 @@ export const TeamsPage: React.FC = () => {
   const columns: ColumnDef<any>[] = [
     {
       header: 'Team / Club',
-      accessor: (t) => (
-        <View style={styles.teamCell}>
-          <View style={styles.teamBadge}>
-            <Text style={styles.teamBadgeText}>
-              {(t.shortName || (t.name ? t.name.slice(0, 3) : 'CC')).toUpperCase()}
-            </Text>
+      accessor: (t) => {
+        const logoUrl = resolveImageUrl(t.logo || t.photo || t.image_path);
+        return (
+          <View style={styles.teamCell}>
+            {logoUrl ? (
+              <Image source={{ uri: logoUrl }} style={[styles.teamBadge, { resizeMode: 'cover' }]} />
+            ) : (
+              <View style={styles.teamBadge}>
+                <Text style={styles.teamBadgeText}>
+                  {(t.shortName || (t.name ? t.name.slice(0, 3) : 'CC')).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View>
+              <Text style={styles.teamName}>{t.name}</Text>
+              <Text style={styles.teamSub}>
+                {t.city || 'Virudhunagar'} • Reg #{t.teamId || t.id}
+              </Text>
+            </View>
           </View>
-          <View>
-            <Text style={styles.teamName}>{t.name}</Text>
-            <Text style={styles.teamSub}>
-              {t.city || 'Virudhunagar'} • Reg #{t.teamId || t.id}
-            </Text>
-          </View>
-        </View>
-      )
+        );
+      }
     },
     {
       header: 'Coach / Manager',
@@ -240,7 +248,14 @@ export const TeamsPage: React.FC = () => {
             <View style={styles.modalCard}>
               <View style={styles.modalHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <TeamsIcon size={20} color="#0A2540" />
+                  {resolveImageUrl(activeTeamDetail.logo || activeTeamDetail.photo || activeTeamDetail.image_path) ? (
+                    <Image
+                      source={{ uri: resolveImageUrl(activeTeamDetail.logo || activeTeamDetail.photo || activeTeamDetail.image_path)! }}
+                      style={{ width: 28, height: 28, borderRadius: 6, resizeMode: 'cover' }}
+                    />
+                  ) : (
+                    <TeamsIcon size={20} color="#0A2540" />
+                  )}
                   <Text style={styles.modalTitle}>{activeTeamDetail.name}</Text>
                 </View>
                 <TouchableOpacity onPress={() => setActiveTeamDetail(null)}>
@@ -285,21 +300,31 @@ export const TeamsPage: React.FC = () => {
                     </View>
                   ) : (
                     <View style={styles.squadList}>
-                      {(activeTeamDetail.squad || []).map((player: any, idx: number) => (
-                        <View key={player.id || idx} style={styles.squadItem}>
-                          <View style={styles.squadNumber}>
-                            <Text style={styles.squadNumberText}>
-                              {player.jersey ? `#${player.jersey}` : `${idx + 1}`}
-                            </Text>
+                      {(activeTeamDetail.squad || []).map((player: any, idx: number) => {
+                        const playerPhoto = resolveImageUrl(player.photo || player.image || player.image_path);
+                        return (
+                          <View key={player.id || idx} style={styles.squadItem}>
+                            {playerPhoto ? (
+                              <Image
+                                source={{ uri: playerPhoto }}
+                                style={{ width: 28, height: 28, borderRadius: 14, marginRight: 10, resizeMode: 'cover' }}
+                              />
+                            ) : (
+                              <View style={styles.squadNumber}>
+                                <Text style={styles.squadNumberText}>
+                                  {player.jersey ? `#${player.jersey}` : `${idx + 1}`}
+                                </Text>
+                              </View>
+                            )}
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.squadPlayerName}>{player.name}</Text>
+                              <Text style={styles.squadPlayerRole}>
+                                {(player.role || 'ALL_ROUNDER').replace('_', ' ')}
+                              </Text>
+                            </View>
                           </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.squadPlayerName}>{player.name}</Text>
-                            <Text style={styles.squadPlayerRole}>
-                              {(player.role || 'ALL_ROUNDER').replace('_', ' ')}
-                            </Text>
-                          </View>
-                        </View>
-                      ))}
+                        );
+                      })}
                     </View>
                   )}
                 </View>
@@ -383,7 +408,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#CBD5E1',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    overflow: 'hidden'
   },
   teamBadgeText: {
     color: '#0A2540',

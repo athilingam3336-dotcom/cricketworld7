@@ -10,6 +10,7 @@ const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+const path = require('path');
 
 const db = require('./config/db');
 const { initSocket } = require('./services/socketService');
@@ -24,6 +25,7 @@ const newsRoutes = require('./routes/newsRoutes');
 const portalRoutes = require('./routes/portalRoutes');
 const umpireRoutes = require('./routes/umpireRoutes');
 const tournamentRoutes = require('./routes/tournamentRoutes');
+const cricketLawsRoutes = require('./routes/cricketLawsRoutes');
 
 const helmet = require('helmet');
 const {
@@ -54,8 +56,12 @@ app.use(cors(getCorsOptions()));
 app.options('*', cors(getCorsOptions()));
 
 // Security 4: Payload size limiting (prevent memory exhaustion denial of service)
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '25mb' }));
+app.use(express.urlencoded({ limit: '25mb', extended: true }));
 app.use(cookieParser());
+
+// Static file serving for uploaded photos and media
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Security 5: Global Rate Limiting
 app.use('/api', generalRateLimiter);
@@ -128,6 +134,16 @@ app.use('/api/news', newsRoutes);
 // Portal Public APIs
 app.use('/api/portal', portalRoutes);
 
+// Cricket Laws (MCC 2017 Code – Fourth Edition 2026) APIs
+app.use('/api/cricket-laws', cricketLawsRoutes);
+
+// Public & Resilient Master Settings Dynamic Options API
+const masterSettingController = require('./controllers/masterSettingController');
+app.get('/api/master-settings', (req, res) => masterSettingController.getSettings(req, res));
+app.post('/api/master-settings', (req, res) => masterSettingController.createSetting(req, res));
+app.put('/api/master-settings/:id', (req, res) => masterSettingController.updateSetting(req, res));
+app.delete('/api/master-settings/:id', (req, res) => masterSettingController.deleteSetting(req, res));
+
 // Security 8: Global Error Handler - Debug mode OFF in production
 app.use((err, req, res, next) => {
   console.error('Unhandled Server Error:', err);
@@ -142,6 +158,34 @@ app.use((err, req, res, next) => {
 });
 
 if (require.main === module) {
+  // Gracefully ensure port is free before starting
+  if (process.platform === 'win32') {
+    try {
+      const { execSync } = require('child_process');
+      const output = execSync(`netstat -ano | findstr :${PORT}`).toString();
+      const lines = output.split('\n');
+      const pids = new Set();
+      for (const line of lines) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length >= 5 && parts[1].includes(`:${PORT}`) && parts[3] === 'LISTENING') {
+          const pid = parts[4];
+          if (pid && pid !== String(process.pid) && pid !== '0') {
+            pids.add(pid);
+          }
+        }
+      }
+      pids.forEach((pid) => {
+        try {
+          execSync(`taskkill /F /PID ${pid}`);
+        } catch (_e) {}
+      });
+    } catch (_e) {}
+  }
+
+  server.on('error', (err) => {
+    console.error('Server error:', err);
+  });
+
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`🏏 Cricket Express & Socket.IO Server running on http://localhost:${PORT}`);
   });

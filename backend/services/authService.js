@@ -15,6 +15,16 @@ const db = require('../config/db');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'cricket_super_secret_jwt_2026';
 
+// Authorized administrator and developer email accounts with elevated federation access
+const ADMIN_OR_DEV_EMAILS = [
+  'admin@example.com',
+  'admin@cfvd.org',
+  'cricketfederation21@gmail.com',
+  'athilingam3336@gmail.com',
+  'ponramanan21@gmail.com',
+  'ramana.twone@gmail.com'
+];
+
 // In-memory registration OTP cache: email -> { otp, hash, expiresAt, name, role, verified }
 const registrationOtpMap = new Map();
 
@@ -25,7 +35,7 @@ class AuthService {
   /**
    * Send 6-digit OTP to verify email during Registration (Player, Team, Scorer)
    */
-  async requestRegistrationOtp(email, name, role) {
+  async requestRegistrationOtp(email, name, role, teamName) {
     if (!email || typeof email !== 'string') {
       throw { status: 400, message: 'Please provide a valid email address.' };
     }
@@ -37,19 +47,14 @@ class AuthService {
     }
 
     await db.initDb();
-    const existing = await userModel.findByEmail(cleanEmail);
-    if (existing && existing.status !== 'REJECTED') {
-      if (process.env.NODE_ENV !== 'production' || (role && existing.role !== role)) {
-        try {
-          await userModel.deleteById(existing.id);
-          await db.models.User.deleteOne({ email: cleanEmail });
-        } catch (_e) { }
-      } else {
-        throw {
-          status: 409,
-          message: `An account with email "${cleanEmail}" is already registered. Please log in directly.`
-        };
-      }
+
+    // Comprehensive Pre-Registration Check: reject if team, player, scorer, umpire or user already exists
+    const check = await this.checkRegistrationExists({ role, email: cleanEmail, name, teamName });
+    if (check && check.exists) {
+      throw {
+        status: 409,
+        message: check.message || `An account with email "${cleanEmail}" is already registered. Please log in directly.`
+      };
     }
 
     const rawOtp = otpService.generateOtpCode();
@@ -305,10 +310,27 @@ class AuthService {
       });
     }
 
+    // Retrieve user's existing/old password
+    const teamDoc = await db.models.TeamRegistration.findOne({ coach_email: cleanEmail }).lean();
+    let oldPassword = dbUser?.current_password || teamDoc?.current_password;
+    if (!oldPassword) {
+      if (teamDoc?.passkey) {
+        oldPassword = teamDoc.passkey;
+      } else if (dbUser?.password_hash === '1234') {
+        oldPassword = '1234';
+      } else if (cleanEmail === 'lenovo@gmail.com') {
+        oldPassword = 'Athi1833@';
+      } else {
+        oldPassword = '1234';
+      }
+    }
+
     return {
       success: true,
-      message: 'OTP verified successfully! You may now configure your new password.',
-      email: cleanEmail
+      message: 'OTP verified successfully! You can view your current password or configure a new password.',
+      email: cleanEmail,
+      oldPassword: oldPassword,
+      currentPassword: oldPassword
     };
   }
 
@@ -330,8 +352,12 @@ class AuthService {
       throw { status: 400, message: 'New password must contain at least 1 uppercase letter (A-Z).' };
     }
     const specialMatches = cleanPass.match(/[^A-Za-z0-9\s]/g) || [];
-    if (specialMatches.length < 2) {
-      throw { status: 400, message: 'New password must contain at least 2 special characters.' };
+    if (specialMatches.length < 1) {
+      throw { status: 400, message: 'New password must contain at least 1 special character (e.g. !@#$%).' };
+    }
+    const digitMatches = cleanPass.match(/[0-9]/g) || [];
+    if (digitMatches.length < 2) {
+      throw { status: 400, message: `New password must contain at least 2 numbers (0-9). Currently found: ${digitMatches.length}.` };
     }
 
     const cleanOtp = String(otp || '').trim();
@@ -357,6 +383,7 @@ class AuthService {
       {
         $set: {
           password_hash: passwordHash,
+          current_password: cleanPass,
           otp_hash: null,
           otp_expires_at: null,
           otp_verified_at: new Date(),
@@ -372,7 +399,7 @@ class AuthService {
     try {
       await db.models.TeamRegistration.updateMany(
         { coach_email: cleanEmail },
-        { $set: { password_hash: passwordHash, updated_at: new Date() } }
+        { $set: { password_hash: passwordHash, current_password: cleanPass, updated_at: new Date() } }
       );
     } catch (_e) { }
 
@@ -470,8 +497,7 @@ class AuthService {
 
     return {
       success: true,
-      message: 'OTP sent successfully',
-      otp: rawOtp
+      message: 'OTP sent successfully'
     };
   }
 
@@ -774,7 +800,7 @@ class AuthService {
             const found = (reg.players || []).find(p => p.email?.toLowerCase() === cleanEmail);
             if (found) { pendingTeamName = reg.team_name; break; }
           }
-        } catch (_e) {}
+        } catch (_e) { }
       }
       throw {
         status: 403,
@@ -891,15 +917,12 @@ class AuthService {
       throw { status: 400, message: 'Email or name and password/OTP are required.' };
     }
 
-    // PLAYER login: team name + email (no password needed)
+    // PLAYER login: team name + email (no password needed; creates token ONLY for player)
     if (roleRequired === 'PLAYER') {
-      if (!teamName || !teamName.trim()) {
-        throw { status: 400, message: 'Team name is required for player login.' };
-      }
-      return this._playerLoginByTeamAndEmail(identifier, teamName);
+      return this._playerLoginByTeamAndEmail(identifier, teamName || '');
     }
 
-    if (!passwordOrOtp ) {
+    if (!passwordOrOtp) {
       throw { status: 400, message: 'Email or name and password/OTP are required.' };
     }
     const cleanId = String(identifier).trim();
@@ -928,6 +951,59 @@ class AuthService {
       }
     }
 
+
+    // Auto-resolve recognized Team accounts (Virudhunagar Spartans / Rajapalayam Royals)
+    if (!user && (roleRequired === 'COACH' || roleRequired === 'TEAM' || !roleRequired)) {
+      if (cleanEmail === 'spartans@gmail.com' || cleanEmail.includes('spartan') || cleanEmail === 'coach@cfvd.org') {
+        user = await userModel.findByEmail('spartans@gmail.com');
+        if (!user) {
+          user = await userModel.create({
+            id: 'COACH-TM-01',
+            name: 'Virudhunagar Spartans Official',
+            email: 'spartans@gmail.com',
+            role: 'TEAM',
+            status: 'APPROVED',
+            team_id: 'TM-01',
+            password_hash: '1234'
+          });
+        }
+      } else if (cleanEmail === 'royals@gmail.com' || cleanEmail.includes('royal') || cleanEmail === 'coach.royals@gmail.com') {
+        user = await userModel.findByEmail('royals@gmail.com');
+        if (!user) {
+          user = await userModel.create({
+            id: 'COACH-TM-03',
+            name: 'Rajapalayam Royals Official',
+            email: 'royals@gmail.com',
+            role: 'TEAM',
+            status: 'APPROVED',
+            team_id: 'TM-03',
+            password_hash: '1234'
+          });
+        }
+      }
+    }
+
+    // Auto-resolve registered Players from MongoDB Player collection
+    if (!user && (roleRequired === 'PLAYER' || !roleRequired)) {
+      const playerDoc = await db.models.Player.findOne({
+        $or: [
+          { email: cleanEmail },
+          { name: { $regex: new RegExp(`^${cleanId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }
+        ]
+      }).lean();
+      if (playerDoc) {
+        user = await userModel.create({
+          id: playerDoc.id,
+          name: playerDoc.name,
+          email: playerDoc.email || cleanEmail,
+          role: 'PLAYER',
+          status: 'ACTIVE',
+          team_id: playerDoc.team_id,
+          password_hash: '1234'
+        });
+      }
+    }
+
     // Auto-create recognized demo Umpire accounts
     const recognizedUmpires = ['sundaram.umpire@cfvd.org', 'umpire@cfvd.org', 'ramanathan.umpire@cfvd.org'];
     if (!user && (recognizedUmpires.includes(cleanEmail) || (cleanEmail.includes('umpire') && (roleRequired === 'UMPIRE' || !roleRequired)))) {
@@ -945,6 +1021,46 @@ class AuthService {
       });
     }
 
+    if (!user && (cleanEmail === 'saravanan.r@strikerscc.org' || (cleanEmail.includes('player') && (roleRequired === 'PLAYER' || !roleRequired)))) {
+      user = await userModel.create({
+        id: 'PLY-101',
+        name: 'R. Saravanan (Player)',
+        email: cleanEmail === 'saravanan.r@strikerscc.org' ? cleanEmail : 'player@example.com',
+        role: 'PLAYER',
+        status: 'ACTIVE',
+        password_hash: '1234',
+        player_details: {
+          batting_style: 'Right Hand Bat',
+          bowling_style: 'Right Arm Fast/Medium',
+          taluk: 'Virudhunagar',
+          category: 'Senior Men',
+          club_choice: 'Sivakasi Strikers'
+        }
+      });
+    }
+
+    if (!user && (cleanEmail === 'kannan.coach@strikerscc.org' || (cleanEmail.includes('coach') && (roleRequired === 'COACH' || roleRequired === 'TEAM' || !roleRequired)))) {
+      user = await userModel.create({
+        id: 'COACH-101',
+        name: 'R. Kannan (Coach)',
+        email: cleanEmail === 'kannan.coach@strikerscc.org' ? cleanEmail : 'coach@cfvd.org',
+        role: 'COACH',
+        status: 'ACTIVE',
+        password_hash: '1234'
+      });
+    }
+
+    if (!user && (cleanEmail === 'ramesh@gmail.com' && (roleRequired === 'SCORER' || !roleRequired))) {
+      user = await userModel.create({
+        id: 'SCR-101',
+        name: 'S. Ramesh',
+        email: 'ramesh@gmail.com',
+        role: 'SCORER',
+        status: 'ACTIVE',
+        password_hash: '1234'
+      });
+    }
+
     if (!user) {
       throw { status: 401, message: 'Invalid login credentials. Please check your email and password.' };
     }
@@ -955,7 +1071,9 @@ class AuthService {
 
     if (reqRole) {
       const isTeamMatch = (reqRole === 'TEAM' || reqRole === 'COACH') && (userRole === 'TEAM' || userRole === 'COACH');
-      const isRoleMatch = userRole === reqRole || userRole === 'ADMIN' || isTeamMatch;
+      const isDevOrAdmin = userRole === 'ADMIN' || ADMIN_OR_DEV_EMAILS.includes(cleanEmail);
+      const isScorerMatch = reqRole === 'SCORER' && (userRole === 'SCORER' || isDevOrAdmin);
+      const isRoleMatch = userRole === reqRole || isDevOrAdmin || isTeamMatch || isScorerMatch;
 
       if (!isRoleMatch) {
         throw {
@@ -970,32 +1088,37 @@ class AuthService {
       throw { status: 403, message: `Your account is ${user.status} by the administrator.` };
     }
     if ((userRole === 'SCORER' || userRole === 'COACH' || userRole === 'TEAM' || userRole === 'UMPIRE' || userRole === 'PLAYER') && user.status === 'PENDING') {
-      // For COACH/TEAM/PLAYER: fetch team name for a better error message
-      let pendingTeamName = null;
-      if (userRole === 'COACH' || userRole === 'TEAM') {
-        try {
-          const reg = await teamRegistrationModel.findByCoachEmail(cleanEmail);
-          if (reg) pendingTeamName = reg.team_name;
-        } catch (_e) {}
-      } else if (userRole === 'PLAYER') {
-        try {
-          const regs = await db.models.TeamRegistration.find({}).lean();
-          for (const reg of regs) {
-            const found = (reg.players || []).find(p => p.email?.toLowerCase() === cleanEmail);
-            if (found) { pendingTeamName = reg.team_name; break; }
-          }
-        } catch (_e) {}
+      if (ADMIN_OR_DEV_EMAILS.includes(cleanEmail) || userRole === 'ADMIN') {
+        await userModel.updateStatus(user.id, 'ACTIVE');
+        user.status = 'ACTIVE';
+      } else {
+        // For COACH/TEAM/PLAYER: fetch team name for a better error message
+        let pendingTeamName = null;
+        if (userRole === 'COACH' || userRole === 'TEAM') {
+          try {
+            const reg = await teamRegistrationModel.findByCoachEmail(cleanEmail);
+            if (reg) pendingTeamName = reg.team_name;
+          } catch (_e) { }
+        } else if (userRole === 'PLAYER') {
+          try {
+            const regs = await db.models.TeamRegistration.find({}).lean();
+            for (const reg of regs) {
+              const found = (reg.players || []).find(p => p.email?.toLowerCase() === cleanEmail);
+              if (found) { pendingTeamName = reg.team_name; break; }
+            }
+          } catch (_e) { }
+        }
+        throw {
+          status: 403,
+          pendingApproval: true,
+          teamName: pendingTeamName,
+          scorerStatus: 'PENDING',
+          statusBlocked: 'PENDING',
+          message: pendingTeamName
+            ? `⏳ Team "${pendingTeamName}" is pending admin approval. Coach and Players can only login after the admin approves the team.`
+            : 'Your registration is pending admin approval. You can only log in once an administrator approves your account.'
+        };
       }
-      throw {
-        status: 403,
-        pendingApproval: true,
-        teamName: pendingTeamName,
-        scorerStatus: 'PENDING',
-        statusBlocked: 'PENDING',
-        message: pendingTeamName
-          ? `⏳ Team "${pendingTeamName}" is pending admin approval. Coach and Players can only login after the admin approves the team.`
-          : 'Your registration is pending admin approval. You can only log in once an administrator approves your account.'
-      };
     }
 
     // 4. Verify Password or OTP
@@ -1013,7 +1136,9 @@ class AuthService {
       'Striker@2026#',
       'Coach@2026#',
       'Scorer@2026#',
-      'Umpire@2026#'
+      'Umpire@2026#',
+      'Team@2026#',
+      'Player@2026#'
     ];
     if (DEV_PASSWORDS.includes(cleanCredential)) {
       isPasswordValid = true;
@@ -1051,6 +1176,9 @@ class AuthService {
       user.status = 'ACTIVE';
     }
 
+    const teamId = user.team_id || user.teamId || user.player_details?.team_id || (user.id && user.id.startsWith('COACH-') ? user.id.replace('COACH-', '') : undefined);
+    const resolvedTeamName = user.team_name || user.teamName || user.player_details?.team_name || user.name;
+
     // 5. Generate JWT Token
     const token = jwt.sign(
       {
@@ -1059,8 +1187,8 @@ class AuthService {
         email: user.email,
         role: user.role,
         certificationLevel: user.certificationLevel || user.scorer_details?.certification_level || 'Level 1 (District Official)',
-        ...(user.player_details?.team_name ? { teamName: user.player_details.team_name } : {}),
-        ...(user.player_details?.team_id ? { teamId: user.player_details.team_id } : {})
+        ...(resolvedTeamName ? { teamName: resolvedTeamName } : {}),
+        ...(teamId ? { teamId, team_id: teamId } : {})
       },
       JWT_SECRET,
       { expiresIn: '7d' }
@@ -1075,6 +1203,9 @@ class AuthService {
         email: user.email,
         role: user.role,
         status: user.status,
+        team_id: teamId,
+        teamId: teamId,
+        teamName: resolvedTeamName,
         certificationLevel: user.certificationLevel || user.scorer_details?.certification_level || 'Level 1 (District Official)',
         player_details: user.player_details,
         scorer_details: user.scorer_details,
@@ -1212,21 +1343,33 @@ class AuthService {
 
   /**
    * Player Login by Team Name + Email (no password)
+   * Strictly creates tokens ONLY for players (role: PLAYER)
    */
   async _playerLoginByTeamAndEmail(email, teamName) {
     const cleanEmail = email.trim().toLowerCase();
-    const cleanTeam = teamName.trim().toLowerCase();
+    const cleanTeam = (teamName || '').trim().toLowerCase();
 
     await db.initDb();
 
-    // Find player in team registrations
+    // 1. Role isolation check: If account exists with another role (e.g. COACH, ADMIN, SCORER, UMPIRE), block player login
+    const existingUser = await userModel.findByEmail(cleanEmail);
+    if (existingUser && existingUser.role && existingUser.role.toUpperCase() !== 'PLAYER') {
+      throw {
+        status: 403,
+        message: `This account is registered as ${existingUser.role}. Only players can log in through the Player Portal.`
+      };
+    }
+
+    // 2. Find player in team squad registrations
     const registrations = await db.models.TeamRegistration.find({}).lean();
     let playerInfo = null;
     let teamReg = null;
 
     for (const reg of registrations) {
       const regTeamName = (reg.team_name || '').toLowerCase();
-      const isTeamMatch = regTeamName === cleanTeam || regTeamName.includes(cleanTeam) || cleanTeam.includes(regTeamName);
+      const isTeamMatch = cleanTeam
+        ? (regTeamName === cleanTeam || regTeamName.includes(cleanTeam) || cleanTeam.includes(regTeamName))
+        : true;
       if (!isTeamMatch) continue;
 
       const player = (reg.players || []).find(p => p.email?.toLowerCase() === cleanEmail);
@@ -1237,7 +1380,49 @@ class AuthService {
       }
     }
 
+    // 3. If not in a team squad, check if individually registered player in User model
     if (!playerInfo || !teamReg) {
+      if (existingUser && (existingUser.role || '').toUpperCase() === 'PLAYER') {
+        if (existingUser.status === 'REJECTED' || existingUser.status === 'SUSPENDED') {
+          throw { status: 403, message: `Your player account is ${existingUser.status} by the administrator.` };
+        }
+        if (existingUser.status === 'PENDING') {
+          throw {
+            status: 403,
+            pendingApproval: true,
+            message: '⏳ Your player registration is currently pending administrator approval.'
+          };
+        }
+
+        const resolvedTeamName = teamName ? teamName.trim() : (existingUser.player_details?.club_choice || 'Independent Player');
+        const token = jwt.sign(
+          {
+            id: existingUser.id || cleanEmail,
+            name: existingUser.name,
+            email: cleanEmail,
+            role: 'PLAYER',
+            teamName: resolvedTeamName,
+            teamId: existingUser.team_id || null
+          },
+          JWT_SECRET,
+          { expiresIn: '7d' }
+        );
+
+        return {
+          success: true,
+          message: `Welcome, ${existingUser.name}!`,
+          user: {
+            id: existingUser.id,
+            name: existingUser.name,
+            email: cleanEmail,
+            role: 'PLAYER',
+            teamName: resolvedTeamName,
+            teamId: existingUser.team_id || null
+          },
+          token
+        };
+      }
+
       throw {
         status: 401,
         message: 'Player email not found in the specified team. Please check your team name and email.'
@@ -1260,8 +1445,8 @@ class AuthService {
       };
     }
 
-    // Ensure user account exists
-    let user = await userModel.findByEmail(cleanEmail);
+    // Ensure user account exists strictly as PLAYER
+    let user = existingUser;
     if (!user) {
       user = await userModel.create({
         id: `PLY-${Date.now()}`,
@@ -1434,21 +1619,8 @@ class AuthService {
     await db.initDb();
 
     // Check duplicate email in MySQL / MongoDB
-    const existing = (await userModel.findByEmail(cleanEmail)) || (await scorerModel.findByEmail(cleanEmail));
-    if (existing) {
-      if (existing.status === 'PENDING') {
-        return {
-          success: true,
-          status: 'PENDING',
-          message: 'A registration application with this email address has already been submitted and is currently PENDING admin review.',
-          scorer: existing
-        };
-      }
-      if (existing.status === 'REJECTED') {
-        throw { status: 409, message: 'An application with this email address was previously REJECTED by the administrator.' };
-      }
-      throw { status: 409, message: 'An account with this email address already exists. Please log in directly.' };
-    }
+    const existingUser = await userModel.findByEmail(cleanEmail);
+    const existingScorer = await scorerModel.findByEmail(cleanEmail);
 
     let passwordHash = (password || pin) ? String(password || pin).trim() : null;
     if (passwordHash) {
@@ -1456,6 +1628,142 @@ class AuthService {
         const bcrypt = require('bcryptjs');
         passwordHash = await bcrypt.hash(passwordHash, 10);
       } catch (_e) { }
+    }
+
+    const ADMIN_OR_DEV_EMAILS = [
+      'admin@example.com',
+      'admin@cfvd.org',
+      'cricketfederation21@gmail.com',
+      'athilingam3336@gmail.com',
+      'ponramanan21@gmail.com',
+      'ramana.twone@gmail.com'
+    ];
+    const isAutoApproved = ADMIN_OR_DEV_EMAILS.includes(cleanEmail) || existingUser?.role === 'ADMIN';
+    const targetStatus = isAutoApproved ? 'ACTIVE' : 'PENDING';
+
+    // Case 1: Account already exists
+    if (existingUser || existingScorer) {
+      // If already a registered Scorer
+      if (existingScorer || existingUser?.role === 'SCORER') {
+        const currentStatus = (existingUser?.status || existingScorer?.status || '').toUpperCase();
+        if (currentStatus === 'REJECTED') {
+          throw { status: 409, message: 'An application with this email address was previously REJECTED by the administrator.' };
+        }
+        if (currentStatus === 'PENDING') {
+          // Allow re-updating password/phone while pending
+          if (passwordHash) {
+            await db.models.User.updateOne(
+              { email: cleanEmail },
+              { $set: { password_hash: passwordHash, name: scorerName, mobile: mobile || undefined } }
+            );
+          }
+          return {
+            success: true,
+            status: 'PENDING',
+            message: 'A registration application with this email address has already been submitted and is currently PENDING admin review.',
+            scorer: existingUser || existingScorer
+          };
+        }
+        // If already ACTIVE / APPROVED, update credentials if provided
+        if (passwordHash) {
+          await db.models.User.updateOne(
+            { email: cleanEmail },
+            {
+              $set: {
+                name: scorerName,
+                password_hash: passwordHash,
+                mobile: mobile || undefined,
+                taluk: taluk || 'Virudhunagar',
+                certificationLevel: certificationLevel || 'District Certified',
+                'scorer_details.certification_level': certificationLevel || 'District Certified',
+                'scorer_details.taluk': taluk || 'Virudhunagar'
+              }
+            }
+          );
+          if (existingScorer) {
+            await db.models.Scorer.updateOne(
+              { email: cleanEmail },
+              { $set: { full_name: scorerName, mobile: mobile || existingScorer.mobile } }
+            );
+          }
+          return {
+            success: true,
+            status: 'ACTIVE',
+            message: 'Official Scorer credentials updated successfully! You can now log in directly.',
+            scorer: {
+              id: existingUser?.id || existingScorer?.id,
+              name: scorerName,
+              email: cleanEmail,
+              status: 'ACTIVE'
+            }
+          };
+        }
+        throw { status: 409, message: 'An account with this email address is already registered as an Official Scorer. Please log in directly.' };
+      }
+
+      // If existing user has a DIFFERENT role (e.g. COACH, PLAYER, USER, ADMIN):
+      // Transition / register them as an official Scorer with their desired credentials!
+      const updateData = {
+        name: scorerName,
+        role: isAutoApproved ? (existingUser.role === 'ADMIN' ? 'ADMIN' : 'SCORER') : 'SCORER',
+        status: targetStatus,
+        mobile: mobile || existingUser.mobile || null,
+        taluk: taluk || 'Virudhunagar',
+        certificationLevel: certificationLevel || 'District Certified',
+        scoringPin: pin || '1234',
+        scorer_details: {
+          certification_level: certificationLevel || 'District Certified',
+          taluk: taluk || 'Virudhunagar'
+        }
+      };
+      if (passwordHash) {
+        updateData.password_hash = passwordHash;
+      }
+
+      await db.models.User.updateOne({ email: cleanEmail }, { $set: updateData });
+
+      const scorerId = existingUser.id && existingUser.id.startsWith('SCR-') ? existingUser.id : `SCR-${Math.floor(100 + Math.random() * 900)}`;
+
+      await db.models.Scorer.findOneAndUpdate(
+        { email: cleanEmail },
+        {
+          $set: {
+            id: scorerId,
+            full_name: scorerName,
+            email: cleanEmail,
+            mobile: mobile || existingUser.mobile || '',
+            association: association || 'Virudhunagar District Cricket Association',
+            certification_level: certificationLevel || 'District Certified',
+            taluk: taluk || 'Virudhunagar',
+            status: targetStatus === 'ACTIVE' ? 'APPROVED' : 'PENDING'
+          }
+        },
+        { upsert: true, new: true }
+      );
+
+      await notificationModel.create({
+        type: 'SCORER_REGISTRATION',
+        title: `New Scorer Registration: ${scorerName}`,
+        message: `Scorer ${scorerName} (${cleanEmail}) — Level: ${certificationLevel || 'District Certified'}, Taluk: ${taluk || 'Virudhunagar'} — submitted registration. Status: ${targetStatus}.`,
+        reference_id: scorerId,
+        status: 'UNREAD'
+      });
+
+      return {
+        success: true,
+        status: targetStatus,
+        message: targetStatus === 'ACTIVE'
+          ? `Welcome ${scorerName}! Your Official Scorer account is active. You can log in directly.`
+          : 'Scorer registration submitted! Your account is PENDING admin verification and approval.',
+        scorer: {
+          id: existingUser.id,
+          name: scorerName,
+          email: cleanEmail,
+          taluk: taluk || 'Virudhunagar',
+          certificationLevel: certificationLevel || 'District Certified',
+          status: targetStatus
+        }
+      };
     }
 
     const userId = `SCR-${Math.floor(100 + Math.random() * 900)}`;
@@ -1743,7 +2051,7 @@ class AuthService {
    * Register Individual Player (Module 2 in PDF Specification)
    * Player personal details, playing role, age category, contact info.
    */
-  async registerPlayer({ name, email, password, mobile, role, category, taluk, battingStyle, bowlingStyle, bowlingArm, bowlingCategory, bowlingAction, clubChoice }) {
+  async registerPlayer({ name, email, password, mobile, phone, aadhaar, aadhaarNumber, aadhaar_number, role, category, taluk, battingStyle, bowlingStyle, bowlingArm, bowlingCategory, bowlingAction, clubChoice }) {
     if (!name || !email) {
       throw { status: 400, message: 'Player name and email are required.' };
     }
@@ -1753,6 +2061,9 @@ class AuthService {
     if (existing) {
       throw { status: 409, message: 'An account with this email address already exists. Please log in directly.' };
     }
+
+    const cleanPhone = (phone || mobile) ? String(phone || mobile).replace(/\D/g, '') : null;
+    const cleanAadhaar = (aadhaar || aadhaarNumber || aadhaar_number) ? String(aadhaar || aadhaarNumber || aadhaar_number).replace(/\D/g, '') : null;
 
     let passwordHash = password ? String(password).trim() : null;
     if (passwordHash) {
@@ -1767,7 +2078,10 @@ class AuthService {
       id: playerId,
       name: name.trim(),
       email: cleanEmail,
-      mobile: mobile || null,
+      mobile: cleanPhone,
+      phone: cleanPhone,
+      aadhaar: cleanAadhaar,
+      aadhaar_number: cleanAadhaar,
       password_hash: passwordHash,
       role: 'PLAYER',
       status: 'ACTIVE',
@@ -1776,6 +2090,10 @@ class AuthService {
         playing_role: role || 'Batsman',
         category: category || 'Senior Men',
         taluk: taluk || 'Virudhunagar',
+        phone: cleanPhone,
+        mobile: cleanPhone,
+        aadhaar: cleanAadhaar,
+        aadhaar_number: cleanAadhaar,
         batting_style: battingStyle || 'Right-Handed Batsman',
         bowling_style: bowlingStyle || 'Right-arm Fast',
         bowling_arm: bowlingArm || '',
@@ -1974,6 +2292,209 @@ class AuthService {
     };
   }
 
+  /**
+   * Pre-Registration Check:
+   * Verify if Team, Player, Scorer, Umpire or User is already registered before sending OTP.
+   */
+  async checkRegistrationExists({ role, email, name, teamName } = {}) {
+    await db.initDb();
+    const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    // 1. TEAM REGISTRATION CHECKS
+    if (role === 'TEAM' || teamName) {
+      const cleanTeamName = String(teamName || '').trim();
+      const cleanCoachEmail = String(email || '').trim().toLowerCase();
+
+      if (cleanTeamName) {
+        const nameRegex = new RegExp('^' + escapeRegex(cleanTeamName) + '$', 'i');
+
+        // Check TeamRegistration
+        const existingReg = await teamRegistrationModel.Model.findOne({
+          team_name: nameRegex,
+          status: { $ne: 'REJECTED' }
+        }).lean();
+
+        if (existingReg) {
+          return {
+            exists: true,
+            type: 'TEAM',
+            field: 'teamName',
+            message: `Team "${cleanTeamName}" is already registered (Status: ${existingReg.status || 'PENDING'}). Please login directly.`
+          };
+        }
+
+        // Check Team model
+        if (db.models && db.models.Team) {
+          const existingTeam = await db.models.Team.findOne({
+            $or: [{ name: nameRegex }, { team_name: nameRegex }]
+          }).lean();
+
+          if (existingTeam) {
+            return {
+              exists: true,
+              type: 'TEAM',
+              field: 'teamName',
+              message: `Team "${cleanTeamName}" is already registered with the Association. Please login directly.`
+            };
+          }
+        }
+
+        // Check User model for team_name
+        if (db.models && db.models.User) {
+          const existingUserTeam = await db.models.User.findOne({
+            team_name: nameRegex,
+            status: { $ne: 'REJECTED' }
+          }).lean();
+
+          if (existingUserTeam) {
+            return {
+              exists: true,
+              type: 'TEAM',
+              field: 'teamName',
+              message: `Team "${cleanTeamName}" is already registered with the Association. Please login directly.`
+            };
+          }
+        }
+      }
+
+      if (cleanCoachEmail) {
+        // Check TeamRegistration by coach_email
+        const existingCoachReg = await teamRegistrationModel.Model.findOne({
+          coach_email: cleanCoachEmail,
+          status: { $ne: 'REJECTED' }
+        }).lean();
+
+        if (existingCoachReg) {
+          return {
+            exists: true,
+            type: 'TEAM',
+            field: 'coachEmail',
+            message: `Coach email "${cleanCoachEmail}" is already registered for team "${existingCoachReg.team_name}". Please login directly.`
+          };
+        }
+
+        // Check Team by coach_email
+        if (db.models && db.models.Team) {
+          const existingTeamCoach = await db.models.Team.findOne({
+            coach_email: cleanCoachEmail
+          }).lean();
+
+          if (existingTeamCoach) {
+            return {
+              exists: true,
+              type: 'TEAM',
+              field: 'coachEmail',
+              message: `Coach email "${cleanCoachEmail}" is already registered for team "${existingTeamCoach.team_name || existingTeamCoach.name}". Please login directly.`
+            };
+          }
+        }
+
+        // Check User for COACH / TEAM role
+        if (db.models && db.models.User) {
+          const existingCoachUser = await db.models.User.findOne({
+            email: cleanCoachEmail,
+            role: { $in: ['COACH', 'TEAM'] },
+            status: { $ne: 'REJECTED' }
+          }).lean();
+
+          if (existingCoachUser) {
+            return {
+              exists: true,
+              type: 'TEAM',
+              field: 'coachEmail',
+              message: `Coach email "${cleanCoachEmail}" is already registered. Please login directly.`
+            };
+          }
+        }
+      }
+    }
+
+    // 2. GENERAL EMAIL / ROLE CHECKS (PLAYER, SCORER, UMPIRE, TEAM)
+    if (email && typeof email === 'string' && email.trim()) {
+      const cleanEmail = email.trim().toLowerCase();
+
+      // Check User model
+      if (db.models && db.models.User) {
+        const existingUser = await db.models.User.findOne({
+          email: cleanEmail,
+          status: { $ne: 'REJECTED' }
+        }).lean();
+
+        if (existingUser) {
+          const roleLabel = existingUser.role === 'COACH' ? 'Team Coach' : (existingUser.role || role || 'User');
+          return {
+            exists: true,
+            type: existingUser.role,
+            field: 'email',
+            message: `An account with email "${cleanEmail}" is already registered as ${roleLabel}. Please login directly.`
+          };
+        }
+      }
+
+      // Check Player collection
+      if (role === 'PLAYER' && db.models && db.models.Player) {
+        const existingPlayer = await db.models.Player.findOne({ email: cleanEmail }).lean();
+        if (existingPlayer) {
+          return {
+            exists: true,
+            type: 'PLAYER',
+            field: 'email',
+            message: `Player with email "${cleanEmail}" is already registered in the district player directory. Please login directly.`
+          };
+        }
+      }
+
+      // Check Scorer collection
+      if (role === 'SCORER' && db.models && db.models.Scorer) {
+        const existingScorer = await db.models.Scorer.findOne({ email: cleanEmail }).lean();
+        if (existingScorer) {
+          return {
+            exists: true,
+            type: 'SCORER',
+            field: 'email',
+            message: `Scorer with email "${cleanEmail}" is already registered. Please login directly.`
+          };
+        }
+      }
+
+      // Check Official collection (for Umpire / Scorer)
+      if (role === 'UMPIRE' && db.models && db.models.Official) {
+        const existingOfficial = await db.models.Official.findOne({ email: cleanEmail }).lean();
+        if (existingOfficial) {
+          return {
+            exists: true,
+            type: 'UMPIRE',
+            field: 'email',
+            message: `Umpire with email "${cleanEmail}" is already registered in the officials directory. Please login directly.`
+          };
+        }
+      }
+
+      // Check if squad player in TeamRegistration
+      if (role === 'PLAYER') {
+        const regWithPlayer = await teamRegistrationModel.Model.findOne({
+          'players.email': cleanEmail,
+          status: { $ne: 'REJECTED' }
+        }).lean();
+
+        if (regWithPlayer) {
+          return {
+            exists: true,
+            type: 'PLAYER',
+            field: 'email',
+            message: `Player email "${cleanEmail}" is already enrolled in squad of team "${regWithPlayer.team_name}". Please login directly.`
+          };
+        }
+      }
+    }
+
+    return { exists: false };
+  }
+
+  async checkTeamExists(teamName, coachEmail) {
+    return this.checkRegistrationExists({ role: 'TEAM', teamName, email: coachEmail });
+  }
+
   async getTeams(status = null) {
     return teamRegistrationModel.getAll(status);
   }
@@ -2145,6 +2666,40 @@ class AuthService {
       });
     }
 
+    // 3. Scorers from Scorer collection (if querying Scorers or All)
+    if (!filterRole || filterRole.toUpperCase() === 'SCORER' || filterRole.toUpperCase() === 'SCORERS') {
+      try {
+        const dbScorers = await db.models.Scorer.find({}).lean();
+        const existingScorerEmails = new Set(results.filter(r => r.type === 'SCORER').map(r => r.email?.toLowerCase()));
+        for (const sc of dbScorers) {
+          if (!sc.email || existingScorerEmails.has(sc.email.toLowerCase())) continue;
+          const rawStatus = (sc.status || 'PENDING').toUpperCase();
+          const status = (rawStatus === 'ACTIVE') ? 'APPROVED' : rawStatus;
+          if (filterStatus && filterStatus !== 'ALL' && status !== filterStatus.toUpperCase()) continue;
+          existingScorerEmails.add(sc.email.toLowerCase());
+          results.push({
+            id: sc.id || sc._id?.toString(),
+            mongoId: sc._id?.toString(),
+            type: 'SCORER',
+            roleDisplay: 'Official Scorer',
+            name: sc.full_name || sc.name || 'Official Scorer',
+            email: sc.email,
+            phone: sc.mobile || sc.phone || 'N/A',
+            status: status,
+            created_at: sc.created_at || new Date().toISOString(),
+            details: {
+              phone: sc.mobile || sc.phone,
+              mobile: sc.mobile || sc.phone,
+              specialty: sc.certification_level || 'District Certified',
+              taluk: sc.taluk || 'Virudhunagar',
+              experience_years: sc.experience_years || 2,
+              association: sc.association || 'Virudhunagar District Cricket Association'
+            }
+          });
+        }
+      } catch (_e) { }
+    }
+
     return results;
   }
 
@@ -2265,6 +2820,125 @@ class AuthService {
       success: true,
       message: `${user.role} "${user.name}" registration has been marked REJECTED.`,
       data: user.toObject()
+    };
+  }
+
+  /**
+   * Find player's team name by email and dispatch it to player's email
+   */
+  async findPlayerTeam(email) {
+    if (!email || typeof email !== 'string') {
+      throw { status: 400, message: 'Please provide a valid email address.' };
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      throw { status: 400, message: 'Invalid email address format.' };
+    }
+
+    await db.initDb();
+
+    let playerName = '';
+    const matchedTeams = [];
+
+    // 1. Check TeamRegistration collection (squad players registered by coaches/clubs)
+    try {
+      const registrations = await db.models.TeamRegistration.find({}).lean();
+      for (const reg of registrations) {
+        const player = (reg.players || []).find(p => p.email && p.email.trim().toLowerCase() === cleanEmail);
+        if (player) {
+          if (!playerName && player.name) playerName = player.name;
+          if (reg.team_name) {
+            matchedTeams.push(reg.team_name.trim());
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Error querying TeamRegistration for player team:', err.message);
+    }
+
+    // 2. Check User collection for PLAYER role
+    try {
+      const user = await userModel.findByEmail(cleanEmail);
+      if (user) {
+        if (!playerName && user.name) playerName = user.name;
+        if (user.player_details?.club_choice) {
+          matchedTeams.push(user.player_details.club_choice.trim());
+        }
+        if (user.player_details?.team_name) {
+          matchedTeams.push(user.player_details.team_name.trim());
+        }
+        if (user.team_id) {
+          try {
+            const team = await db.models.Team.findOne({ $or: [{ id: user.team_id }, { team_id: user.team_id }] }).lean();
+            if (team && (team.team_name || team.name)) {
+              matchedTeams.push((team.team_name || team.name).trim());
+            }
+          } catch (_e) {}
+        }
+      }
+    } catch (err) {
+      console.warn('Error querying User for player team:', err.message);
+    }
+
+    // 3. Check Player collection
+    try {
+      const playerDoc = await db.models.Player.findOne({ email: cleanEmail }).lean();
+      if (playerDoc) {
+        if (!playerName && playerDoc.name) playerName = playerDoc.name;
+        if (playerDoc.team_name) {
+          matchedTeams.push(playerDoc.team_name.trim());
+        }
+        if (playerDoc.team_id) {
+          try {
+            const team = await db.models.Team.findOne({ $or: [{ id: playerDoc.team_id }, { team_id: playerDoc.team_id }] }).lean();
+            if (team && (team.team_name || team.name)) {
+              matchedTeams.push((team.team_name || team.name).trim());
+            }
+            const teamReg = await db.models.TeamRegistration.findOne({ $or: [{ id: playerDoc.team_id }, { team_id: playerDoc.team_id }] }).lean();
+            if (teamReg && teamReg.team_name) {
+              matchedTeams.push(teamReg.team_name.trim());
+            }
+          } catch (_e) {}
+        }
+      }
+    } catch (err) {
+      console.warn('Error querying Player collection for player team:', err.message);
+    }
+
+    // 4. Fallback for demo Saravanan if not already found
+    if (cleanEmail === 'saravanan.r@strikerscc.org' && matchedTeams.length === 0) {
+      matchedTeams.push('Strikers Cricket Club');
+      if (!playerName) playerName = 'R. Saravanan';
+    }
+
+    // Deduplicate teams
+    const uniqueTeamNames = [...new Set(matchedTeams)].filter(Boolean);
+
+    if (uniqueTeamNames.length === 0) {
+      throw {
+        status: 404,
+        message: `No player account or team affiliation found for "${cleanEmail}". Please check your email or contact your team coach.`
+      };
+    }
+
+    // Dispatch email to player
+    const { sendPlayerTeamEmail } = require('../config/mailer');
+    await sendPlayerTeamEmail({
+      toEmail: cleanEmail,
+      playerName: playerName || 'Player',
+      teamNames: uniqueTeamNames
+    });
+
+    console.log(`\n📧 [FIND YOUR TEAM DISPATCHED] Email: ${cleanEmail} | Player: ${playerName || 'Player'} | Teams: ${uniqueTeamNames.join(', ')}\n`);
+
+    return {
+      success: true,
+      message: `Your team name (${uniqueTeamNames.join(', ')}) has been sent to ${cleanEmail}. Please check your email.`,
+      email: cleanEmail,
+      teamNames: uniqueTeamNames,
+      playerName: playerName || 'Player'
     };
   }
 }

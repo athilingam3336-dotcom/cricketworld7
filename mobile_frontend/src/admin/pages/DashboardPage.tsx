@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, useWindowDimensions } from 'react-native';
 import {
   UsersIcon,
   PlayersIcon,
@@ -34,6 +34,8 @@ interface Props {
 export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
   const { adminUser } = useAdminAuth();
   const { showToast, setPendingApprovalsCount, setLiveMatchesCount } = useAdminLayout();
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
 
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>({
@@ -132,9 +134,9 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
   return (
     <View style={styles.container}>
       {/* Top Banner Greeting */}
-      <View style={styles.greetingBanner}>
-        <View style={styles.greetingTextCol}>
-          <Text style={styles.greetingTitle}>
+      <View style={[styles.greetingBanner, isMobile && { padding: 14, gap: 12 }]}>
+        <View style={[styles.greetingTextCol, isMobile && { minWidth: '100%' }]}>
+          <Text style={[styles.greetingTitle, isMobile && { fontSize: 18 }]}>
             {getGreeting()}, {adminUser?.name || 'Administrator'}
           </Text>
           <Text style={styles.greetingSub}>
@@ -143,7 +145,7 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
         </View>
 
         <TouchableOpacity
-          style={styles.refreshBtn}
+          style={[styles.refreshBtn, isMobile && { width: '100%', justifyContent: 'center' }]}
           onPress={loadData}
           activeOpacity={0.7}
           disabled={loading}
@@ -293,6 +295,27 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
                   <Text style={styles.matchVenue}>
                     📍 {m.venue} • {m.date} at {m.time}
                   </Text>
+                  {(m.status || '').toUpperCase() === 'SCHEDULED' && (
+                    <View style={{ marginTop: 4, padding: 6, borderRadius: 6, backgroundColor: m.schedule_confirmation_status === 'CONFIRMED' ? '#ECFDF5' : '#FEF2F2', borderWidth: 1, borderColor: m.schedule_confirmation_status === 'CONFIRMED' ? '#86EFAC' : '#FECACA' }}>
+                      {m.schedule_confirmation_status === 'CONFIRMED' ? (
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#15803D' }}>
+                          ✓ Schedule Confirmed (Released to Scorer)
+                        </Text>
+                      ) : (
+                        <View style={{ gap: 2 }}>
+                          <Text style={{ fontSize: 11, fontWeight: '800', color: '#DC2626' }}>
+                            ⚠️ Squad Selection Status:
+                          </Text>
+                          <Text style={{ fontSize: 10, fontWeight: '600', color: m.team_a_allocation_status === 'SUBMITTED' ? '#15803D' : '#B91C1C' }}>
+                            {m.team_a_allocation_status === 'SUBMITTED' ? '✅' : '❌'} {m.teamA}: {m.team_a_allocation_status === 'SUBMITTED' ? '11 Selected' : 'Pending Selection'}
+                          </Text>
+                          <Text style={{ fontSize: 10, fontWeight: '600', color: m.team_b_allocation_status === 'SUBMITTED' ? '#15803D' : '#B91C1C' }}>
+                            {m.team_b_allocation_status === 'SUBMITTED' ? '✅' : '❌'} {m.teamB}: {m.team_b_allocation_status === 'SUBMITTED' ? '11 Selected' : 'Pending Selection'}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
                   <View style={styles.matchFooter}>
                     <Text style={styles.matchResult}>{m.result}</Text>
                     <TouchableOpacity
@@ -469,12 +492,12 @@ const styles = StyleSheet.create({
   },
   panelCard: {
     flex: 1,
-    minWidth: 320,
+    minWidth: 280,
     backgroundColor: '#ffffff',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    padding: 20,
+    padding: 16,
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.03,

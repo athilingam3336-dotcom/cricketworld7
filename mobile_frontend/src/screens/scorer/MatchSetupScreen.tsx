@@ -101,8 +101,8 @@ export default function MatchSetupScreen() {
 
   // Render a player item row
   const renderPlayerRow = (p: any, idx: number) => {
-    const isWk = p.role === 'WICKET_KEEPER' || p.role === 'Wicket Keeper';
-    const isCap = idx === 0 || p.is_captain;
+    const isWk = Boolean(p.is_wicket_keeper) || p.role === 'WICKET_KEEPER' || p.role === 'Wicket Keeper';
+    const isCap = Boolean(p.is_captain) || (idx === 0 && p.is_captain === undefined);
     return (
       <View key={p.id || idx} style={styles.playerItem}>
         <View style={styles.playerNumBadge}>
@@ -131,7 +131,7 @@ export default function MatchSetupScreen() {
         <View style={styles.headerRight}>
           <View style={styles.matchPill}>
             <Text style={styles.matchPillText} numberOfLines={1}>
-              {setupData?.tournament || 'VPL 2026'} &bull; <Text style={{ color: '#facc15' }}>{teamA.name}</Text> vs <Text style={{ color: '#facc15' }}>{teamB.name}</Text>
+              {setupData?.tournament || 'VPL 2026'} • <Text style={{ color: '#facc15' }}>{teamA.name}</Text> vs <Text style={{ color: '#facc15' }}>{teamB.name}</Text>
             </Text>
           </View>
           <View style={styles.statusBadge}>
@@ -286,18 +286,22 @@ export default function MatchSetupScreen() {
 
             </View>
 
-            {/* RIGHT COLUMN: Squads & Playing XI (11 vs 11) */}
+            {/* RIGHT COLUMN: Squads & Registered Roster */}
             <View style={styles.rightCol}>
               <View style={[styles.card, styles.squadsCard]}>
                 
                 {/* Header */}
                 <View style={styles.cardHeaderRow}>
-                  <View>
-                    <Text style={styles.cardHeader}>Official Playing XI Roster</Text>
-                    <Text style={styles.sectionHelp}>11 verified squad players per side for this fixture</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.cardHeader}>Official Registered Squad Roster</Text>
+                    <Text style={styles.sectionHelp}>
+                      Authentic players registered during team enrollment • Managed via Team Login
+                    </Text>
                   </View>
                   <View style={styles.xiMainBadge}>
-                    <Text style={styles.xiMainBadgeText}>11 vs 11 Verified</Text>
+                    <Text style={styles.xiMainBadgeText}>
+                      {setupData?.teamAAllocationStatus === 'SUBMITTED' ? '✅ Allocated Playing XI (11)' : `${teamAPlayers.length} Players`} vs {setupData?.teamBAllocationStatus === 'SUBMITTED' ? '✅ Allocated Playing XI (11)' : `${teamBPlayers.length} Players`}
+                    </Text>
                   </View>
                 </View>
 
@@ -309,7 +313,7 @@ export default function MatchSetupScreen() {
                       onPress={() => setMobileSquadTab('TEAM_A')}
                     >
                       <Text style={[styles.mobileTabText, mobileSquadTab === 'TEAM_A' && styles.mobileTabTextActive]} numberOfLines={1}>
-                        {teamA.name} ({Math.min(teamAPlayers.length, 11)})
+                        {teamA.name} ({teamAPlayers.length})
                       </Text>
                     </TouchableOpacity>
                     <TouchableOpacity
@@ -317,7 +321,7 @@ export default function MatchSetupScreen() {
                       onPress={() => setMobileSquadTab('TEAM_B')}
                     >
                       <Text style={[styles.mobileTabText, mobileSquadTab === 'TEAM_B' && styles.mobileTabTextActive]} numberOfLines={1}>
-                        {teamB.name} ({Math.min(teamBPlayers.length, 11)})
+                        {teamB.name} ({teamBPlayers.length})
                       </Text>
                     </TouchableOpacity>
                   </View>
@@ -330,10 +334,20 @@ export default function MatchSetupScreen() {
                     <View style={styles.squadColumn}>
                       <View style={styles.teamColHeader}>
                         <Text style={styles.teamColTitle} numberOfLines={1}>{teamA.name}</Text>
-                        <Text style={styles.teamColSub}>Playing 11</Text>
+                        <Text style={styles.teamColSub}>
+                          {setupData?.teamAAllocationStatus === 'SUBMITTED' || teamAPlayers.some((p: any) => p.is_playing_xi)
+                            ? '✅ Official Playing XI (11 Allocated)'
+                            : `${teamAPlayers.length} Registered Players`}
+                        </Text>
                       </View>
                       <View style={styles.playersScrollBox}>
-                        {teamAPlayers.slice(0, 11).map((p: any, idx: number) => renderPlayerRow(p, idx))}
+                        {teamAPlayers.length > 0 ? (
+                          teamAPlayers.map((p: any, idx: number) => renderPlayerRow(p, idx))
+                        ) : (
+                          <Text style={{ padding: 12, color: '#64748b', fontSize: 12 }}>
+                            No registered players found for {teamA.name}.
+                          </Text>
+                        )}
                       </View>
                     </View>
                   )}
@@ -343,13 +357,30 @@ export default function MatchSetupScreen() {
                     <View style={styles.squadColumn}>
                       <View style={[styles.teamColHeader, styles.teamColHeaderB]}>
                         <Text style={styles.teamColTitle} numberOfLines={1}>{teamB.name}</Text>
-                        <Text style={styles.teamColSub}>Playing 11</Text>
+                        <Text style={styles.teamColSub}>
+                          {setupData?.teamBAllocationStatus === 'SUBMITTED' || teamBPlayers.some((p: any) => p.is_playing_xi)
+                            ? '✅ Official Playing XI (11 Allocated)'
+                            : `${teamBPlayers.length} Registered Players`}
+                        </Text>
                       </View>
                       <View style={styles.playersScrollBox}>
-                        {teamBPlayers.slice(0, 11).map((p: any, idx: number) => renderPlayerRow(p, idx))}
+                        {teamBPlayers.length > 0 ? (
+                          teamBPlayers.map((p: any, idx: number) => renderPlayerRow(p, idx))
+                        ) : (
+                          <Text style={{ padding: 12, color: '#64748b', fontSize: 12 }}>
+                            No registered players found for {teamB.name}.
+                          </Text>
+                        )}
                       </View>
                     </View>
                   )}
+                </View>
+
+                {/* Governance Notice */}
+                <View style={{ marginTop: 12, padding: 10, backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' }}>
+                  <Text style={{ fontSize: 11, color: '#64748b', lineHeight: 15 }}>
+                    🛡️ <Text style={{ fontWeight: '700', color: '#1e293b' }}>Official Squad Notice:</Text> Squad rosters are derived directly from approved team registrations. To add, edit, or substitute squad players, team coaches/managers must modify them through the <Text style={{ fontWeight: '700', color: '#b45309' }}>Team &amp; Coach Login Portal</Text>.
+                  </Text>
                 </View>
 
               </View>

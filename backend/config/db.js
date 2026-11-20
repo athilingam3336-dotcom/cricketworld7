@@ -7,6 +7,8 @@
 
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const path = require('path');
+const fs = require('fs');
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/cricket_db';
 
@@ -23,6 +25,7 @@ const UserSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, index: true, lowercase: true, trim: true },
   mobile: { type: String, default: null },
   password_hash: { type: String, default: null },
+  current_password: { type: String, default: null },
   role: { 
     type: String, 
     enum: ['ADMIN', 'COACH', 'TEAM', 'PLAYER', 'SCORER', 'UMPIRE', 'CONTENT', 'USER'], 
@@ -47,8 +50,12 @@ const UserSchema = new mongoose.Schema({
     category: { type: String, default: 'Senior Men' },
     club_choice: { type: String, default: '' },
     team_id: { type: String, default: null },
-    team_name: { type: String, default: null }
+    team_name: { type: String, default: null },
+    photo: { type: String, default: null },
+    image_path: { type: String, default: null }
   },
+  photo: { type: String, default: null },
+  image_path: { type: String, default: null },
   scorer_details: {
     certification_level: { type: String, default: 'District Certified' },
     taluk: { type: String, default: 'Virudhunagar' }
@@ -115,7 +122,10 @@ const TournamentSchema = new mongoose.Schema({
   format: { type: String, default: 'T20' }, // Legacy compatibility
   overs_per_match: { type: Number, default: 20 },
   season: { type: String, default: '2026' },
+  team_a_name: { type: String, default: '' },
+  team_b_name: { type: String, default: '' },
   venue: { type: String, default: 'Kamarajar District Stadium' },
+  venue_maps_url: { type: String, default: '' },
   start_date: { type: String },
   end_date: { type: String },
   registration_start_date: { type: String, default: null },
@@ -186,11 +196,17 @@ const TeamSchema = new mongoose.Schema({
   short_name: { type: String, default: 'VND' },
   city: { type: String, default: 'Virudhunagar' },
   taluk: { type: String, default: 'Virudhunagar' },
+  phone: { type: String, default: '' },
+  home_ground: { type: String, default: '' },
+  certification: { type: String, default: '' },
   coach_name: { type: String, default: '' },
   coach_email: { type: String, default: '' },
-  team_passkey_hash: { type: String, default: null },
   captain: { type: String, default: '' },
   vice_captain: { type: String, default: '' },
+  photo: { type: String, default: null },
+  image_path: { type: String, default: null },
+  logo: { type: String, default: null },
+  team_passkey_hash: { type: String, default: null },
   password_hash: { type: String, default: null },
   status: { type: String, enum: ['ACTIVE', 'APPROVED', 'PENDING', 'INACTIVE'], default: 'ACTIVE' },
   stats: {
@@ -208,12 +224,14 @@ const PlayerSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true, index: true },
   team_id: { type: String, required: true, index: true },
   name: { type: String, required: true },
-  email: { type: String, required: true, lowercase: true, trim: true, index: true },
+  email: { type: String, default: null, lowercase: true, trim: true, index: true },
   password_hash: { type: String, default: null },
   role: { type: String, enum: ['BATTER', 'BOWLER', 'ALL_ROUNDER', 'WICKET_KEEPER'], default: 'BATTER' },
   jersey_number: { type: Number, default: 0 },
   batting_style: { type: String, default: 'Right Hand Bat' },
   bowling_style: { type: String, default: 'Right Arm Medium' },
+  photo: { type: String, default: null },
+  image_path: { type: String, default: null },
   status: { type: String, default: 'ACTIVE' },
   stats: {
     runs: { type: Number, default: 0 },
@@ -236,9 +254,14 @@ const TeamRegistrationSchema = new mongoose.Schema({
   coach_name: { type: String, required: true },
   coach_email: { type: String, required: true, lowercase: true, trim: true, index: true },
   password_hash: { type: String, default: null },
+  current_password: { type: String, default: null },
   passkey: { type: String, default: '' },
   city: { type: String, default: 'Virudhunagar' },
   taluk: { type: String, default: 'Virudhunagar' },
+  phone: { type: String, default: '' },
+  photo: { type: String, default: null },
+  image_path: { type: String, default: null },
+  logo: { type: String, default: null },
   status: { 
     type: String, 
     enum: ['PENDING', 'APPROVED', 'REJECTED'], 
@@ -254,6 +277,8 @@ const TeamRegistrationSchema = new mongoose.Schema({
     email: { type: String, required: true, lowercase: true, trim: true },
     password_hash: { type: String, default: null },
     role: { type: String, default: 'BATTER' },
+    photo: { type: String, default: null },
+    image_path: { type: String, default: null },
     status: { type: String, default: 'PENDING' }
   }]
 }, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
@@ -265,13 +290,60 @@ const MatchSchema = new mongoose.Schema({
   tournament_name: { type: String, default: 'Virudhunagar Premier League 2026' },
   team_a_id: { type: String, required: true },
   team_b_id: { type: String, required: true },
+  team_a_name: { type: String, default: '' },
+  team_b_name: { type: String, default: '' },
   venue: { type: String, default: 'Kamarajar District Stadium' },
+  venue_maps_url: { type: String, default: '' },
   match_date: { type: String, default: '2026-10-06' },
   match_time: { type: String, default: '09:30 AM' },
   match_type: { type: String, default: 'T20' },
   overs_per_side: { type: Number, default: 20 },
   stage: { type: String, default: 'LEAGUE' }, // LEAGUE, QUARTER_FINAL, SEMI_FINAL, FINAL, etc.
-  status: { type: String, enum: ['SCHEDULED', 'TOSS', 'LIVE', 'INNINGS_BREAK', 'PAUSED', 'COMPLETED', 'ABANDONED', 'CANCELLED'], default: 'SCHEDULED', index: true },
+  status: { type: String, enum: ['SCHEDULED', 'TOSS', 'LIVE', 'INNINGS_BREAK', 'PAUSED', 'COMPLETED', 'ABANDONED', 'CANCELLED', 'POSTPONED'], default: 'SCHEDULED', index: true },
+  postponement: {
+    is_postponed: { type: Boolean, default: false },
+    reason: { type: String, default: null },
+    postponed_at: { type: Date, default: null },
+    postponed_by: {
+      user_id: { type: String, default: null },
+      role: { type: String, default: 'ADMIN' },
+      name: { type: String, default: '' }
+    },
+    original_date: { type: String, default: null },
+    original_time: { type: String, default: null },
+    rescheduled_date: { type: String, default: null },
+    rescheduled_time: { type: String, default: null },
+    rescheduled_at: { type: Date, default: null },
+    rescheduled_by: {
+      user_id: { type: String, default: null },
+      role: { type: String, default: null },
+      name: { type: String, default: '' }
+    }
+  },
+  umpire_postponement_request: {
+    requested: { type: Boolean, default: false },
+    umpire_id: { type: String, default: null },
+    umpire_name: { type: String, default: '' },
+    reason: { type: String, default: '' },
+    status: { type: String, enum: ['NONE', 'PENDING', 'APPROVED', 'REJECTED'], default: 'NONE' },
+    requested_at: { type: Date, default: null },
+    reviewed_by: { type: String, default: null },
+    reviewed_at: { type: Date, default: null },
+    review_notes: { type: String, default: '' }
+  },
+  postponement_history: [{
+    action: { type: String, required: true }, // 'POSTPONED', 'RESCHEDULED', 'REQUESTED', 'REQUEST_APPROVED', 'REQUEST_REJECTED'
+    reason: { type: String, default: '' },
+    from_date: { type: String, default: '' },
+    from_time: { type: String, default: '' },
+    to_date: { type: String, default: '' },
+    to_time: { type: String, default: '' },
+    actor_id: { type: String, default: '' },
+    actor_name: { type: String, default: '' },
+    actor_role: { type: String, default: '' },
+    timestamp: { type: Date, default: Date.now },
+    notes: { type: String, default: '' }
+  }],
   toss_winner_id: { type: String, default: null },
   toss_decision: { type: String, default: null },
   current_innings_number: { type: Number, default: 1 },
@@ -288,12 +360,25 @@ const MatchSchema = new mongoose.Schema({
   umpire_confirmed_at: { type: Date, default: null },
   team_a_playing_xi: [{ type: String }],
   team_b_playing_xi: [{ type: String }],
+  team_a_substitutes: [{ type: String }],
+  team_b_substitutes: [{ type: String }],
+  team_a_lineup: [mongoose.Schema.Types.Mixed],
+  team_b_lineup: [mongoose.Schema.Types.Mixed],
+  team_a_allocation_status: { type: String, enum: ['PENDING', 'SUBMITTED'], default: 'PENDING' },
+  team_b_allocation_status: { type: String, enum: ['PENDING', 'SUBMITTED'], default: 'PENDING' },
+  team_a_allocation_submitted_at: { type: Date, default: null },
+  team_b_allocation_submitted_at: { type: Date, default: null },
+  schedule_confirmation_status: { type: String, enum: ['PENDING', 'CONFIRMED'], default: 'PENDING' },
+  schedule_confirmed_at: { type: Date, default: null },
+  schedule_confirmed_by: { type: String, default: null },
   revised_overs: { type: Number, default: null },
   revised_target: { type: Number, default: null },
   revised_comments: { type: String, default: '' },
   is_super_over: { type: Boolean, default: false },
   match_start_time: { type: String, default: null },
   match_end_time: { type: String, default: null },
+  status_comment: { type: String, default: '' },
+  current_break: { type: mongoose.Schema.Types.Mixed, default: null },
   breaks: [{
     type: { type: String },
     startTime: { type: String },
@@ -368,11 +453,17 @@ const InningsSchema = new mongoose.Schema({
   current_non_striker_id: { type: String, default: null },
   current_bowler_id: { type: String, default: null },
   previous_bowler_id: { type: String, default: null },
+  suspended_bowler_ids: [{ type: String }],
+  bowler_substitutions: [{ type: mongoose.Schema.Types.Mixed }],
+  is_free_hit: { type: Boolean, default: false },
+  penalty_runs: { type: Number, default: 0 },
+  short_runs: { type: Number, default: 0 },
   extras: {
     wides: { type: Number, default: 0 },
     no_balls: { type: Number, default: 0 },
     byes: { type: Number, default: 0 },
     leg_byes: { type: Number, default: 0 },
+    penalty: { type: Number, default: 0 },
     total: { type: Number, default: 0 }
   }
 }, { timestamps: true });
@@ -433,13 +524,17 @@ const DeliverySchema = new mongoose.Schema({
   dismissed_player_id: { type: String, default: null },
   boundary_type: { type: String, default: null },
   is_legal_delivery: { type: Boolean, default: true },
+  is_free_hit: { type: Boolean, default: false },
   shot_type: { type: String, default: null },
   fielding_position: { type: String, default: null },
   shot_angle: { type: Number, default: null },
   shot_distance: { type: Number, default: null },
   shot_zone: { type: String, default: null },
+  shot_x: { type: Number, default: null },
+  shot_y: { type: Number, default: null },
   fielder_id: { type: String, default: null },
   fielder_name: { type: String, default: null },
+  fielding_action: { type: String, default: null },
   reason: { type: String, default: null },
   replacement_batter_id: { type: String, default: null },
   commentary: { type: String, default: '' },
@@ -474,16 +569,24 @@ const TeamPlayerSchema = new mongoose.Schema({
   player_name: { type: String, required: true },
   player_email: { type: String, required: true, lowercase: true, trim: true },
   player_role: { type: String, default: 'BATTER' },
+  photo: { type: String, default: null },
+  image_path: { type: String, default: null },
   created_at: { type: Date, default: Date.now }
 }, { timestamps: { createdAt: 'created_at' } });
 
-// 12. Notifications Schema
+// 12. Notifications Schema (Strict Match Schedule Target Delivery)
 const NotificationSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true, index: true },
-  type: { type: String, default: 'GENERAL' },
+  type: { type: String, default: 'MATCH_SCHEDULED' },
   title: { type: String, required: true },
   message: { type: String, required: true },
   reference_id: { type: String, default: null },
+  recipient_role: { type: String, enum: ['TEAM', 'PLAYER', 'ADMIN'], default: 'TEAM' },
+  recipient_id: { type: String, default: null, index: true },
+  recipient_email: { type: String, default: null, index: true },
+  team_id: { type: String, default: null, index: true },
+  team_name: { type: String, default: null },
+  link: { type: String, default: '' },
   status: { type: String, enum: ['UNREAD', 'READ'], default: 'UNREAD' },
   created_at: { type: Date, default: Date.now }
 }, { timestamps: { createdAt: 'created_at' } });
@@ -566,6 +669,178 @@ const UmpireDecisionSchema = new mongoose.Schema({
 }, { timestamps: { createdAt: 'timestamp' } });
 
 const UmpireDecision = mongoose.models.UmpireDecision || mongoose.model('UmpireDecision', UmpireDecisionSchema);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 16. Cricket Laws Schema (MCC 2017 Code – Fourth Edition 2026)
+// ─────────────────────────────────────────────────────────────────────────────
+const CricketLawSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true, index: true },
+  law_number: { type: Number, required: true, unique: true, index: true },
+  title: { type: String, required: true },
+  short_description: { type: String, default: '' },
+  category: {
+    type: String,
+    enum: ['Batters', 'Bowlers', 'Fielders', 'Umpires', 'Scorers', 'Match Officials', 'Dismissals', 'Equipment', 'Match Situations', 'General'],
+    default: 'General',
+    index: true
+  },
+  edition: { type: String, default: '2017 Code – Fourth Edition 2026' },
+  effective_date: { type: String, default: '1 October 2026' },
+  source_url: { type: String, default: 'https://lawsofcricket.lords.org/' },
+  is_amended_2026: { type: Boolean, default: false },
+  amendment_notes: { type: String, default: '' },
+  subsection_count: { type: Number, default: 0 },
+  is_active: { type: Boolean, default: true, index: true },
+  last_verified_at: { type: Date, default: Date.now },
+  display_order: { type: Number, default: 0 }
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+
+const CricketLaw = mongoose.models.CricketLaw || mongoose.model('CricketLaw', CricketLawSchema);
+
+// 17. Cricket Law Sections Schema
+const CricketLawSectionSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true, index: true },
+  law_id: { type: String, required: true, index: true },
+  law_number: { type: Number, required: true, index: true },
+  section_number: { type: String, required: true }, // e.g. "30.1", "30.1.1"
+  section_title: { type: String, required: true },
+  explanation: { type: String, default: '' },
+  detailed_explanation: { type: String, default: '' },
+  practical_example: { type: String, default: '' },
+  parent_section_id: { type: String, default: null, index: true }, // null = top-level
+  depth: { type: Number, default: 1 }, // 1 = top, 2 = sub, 3 = sub-sub
+  display_order: { type: Number, default: 0 },
+  is_active: { type: Boolean, default: true }
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+
+CricketLawSectionSchema.index({ law_id: 1, section_number: 1 });
+CricketLawSectionSchema.index({ law_number: 1, section_number: 1 });
+
+const CricketLawSection = mongoose.models.CricketLawSection || mongoose.model('CricketLawSection', CricketLawSectionSchema);
+
+// 18. Cricket Law Versions Schema
+const CricketLawVersionSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true, index: true },
+  law_id: { type: String, required: true, index: true },
+  law_number: { type: Number, required: true },
+  edition: { type: String, required: true },
+  amendment_notes: { type: String, default: '' },
+  effective_date: { type: String, default: '' },
+  is_current: { type: Boolean, default: false, index: true }
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+
+const CricketLawVersion = mongoose.models.CricketLawVersion || mongoose.model('CricketLawVersion', CricketLawVersionSchema);
+
+// 19. Cricket Law Audit Log Schema
+const CricketLawAuditLogSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true, index: true },
+  law_id: { type: String, required: true, index: true },
+  law_number: { type: Number, required: true },
+  action: { type: String, required: true, enum: ['CREATE', 'UPDATE', 'PUBLISH', 'RESTORE', 'SECTION_ADD', 'SECTION_UPDATE'] },
+  updated_by: { type: String, required: true },
+  updated_by_email: { type: String, default: '' },
+  previous_version: { type: mongoose.Schema.Types.Mixed, default: null },
+  new_version: { type: mongoose.Schema.Types.Mixed, default: null },
+  notes: { type: String, default: '' },
+  timestamp: { type: Date, default: Date.now, index: true }
+}, { timestamps: { createdAt: 'timestamp' } });
+
+const CricketLawAuditLog = mongoose.models.CricketLawAuditLog || mongoose.model('CricketLawAuditLog', CricketLawAuditLogSchema);
+
+// 20. Tournament Calculation Settings Schema (DLS / VJD per tournament)
+const TournamentCalculationSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true, index: true },
+  tournament_id: { type: String, required: true, unique: true, index: true },
+  tournament_name: { type: String, default: '' },
+  calculation_method: {
+    type: String,
+    enum: ['DLS', 'VJD'],
+    default: 'DLS',
+    required: true
+  },
+  updated_by: { type: String, default: 'admin@cfvd.org' },
+  updated_by_name: { type: String, default: 'Administrator' },
+  updated_at: { type: Date, default: Date.now }
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+
+const TournamentCalculation = mongoose.models.TournamentCalculation || mongoose.model('TournamentCalculation', TournamentCalculationSchema);
+
+// 24. Player Performance Match Rating Schema
+const PlayerMatchRatingSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true, index: true },
+  player_id: { type: String, required: true, index: true },
+  player_name: { type: String, default: '' },
+  match_id: { type: String, required: true, index: true },
+  tournament_id: { type: String, default: null },
+  tournament_name: { type: String, default: '' },
+  match_date: { type: Date, default: Date.now },
+  format: { type: String, enum: ['T20', 'ONE_DAY', 'MULTI_DAY', 'T10', 'CUSTOM'], default: 'T20' },
+  role: { type: String, enum: ['BATSMAN', 'BOWLER', 'ALL_ROUNDER', 'WICKETKEEPER'], default: 'BATSMAN' },
+  batting_rating: { type: Number, default: null },
+  bowling_rating: { type: Number, default: null },
+  fielding_rating: { type: Number, default: null },
+  impact_rating: { type: Number, default: null },
+  overall_rating: { type: Number, default: null },
+  component_availability: {
+    batting: { type: Boolean, default: false },
+    bowling: { type: Boolean, default: false },
+    fielding: { type: Boolean, default: false },
+    impact: { type: Boolean, default: false }
+  },
+  match_stats: {
+    runs: { type: Number, default: 0 },
+    balls: { type: Number, default: 0 },
+    fours: { type: Number, default: 0 },
+    sixes: { type: Number, default: 0 },
+    strike_rate: { type: Number, default: 0 },
+    is_out: { type: Boolean, default: false },
+    dismissal_text: { type: String, default: '' },
+    overs: { type: Number, default: 0 },
+    balls_bowled: { type: Number, default: 0 },
+    maidens: { type: Number, default: 0 },
+    runs_conceded: { type: Number, default: 0 },
+    wickets: { type: Number, default: 0 },
+    economy: { type: Number, default: 0 },
+    catches: { type: Number, default: 0 },
+    run_outs: { type: Number, default: 0 },
+    stumpings: { type: Number, default: 0 }
+  },
+  calculation_version: { type: String, default: 'v2.0' },
+  verification_status: { type: String, enum: ['VERIFIED', 'PROVISIONAL', 'INVALIDATED'], default: 'VERIFIED' },
+  calculated_at: { type: Date, default: Date.now }
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+
+// Ensure compound index for fast lookups and unique constraint per player per match
+PlayerMatchRatingSchema.index({ player_id: 1, match_id: 1 }, { unique: true });
+PlayerMatchRatingSchema.index({ player_id: 1, match_date: -1 });
+PlayerMatchRatingSchema.index({ format: 1, overall_rating: -1 });
+
+const PlayerMatchRating = mongoose.models.PlayerMatchRating || mongoose.model('PlayerMatchRating', PlayerMatchRatingSchema);
+// 21. Master Settings & Dynamic Dropdown Options Schema
+const MasterSettingSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true, index: true },
+  category: { 
+    type: String, 
+    required: true, 
+    index: true,
+    enum: [
+      'taluk_jurisdiction',
+      'playing_role',
+      'batting_style',
+      'age_category',
+      'certification_level',
+      'umpire_certification',
+      'state'
+    ]
+  },
+  name: { type: String, required: true, trim: true },
+  code: { type: String, default: null, trim: true },
+  description: { type: String, default: '' },
+  is_active: { type: Boolean, default: true },
+  sort_order: { type: Number, default: 0 }
+}, { timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' } });
+
+const MasterSetting = mongoose.models.MasterSetting || mongoose.model('MasterSetting', MasterSettingSchema);
 
 // In-Memory Temporary Registrations & OTPs cache
 const memoryDb = {
@@ -778,6 +1053,46 @@ async function seedDefaultData() {
       { upsert: true }
     );
 
+    // Ensure default Player and Coach demo accounts exist
+    await User.findOneAndUpdate(
+      { email: 'saravanan.r@strikerscc.org' },
+      {
+        $setOnInsert: {
+          id: 'PLY-101',
+          name: 'R. Saravanan (Player)',
+          email: 'saravanan.r@strikerscc.org',
+          mobile: '9876543216',
+          role: 'PLAYER',
+          status: 'ACTIVE',
+          password_hash: defaultPasswordHash,
+          player_details: {
+            batting_style: 'Right Hand Bat',
+            bowling_style: 'Right Arm Fast/Medium',
+            taluk: 'Virudhunagar',
+            category: 'Senior Men',
+            club_choice: 'Sivakasi Strikers'
+          }
+        }
+      },
+      { upsert: true }
+    );
+
+    await User.findOneAndUpdate(
+      { email: 'kannan.coach@strikerscc.org' },
+      {
+        $setOnInsert: {
+          id: 'COACH-101',
+          name: 'R. Kannan (Coach)',
+          email: 'kannan.coach@strikerscc.org',
+          mobile: '9876543215',
+          role: 'COACH',
+          status: 'ACTIVE',
+          password_hash: defaultPasswordHash
+        }
+      },
+      { upsert: true }
+    );
+
     // Seed Scorers
     const scorerCount = await Scorer.countDocuments();
     if (scorerCount === 0) {
@@ -934,8 +1249,8 @@ async function seedDefaultData() {
     }
 
     // Seed Players
-    const playerCount = await Player.countDocuments();
-    if (playerCount === 0) {
+    const defaultPlayer = await Player.findOne({ id: 'P301' });
+    if (!defaultPlayer) {
       await Player.insertMany([
         // Team 1 (TM-01) - 15 Genuine Players
         { id: 'P301', team_id: 'TM-01', name: 'Suresh Kumar', email: 'suresh@spartans.com', role: 'BATTER', jersey_number: 7, batting_style: 'Right Hand Bat', stats: { runs: 284, balls: 195, fours: 32, sixes: 10, highest_score: 88, wickets: 0, overs: 0, runs_conceded: 0, catches: 4, stumpings: 0 } },
@@ -1023,6 +1338,7 @@ async function seedDefaultData() {
           match_type: 'T20',
           overs_per_side: 20,
           status: 'SCHEDULED',
+          schedule_confirmation_status: 'CONFIRMED',
           assigned_scorer_id: 'SCR-101',
           umpire1_id: 'UMP-101',
           umpire2_id: 'UMP-102',
@@ -1041,6 +1357,7 @@ async function seedDefaultData() {
           match_type: 'T20',
           overs_per_side: 20,
           status: 'LIVE',
+          schedule_confirmation_status: 'CONFIRMED',
           toss_winner_id: 'TM-01',
           toss_decision: 'BAT',
           current_innings_number: 1,
@@ -1062,10 +1379,33 @@ async function seedDefaultData() {
           match_type: 'T20',
           overs_per_side: 20,
           status: 'COMPLETED',
+          schedule_confirmation_status: 'CONFIRMED',
           toss_winner_id: 'TM-01',
           toss_decision: 'BAT',
           result_summary: 'Virudhunagar Strikers won by 7 wickets',
           player_of_match: 'Dinesh Karthik',
+          assigned_scorer_id: 'SCR-101',
+          umpire1_id: 'UMP-101',
+          umpire2_id: 'UMP-102',
+          umpire1_name: 'Thiru. K. Sundaram',
+          umpire2_name: 'Thiru. M. Ramanathan'
+        },
+        {
+          id: 'M005',
+          tournament_id: 'T-2026-VPL',
+          tournament_name: 'Virudhunagar Premier League 2026',
+          team_a_id: 'TM-01',
+          team_b_id: 'TM-03',
+          venue: 'Kamarajar District Stadium',
+          match_date: '2026-10-06',
+          match_time: '02:30 PM',
+          match_type: 'T20',
+          overs_per_side: 20,
+          status: 'LIVE',
+          schedule_confirmation_status: 'CONFIRMED',
+          toss_winner_id: 'TM-03',
+          toss_decision: 'BAT',
+          current_innings_number: 1,
           assigned_scorer_id: 'SCR-101',
           umpire1_id: 'UMP-101',
           umpire2_id: 'UMP-102',
@@ -1139,9 +1479,29 @@ async function seedDefaultData() {
         { id: 'IBAT-01', innings_id: 'INN-M002-1', player_id: 'P301', batting_position: 1, runs: 64, balls: 42, fours: 8, sixes: 2, strike_rate: 152.38, is_out: false },
         { id: 'IBAT-02', innings_id: 'INN-M002-1', player_id: 'P302', batting_position: 2, runs: 28, balls: 22, fours: 3, sixes: 1, strike_rate: 127.27, is_out: true, dismissal_type: 'CAUGHT', bowler_id: 'P402', fielder_id: 'P401' },
         { id: 'IBAT-03', innings_id: 'INN-M002-1', player_id: 'P303', batting_position: 3, runs: 35, balls: 24, fours: 4, sixes: 1, strike_rate: 145.83, is_out: false },
-        { id: 'IBAT-M003-01', innings_id: 'INN-M003-1', player_id: 'P301', batting_position: 1, runs: 42, balls: 30, fours: 4, sixes: 1, strike_rate: 140.0, is_out: false },
-        { id: 'IBAT-M003-02', innings_id: 'INN-M003-1', player_id: 'P302', batting_position: 2, runs: 12, balls: 10, fours: 1, sixes: 0, strike_rate: 120.0, is_out: true, dismissal_type: 'BOWLED', bowler_id: 'P401' },
-        { id: 'IBAT-M003-03', innings_id: 'INN-M003-1', player_id: 'P303', batting_position: 3, runs: 18, balls: 14, fours: 2, sixes: 0, strike_rate: 128.57, is_out: false }
+        // INN-M003-1 Batters (Virudhunagar Spartans: 160/8)
+        { id: 'IBAT-M003-1-01', innings_id: 'INN-M003-1', player_id: 'P301', batting_position: 1, runs: 42, balls: 30, fours: 4, sixes: 1, strike_rate: 140.0, is_out: true, dismissal_type: 'CAUGHT', bowler_id: 'P403', fielder_id: 'P401', dismissal_text: 'c †Dinesh Karthik b Karthik N' },
+        { id: 'IBAT-M003-1-02', innings_id: 'INN-M003-1', player_id: 'P302', batting_position: 2, runs: 12, balls: 10, fours: 1, sixes: 0, strike_rate: 120.0, is_out: true, dismissal_type: 'BOWLED', bowler_id: 'P403', dismissal_text: 'b Karthik N' },
+        { id: 'IBAT-M003-1-03', innings_id: 'INN-M003-1', player_id: 'P303', batting_position: 3, runs: 18, balls: 14, fours: 2, sixes: 0, strike_rate: 128.57, is_out: true, dismissal_type: 'LBW', bowler_id: 'P404', dismissal_text: 'lbw b Saravanan P' },
+        { id: 'IBAT-M003-1-04', innings_id: 'INN-M003-1', player_id: 'P304', batting_position: 4, runs: 26, balls: 18, fours: 3, sixes: 1, strike_rate: 144.44, is_out: true, dismissal_type: 'CAUGHT', bowler_id: 'P408', fielder_id: 'P402', dismissal_text: 'c R. Ashwin b Murugesan A' },
+        { id: 'IBAT-M003-1-05', innings_id: 'INN-M003-1', player_id: 'P306', batting_position: 5, runs: 24, balls: 16, fours: 2, sixes: 1, strike_rate: 150.0, is_out: true, dismissal_type: 'RUN_OUT', fielder_id: 'P407', dismissal_text: 'run out (Balaji R)' },
+        { id: 'IBAT-M003-1-06', innings_id: 'INN-M003-1', player_id: 'P308', batting_position: 6, runs: 11, balls: 9, fours: 1, sixes: 0, strike_rate: 122.22, is_out: true, dismissal_type: 'CAUGHT', bowler_id: 'P411', fielder_id: 'P405', dismissal_text: 'c Manikandan K b Selvam R' },
+        { id: 'IBAT-M003-1-07', innings_id: 'INN-M003-1', player_id: 'P310', batting_position: 7, runs: 9, balls: 8, fours: 1, sixes: 0, strike_rate: 112.50, is_out: true, dismissal_type: 'CAUGHT_AND_BOWLED', bowler_id: 'P402', dismissal_text: 'c & b R. Ashwin' },
+        { id: 'IBAT-M003-1-08', innings_id: 'INN-M003-1', player_id: 'P305', batting_position: 8, runs: 4, balls: 6, fours: 0, sixes: 0, strike_rate: 66.67, is_out: true, dismissal_type: 'BOWLED', bowler_id: 'P411', dismissal_text: 'b Selvam R' },
+        { id: 'IBAT-M003-1-09', innings_id: 'INN-M003-1', player_id: 'P307', batting_position: 9, runs: 2, balls: 5, fours: 0, sixes: 0, strike_rate: 40.0, is_out: false, dismissal_text: 'not out' },
+        { id: 'IBAT-M003-1-10', innings_id: 'INN-M003-1', player_id: 'P309', batting_position: 10, runs: 1, balls: 4, fours: 0, sixes: 0, strike_rate: 25.0, is_out: false, dismissal_text: 'not out' },
+        // INN-M003-2 Batters (Sivakasi Strikers: 144/9)
+        { id: 'IBAT-M003-2-01', innings_id: 'INN-M003-2', player_id: 'P401', batting_position: 1, runs: 38, balls: 26, fours: 4, sixes: 1, strike_rate: 146.15, is_out: true, dismissal_type: 'CAUGHT', bowler_id: 'P305', fielder_id: 'P301', dismissal_text: 'c Suresh Kumar b R. Vignesh' },
+        { id: 'IBAT-M003-2-02', innings_id: 'INN-M003-2', player_id: 'P405', batting_position: 2, runs: 15, balls: 14, fours: 2, sixes: 0, strike_rate: 107.14, is_out: true, dismissal_type: 'BOWLED', bowler_id: 'P307', dismissal_text: 'b Saravanan' },
+        { id: 'IBAT-M003-2-03', innings_id: 'INN-M003-2', player_id: 'P407', batting_position: 3, runs: 22, balls: 18, fours: 2, sixes: 1, strike_rate: 122.22, is_out: true, dismissal_type: 'CAUGHT', bowler_id: 'P309', fielder_id: 'P303', dismissal_text: 'c Vijay b S. Karthik' },
+        { id: 'IBAT-M003-2-04', innings_id: 'INN-M003-2', player_id: 'P406', batting_position: 4, runs: 19, balls: 15, fours: 2, sixes: 0, strike_rate: 126.67, is_out: true, dismissal_type: 'LBW', bowler_id: 'P311', dismissal_text: 'lbw b P. Murugan' },
+        { id: 'IBAT-M003-2-05', innings_id: 'INN-M003-2', player_id: 'P402', batting_position: 5, runs: 16, balls: 13, fours: 1, sixes: 1, strike_rate: 123.08, is_out: true, dismissal_type: 'CAUGHT', bowler_id: 'P305', fielder_id: 'P304', dismissal_text: 'c †K. Balaji b R. Vignesh' },
+        { id: 'IBAT-M003-2-06', innings_id: 'INN-M003-2', player_id: 'P409', batting_position: 6, runs: 11, balls: 10, fours: 1, sixes: 0, strike_rate: 110.0, is_out: true, dismissal_type: 'RUN_OUT', fielder_id: 'P306', dismissal_text: 'run out (Arun Pandian)' },
+        { id: 'IBAT-M003-2-07', innings_id: 'INN-M003-2', player_id: 'P410', batting_position: 7, runs: 6, balls: 8, fours: 0, sixes: 0, strike_rate: 75.0, is_out: true, dismissal_type: 'BOWLED', bowler_id: 'P307', dismissal_text: 'b Saravanan' },
+        { id: 'IBAT-M003-2-08', innings_id: 'INN-M003-2', player_id: 'P403', batting_position: 8, runs: 4, balls: 6, fours: 0, sixes: 0, strike_rate: 66.67, is_out: true, dismissal_type: 'CAUGHT', bowler_id: 'P309', fielder_id: 'P301', dismissal_text: 'c Suresh Kumar b S. Karthik' },
+        { id: 'IBAT-M003-2-09', innings_id: 'INN-M003-2', player_id: 'P408', batting_position: 9, runs: 2, balls: 5, fours: 0, sixes: 0, strike_rate: 40.0, is_out: true, dismissal_type: 'BOWLED', bowler_id: 'P311', dismissal_text: 'b P. Murugan' },
+        { id: 'IBAT-M003-2-10', innings_id: 'INN-M003-2', player_id: 'P404', batting_position: 10, runs: 1, balls: 3, fours: 0, sixes: 0, strike_rate: 33.33, is_out: false, dismissal_text: 'not out' },
+        { id: 'IBAT-M003-2-11', innings_id: 'INN-M003-2', player_id: 'P411', batting_position: 11, runs: 1, balls: 2, fours: 0, sixes: 0, strike_rate: 50.0, is_out: false, dismissal_text: 'not out' }
       ]);
     }
 
@@ -1150,8 +1510,18 @@ async function seedDefaultData() {
       await InningsBowler.insertMany([
         { id: 'IBOW-01', innings_id: 'INN-M002-1', player_id: 'P401', overs: 3, balls: 2, maidens: 0, runs_conceded: 28, runs: 28, wickets: 1, no_balls: 1, wides: 2, economy: 8.40 },
         { id: 'IBOW-02', innings_id: 'INN-M002-1', player_id: 'P402', overs: 4, balls: 0, maidens: 0, runs_conceded: 32, runs: 32, wickets: 2, no_balls: 0, wides: 1, economy: 8.00 },
-        { id: 'IBOW-M003-01', innings_id: 'INN-M003-1', player_id: 'P401', overs: 4, balls: 0, maidens: 0, runs_conceded: 24, runs: 24, wickets: 2, no_balls: 0, wides: 2, economy: 6.00 },
-        { id: 'IBOW-M003-02', innings_id: 'INN-M003-1', player_id: 'P307', overs: 4, balls: 0, maidens: 0, runs_conceded: 26, runs: 26, wickets: 2, no_balls: 1, wides: 2, economy: 6.50 }
+        // INN-M003-1 Bowlers (Sivakasi Strikers)
+        { id: 'IBOW-M003-1-01', innings_id: 'INN-M003-1', player_id: 'P403', overs: 4, balls: 0, maidens: 0, runs_conceded: 28, runs: 28, wickets: 2, economy: 7.00, no_balls: 0, wides: 1 },
+        { id: 'IBOW-M003-1-02', innings_id: 'INN-M003-1', player_id: 'P404', overs: 4, balls: 0, maidens: 0, runs_conceded: 30, runs: 30, wickets: 1, economy: 7.50, no_balls: 0, wides: 2 },
+        { id: 'IBOW-M003-1-03', innings_id: 'INN-M003-1', player_id: 'P408', overs: 4, balls: 0, maidens: 0, runs_conceded: 34, runs: 34, wickets: 1, economy: 8.50, no_balls: 1, wides: 1 },
+        { id: 'IBOW-M003-1-04', innings_id: 'INN-M003-1', player_id: 'P411', overs: 4, balls: 0, maidens: 0, runs_conceded: 32, runs: 32, wickets: 2, economy: 8.00, no_balls: 0, wides: 1 },
+        { id: 'IBOW-M003-1-05', innings_id: 'INN-M003-1', player_id: 'P402', overs: 4, balls: 0, maidens: 0, runs_conceded: 25, runs: 25, wickets: 1, economy: 6.25, no_balls: 0, wides: 1 },
+        // INN-M003-2 Bowlers (Virudhunagar Spartans)
+        { id: 'IBOW-M003-2-01', innings_id: 'INN-M003-2', player_id: 'P305', overs: 4, balls: 0, maidens: 0, runs_conceded: 26, runs: 26, wickets: 2, economy: 6.50, no_balls: 0, wides: 1 },
+        { id: 'IBOW-M003-2-02', innings_id: 'INN-M003-2', player_id: 'P307', overs: 4, balls: 0, maidens: 0, runs_conceded: 24, runs: 24, wickets: 2, economy: 6.00, no_balls: 0, wides: 1 },
+        { id: 'IBOW-M003-2-03', innings_id: 'INN-M003-2', player_id: 'P309', overs: 4, balls: 0, maidens: 0, runs_conceded: 28, runs: 28, wickets: 2, economy: 7.00, no_balls: 0, wides: 1 },
+        { id: 'IBOW-M003-2-04', innings_id: 'INN-M003-2', player_id: 'P311', overs: 4, balls: 0, maidens: 0, runs_conceded: 30, runs: 30, wickets: 2, economy: 7.50, no_balls: 0, wides: 1 },
+        { id: 'IBOW-M003-2-05', innings_id: 'INN-M003-2', player_id: 'P306', overs: 4, balls: 0, maidens: 0, runs_conceded: 27, runs: 27, wickets: 0, economy: 6.75, no_balls: 0, wides: 1 }
       ]);
     }
 
@@ -1202,8 +1572,8 @@ async function seedDefaultData() {
     }
 
     // Seed Team Registrations
-    const regCount = await TeamRegistration.countDocuments();
-    if (regCount === 0) {
+    const defaultReg = await TeamRegistration.findOne({ id: 'TEAM-VRD-101' });
+    if (!defaultReg) {
       await TeamRegistration.insertMany([
         {
           id: 'TEAM-VRD-101',
@@ -1259,27 +1629,20 @@ async function seedDefaultData() {
       ]);
     }
 
-    // Seed Notifications
-    const notifCount = await Notification.countDocuments();
-    if (notifCount === 0) {
-      await Notification.insertMany([
-        {
-          id: 'NOTIF-01',
-          type: 'TEAM_REGISTRATION',
-          title: 'New Team Registration: Sattur Super Kings',
-          message: 'Coach R. Kannan submitted team Sattur Super Kings. Awaiting administrative review.',
-          reference_id: 'TEAM-VRD-102',
-          status: 'UNREAD'
-        }
-      ]);
-    }
+    // Seed Notifications permanently disabled: only actual match scheduling creates notifications
 
     // Seed Venues
     const venueCount = await Venue.countDocuments();
     if (venueCount === 0) {
       await Venue.insertMany([
-        { id: 'VEN-01', name: 'Kamarajar District Stadium', location: 'Virudhunagar Central', capacity: 8000, floodlights: true, description: 'Main association ground.' },
-        { id: 'VEN-02', name: 'Sivakasi Cricket Ground', location: 'Sivakasi Bypass', capacity: 4000, floodlights: true, description: 'Premium turf pitch ground.' }
+        { id: 'VEN-01', name: 'Kamarajar District Stadium', location: 'Virudhunagar Central', capacity: 8000, floodlights: true, description: 'Main association ground with LED floodlights and pavilion.' },
+        { id: 'VEN-02', name: 'Sivakasi Cricket Ground', location: 'Sivakasi Bypass', capacity: 4500, floodlights: true, description: 'Premium turf pitch facility.' },
+        { id: 'VEN-03', name: 'Rajapalayam RAC Ground', location: 'PACR Road, Rajapalayam', capacity: 3500, floodlights: false, description: 'Collegiate championship tournament venue.' },
+        { id: 'VEN-04', name: 'Srivilliputhur Kalasalingam Cricket Ground', location: 'Krishnankoil, Srivilliputhur', capacity: 5000, floodlights: true, description: 'Standard ICC dimension turf ground.' },
+        { id: 'VEN-05', name: 'Aruppukottai SBK College Ground', location: 'Aruppukottai', capacity: 3000, floodlights: false, description: 'Taluk-level championship ground.' },
+        { id: 'VEN-06', name: 'Sattur Railway Ground', location: 'Near Railway Station, Sattur', capacity: 2500, floodlights: false, description: 'Fast outfield and traditional turf pitch.' },
+        { id: 'VEN-07', name: 'Vembakottai Sports Pavilion Ground', location: 'Vembakottai', capacity: 2000, floodlights: false, description: 'District rural sports development facility.' },
+        { id: 'VEN-08', name: 'Watrap Taluk Sports Arena Ground', location: 'Main Road, Watrap', capacity: 2000, floodlights: false, description: 'Taluk arena with newly relaid central pitch.' }
       ]);
     }
 
@@ -1290,6 +1653,80 @@ async function seedDefaultData() {
         { id: 'OFF-01', name: 'S. Ramesh', role: 'SCORER', email: 'ramesh@gmail.com', phone: '9876543213', status: 'ACTIVE' },
         { id: 'OFF-02', name: 'K. Murugan', role: 'SCORER', email: 'murugan@cfvd.org', phone: '9876543214', status: 'ACTIVE' }
       ]);
+    }
+
+    // Seed Master Settings Dynamic Options (Taluk Jurisdiction, Playing Role, Batting Style, Age Category, Certification Level, Umpire Certification, State)
+    const masterSettingCount = await MasterSetting.countDocuments();
+    if (masterSettingCount === 0) {
+      const jsonSeedPath = path.join(__dirname, '..', 'data', 'master_settings', 'all_master_settings.json');
+      let defaultOptions = [];
+      if (fs.existsSync(jsonSeedPath)) {
+        defaultOptions = JSON.parse(fs.readFileSync(jsonSeedPath, 'utf8'));
+      } else {
+        defaultOptions = [
+          // 1. Taluk Jurisdiction
+          { category: 'taluk_jurisdiction', name: 'Virudhunagar', code: 'VNR', sort_order: 1 },
+          { category: 'taluk_jurisdiction', name: 'Sivakasi', code: 'SVKS', sort_order: 2 },
+          { category: 'taluk_jurisdiction', name: 'Rajapalayam', code: 'RJPM', sort_order: 3 },
+          { category: 'taluk_jurisdiction', name: 'Srivilliputhur', code: 'SVPR', sort_order: 4 },
+          { category: 'taluk_jurisdiction', name: 'Aruppukottai', code: 'APKI', sort_order: 5 },
+          { category: 'taluk_jurisdiction', name: 'Sattur', code: 'STR', sort_order: 6 },
+          { category: 'taluk_jurisdiction', name: 'Watrap', code: 'WTR', sort_order: 7 },
+          { category: 'taluk_jurisdiction', name: 'Kariapatti', code: 'KPT', sort_order: 8 },
+          { category: 'taluk_jurisdiction', name: 'Tiruchuli', code: 'TCL', sort_order: 9 },
+          { category: 'taluk_jurisdiction', name: 'Vembakottai', code: 'VBK', sort_order: 10 },
+
+          // 2. Playing Role
+          { category: 'playing_role', name: 'Batsman', code: 'BAT', sort_order: 1 },
+          { category: 'playing_role', name: 'Bowler', code: 'BOWL', sort_order: 2 },
+          { category: 'playing_role', name: 'All-Rounder', code: 'AR', sort_order: 3 },
+          { category: 'playing_role', name: 'Wicket Keeper', code: 'WK', sort_order: 4 },
+
+          // 3. Batting Style
+          { category: 'batting_style', name: 'Right-Handed Batsman', code: 'RHB', sort_order: 1 },
+          { category: 'batting_style', name: 'Left-Handed Batsman', code: 'LHB', sort_order: 2 },
+
+          // 4. Age Category
+          { category: 'age_category', name: 'Senior Men', code: 'SR_MEN', sort_order: 1 },
+          { category: 'age_category', name: "Women's Senior", code: 'SR_WOMEN', sort_order: 2 },
+          { category: 'age_category', name: 'Under-23', code: 'U23', sort_order: 3 },
+          { category: 'age_category', name: 'Under-19', code: 'U19', sort_order: 4 },
+          { category: 'age_category', name: 'Under-16', code: 'U16', sort_order: 5 },
+          { category: 'age_category', name: 'Under-14', code: 'U14', sort_order: 6 },
+          { category: 'age_category', name: 'Under-12', code: 'U12', sort_order: 7 },
+
+          // 5. Certification Level (Scorer)
+          { category: 'certification_level', name: 'District Certified', code: 'DIST_CERT', sort_order: 1 },
+          { category: 'certification_level', name: 'State Panel', code: 'STATE_PANEL', sort_order: 2 },
+          { category: 'certification_level', name: 'Club Scorer', code: 'CLUB_SCR', sort_order: 3 },
+          { category: 'certification_level', name: 'Trainee Scorer', code: 'TRAINEE_SCR', sort_order: 4 },
+
+          // 6. Umpire Certification / Qualification
+          { category: 'umpire_certification', name: 'State Panel A (Senior)', code: 'STATE_PANEL_A', sort_order: 1 },
+          { category: 'umpire_certification', name: 'State Panel B', code: 'STATE_PANEL_B', sort_order: 2 },
+          { category: 'umpire_certification', name: 'BCCI Level 1 Certified', code: 'BCCI_L1', sort_order: 3 },
+          { category: 'umpire_certification', name: 'District Senior Panel', code: 'DIST_SR_PANEL', sort_order: 4 },
+          { category: 'umpire_certification', name: 'District Certified Umpire', code: 'DIST_CERT_UMP', sort_order: 5 },
+          { category: 'umpire_certification', name: 'Trainee Umpire', code: 'TRAINEE_UMP', sort_order: 6 },
+
+          // 7. State
+          { category: 'state', name: 'Tamil Nadu', code: 'TN', sort_order: 1 },
+          { category: 'state', name: 'Kerala', code: 'KL', sort_order: 2 },
+          { category: 'state', name: 'Karnataka', code: 'KA', sort_order: 3 },
+          { category: 'state', name: 'Andhra Pradesh', code: 'AP', sort_order: 4 },
+          { category: 'state', name: 'Telangana', code: 'TS', sort_order: 5 },
+          { category: 'state', name: 'Other', code: 'OTHER', sort_order: 6 }
+        ];
+      }
+
+      await MasterSetting.insertMany(
+        defaultOptions.map((opt, idx) => ({
+          id: opt.id || `MSET-${Date.now()}-${idx + 1}`,
+          ...opt,
+          is_active: opt.is_active !== undefined ? opt.is_active : true
+        }))
+      );
+      console.log('✅ Seeded default Master Settings Dynamic Subcategories (Taluk, Roles, Batting, Age, Certs, State).');
     }
   } catch (err) {
     console.warn('Seed note:', err.message);
@@ -1734,6 +2171,13 @@ module.exports = {
     Official,
     Venue,
     AuditLog,
-    UmpireDecision
+    UmpireDecision,
+    CricketLaw,
+    CricketLawSection,
+    CricketLawVersion,
+    CricketLawAuditLog,
+    TournamentCalculation,
+    PlayerMatchRating,
+    MasterSetting
   }
 };
