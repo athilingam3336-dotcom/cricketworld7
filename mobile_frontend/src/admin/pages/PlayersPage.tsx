@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, Image } from 'react-native';
 import PageHeader from '../components/PageHeader';
 import DataTable, { ColumnDef } from '../components/DataTable';
 import StatusBadge from '../components/StatusBadge';
@@ -14,6 +14,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { PlusIcon, EditIcon, EyeIcon, CloseIcon, CricketBatIcon } from '../components/Icons';
 import { adminApi } from '../services/adminApi';
 import { useAdminLayout } from '../components/AdminLayout';
+import { resolveImageUrl } from '../../services/api';
 
 export const PlayersPage: React.FC = () => {
   const { showToast } = useAdminLayout();
@@ -140,21 +141,28 @@ export const PlayersPage: React.FC = () => {
   const columns: ColumnDef<any>[] = [
     {
       header: 'Player',
-      accessor: (p) => (
-        <View style={styles.playerCell}>
-          <View style={styles.avatarCircle}>
-            <Text style={styles.avatarText}>
-              {(p.name || 'P').charAt(0).toUpperCase()}
-            </Text>
+      accessor: (p) => {
+        const photoUrl = resolveImageUrl(p.photo || p.image || p.image_path);
+        return (
+          <View style={styles.playerCell}>
+            {photoUrl ? (
+              <Image source={{ uri: photoUrl }} style={[styles.avatarCircle, { resizeMode: 'cover' }]} />
+            ) : (
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarText}>
+                  {(p.name || 'P').charAt(0).toUpperCase()}
+                </Text>
+              </View>
+            )}
+            <View>
+              <Text style={styles.playerName}>{p.name}</Text>
+              <Text style={styles.playerMeta}>
+                Jersey #{p.jersey || '-'} • {p.battingStyle ? p.battingStyle.replace('_', ' ') : 'RHB'}
+              </Text>
+            </View>
           </View>
-          <View>
-            <Text style={styles.playerName}>{p.name}</Text>
-            <Text style={styles.playerMeta}>
-              Jersey #{p.jersey || '-'} • {p.battingStyle ? p.battingStyle.replace('_', ' ') : 'RHB'}
-            </Text>
-          </View>
-        </View>
-      )
+        );
+      }
     },
     {
       header: 'Team / Club',
@@ -349,11 +357,18 @@ export const PlayersPage: React.FC = () => {
 
               <View style={styles.modalBody}>
                 <View style={styles.profileHeaderSection}>
-                  <View style={styles.profileAvatarBig}>
-                    <Text style={styles.profileAvatarText}>
-                      {(activePlayer.name || 'P').charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
+                  {resolveImageUrl(activePlayer.photo || activePlayer.image || activePlayer.image_path) ? (
+                    <Image
+                      source={{ uri: resolveImageUrl(activePlayer.photo || activePlayer.image || activePlayer.image_path)! }}
+                      style={[styles.profileAvatarBig, { resizeMode: 'cover' }]}
+                    />
+                  ) : (
+                    <View style={styles.profileAvatarBig}>
+                      <Text style={styles.profileAvatarText}>
+                        {(activePlayer.name || 'P').charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
                   <View style={{ flex: 1 }}>
                     <Text style={styles.profileName}>{activePlayer.name}</Text>
                     <Text style={styles.profileTeam}>{activePlayer.teamName}</Text>
@@ -665,7 +680,8 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     backgroundColor: '#0A2540',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    overflow: 'hidden'
   },
   avatarText: {
     color: '#FFFFFF',
@@ -756,7 +772,8 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     backgroundColor: '#0A2540',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    overflow: 'hidden'
   },
   profileAvatarText: {
     fontSize: 24,

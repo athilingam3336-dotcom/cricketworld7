@@ -19,15 +19,36 @@ import {
   Platform,
   Dimensions,
   Animated,
-  StatusBar,
   ActivityIndicator,
-  Alert
+  Alert,
+  Linking,
+  useWindowDimensions,
+  ViewStyle,
+  DimensionValue,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { io } from 'socket.io-client';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppNavigation } from '../src/navigation/AppNavigator';
-import { ScorerApi, getCurrentUser, setCurrentUser, setAuthToken, SOCKET_URL } from '../src/services/api';
+import { ScorerApi, PlayerApi, getCurrentUser, setCurrentUser, setAuthToken, logoutAndClearAllSessions, SOCKET_URL, resolveImageUrl } from '../src/services/api';
+import { MatchHighlightsBanner } from '../src/components/common/MatchHighlightsBanner';
+import {
+  bsColors,
+  bsButtons,
+  bsAlert,
+} from '../src/styles/bootstrapTheme';
+import UmpireSignalOverlay, { UmpireSignalEvent, UmpireSignalsGalleryModal } from '../src/components/common/UmpireSignalOverlay';
 import Header from '../src/layouts/Header';
+import BroadcastLiveBallAction from '../src/components/common/BroadcastLiveBallAction';
+import { VPLEventBanner, VPLSoundControls } from '../src/components/common/VPLEventBanner';
+import { mapBallToEvents, normalizeExtraType, normalizeDismissal } from '../src/utils/vplEventMapper';
+import VideoPreloader from '../src/components/common/VideoPreloader';
+import BootstrapPagination from '../src/components/common/BootstrapPagination';
+import {
+  Ionicons,
+  MaterialCommunityIcons,
+  FontAwesome5,
+} from '@expo/vector-icons';
 
 // ─── ASSET REFERENCES ──────────────────────────────────────────────────────────
 const IMG_LOGO = require('../assets/logo_transparent.png');
@@ -120,11 +141,19 @@ interface DistrictPlayer {
   battingStyle: string;
   bowlingStyle: string;
   team: string;
+  teamShort?: string;
   taluk: string;
   category: string;
   categoryLabel: string;
   verified: boolean;
+  photo?: string;
+  image?: string;
+  image_path?: string;
   avatarColor: [string, string];
+  milestoneType?: 'century' | 'fifty' | 'bowling_haul';
+  milestoneBadge?: string;
+  matchPerformance?: string;
+  matchVs?: string;
   stats: {
     mat: number;
     inns: number;
@@ -142,145 +171,6 @@ interface DistrictPlayer {
   };
   bio: string;
 }
-
-const DISTRICT_PLAYERS: DistrictPlayer[] = [
-  {
-    id: 'CFVD-PLY-101',
-    name: 'R. Saravanan',
-    role: 'batter',
-    roleLabel: 'Opening Batter',
-    playingRole: 'Batter',
-    battingStyle: 'Right Hand Bat',
-    bowlingStyle: 'Right Arm Medium',
-    team: 'Virudhunagar Strikers',
-    taluk: 'Virudhunagar',
-    category: 'senior_men',
-    categoryLabel: "Senior Men's Division",
-    verified: true,
-    avatarColor: ['#1e3a8a', '#3b82f6'],
-    stats: { mat: 8, inns: 8, runs: 445, hs: '112*', avg: '63.57', sr: '149.3', fifties: 3, hundreds: 1, wkts: 0, catches: 8 },
-    bio: 'Lead run-scorer in the Virudhunagar Premier League 2026. Renowned for explosive stroke-play inside the powerplay and steadfast match-winning knocks.'
-  },
-  {
-    id: 'CFVD-PLY-102',
-    name: 'K. Praveen Kumar',
-    role: 'bowler',
-    roleLabel: 'Right-Arm Off Spin Bowler',
-    playingRole: 'Bowler',
-    battingStyle: 'Right Hand Bat',
-    bowlingStyle: 'Right Arm Off Break',
-    team: 'Virudhunagar CC (VHNSN Alumni)',
-    taluk: 'Virudhunagar',
-    category: 'senior_men',
-    categoryLabel: "Senior Men's Division",
-    verified: true,
-    avatarColor: ['#065f46', '#10b981'],
-    stats: { mat: 8, inns: 8, runs: 168, hs: '41*', avg: '28.00', sr: '112.5', fifties: 0, hundreds: 0, wkts: 21, best: '5/24', econ: '5.47', catches: 5 },
-    bio: 'Premier district off-spinner with 21 wickets this season. Exceptional flight control, subtle variations, and invaluable lower-order batting resilience.'
-  },
-  {
-    id: 'CFVD-PLY-103',
-    name: 'S. Karthik Raja',
-    role: 'wicketkeeper',
-    roleLabel: 'Wicketkeeper Batter',
-    playingRole: 'Wicketkeeper Batter',
-    battingStyle: 'Right Hand Bat',
-    bowlingStyle: 'None (Wicketkeeper)',
-    team: 'Rajapalayam CC',
-    taluk: 'Rajapalayam',
-    category: 'senior_men',
-    categoryLabel: "Senior Men's Division",
-    verified: true,
-    avatarColor: ['#7c2d12', '#ea580c'],
-    stats: { mat: 7, inns: 7, runs: 375, hs: '104', avg: '53.57', sr: '133.9', fifties: 2, hundreds: 1, wkts: 0, catches: 9, stumpings: 3 },
-    bio: 'Dynamic wicketkeeper-batter who anchored Rajapalayam CC to the First Division semi-finals. Exceptional glove-work standing up to spin and pace.'
-  },
-  {
-    id: 'CFVD-PLY-104',
-    name: 'K. Meenakshi',
-    role: 'womens',
-    roleLabel: 'Top-Order Batter & Captain',
-    playingRole: 'Batter',
-    battingStyle: 'Right Hand Bat',
-    bowlingStyle: 'Right Arm Leg Break',
-    team: 'SFRC College for Women',
-    taluk: 'Sivakasi',
-    category: 'womens',
-    categoryLabel: "Women's Senior Championship",
-    verified: true,
-    avatarColor: ['#831843', '#ec4899'],
-    stats: { mat: 6, inns: 6, runs: 312, hs: '84*', avg: '62.40', sr: '132.5', fifties: 3, hundreds: 0, wkts: 4, catches: 7 },
-    bio: 'Captained SFRC to the District Inter-College Women’s Trophy. Classical technique against fast bowling and clinical finisher under pressure.'
-  },
-  {
-    id: 'CFVD-PLY-105',
-    name: 'M. Vignesh',
-    role: 'bowler',
-    roleLabel: 'Left-Arm Fast Bowler',
-    playingRole: 'Bowler',
-    battingStyle: 'Right Hand Bat',
-    bowlingStyle: 'Left Arm Fast Medium (135+ km/h)',
-    team: 'Sivakasi Super Kings (ANJAC)',
-    taluk: 'Sivakasi',
-    category: 'senior_men',
-    categoryLabel: 'Under-23 Senior Colts',
-    verified: true,
-    avatarColor: ['#1e1b4b', '#6366f1'],
-    stats: { mat: 8, inns: 8, runs: 62, hs: '22*', avg: '15.50', sr: '124.0', fifties: 0, hundreds: 0, wkts: 18, best: '5/19', econ: '6.19', catches: 4 },
-    bio: 'Fastest bowler in the district circuit with fearsome toe-crushing yorkers and fiery bouncers. Key strike bowler for Sivakasi Super Kings.'
-  },
-  {
-    id: 'CFVD-PLY-106',
-    name: 'P. Muthukumar',
-    role: 'batter',
-    roleLabel: 'Middle-Order Anchor Batter',
-    playingRole: 'Batter',
-    battingStyle: 'Right Hand Bat',
-    bowlingStyle: 'Right Arm Off Break',
-    team: 'Srivilliputhur Warriors',
-    taluk: 'Srivilliputhur',
-    category: 'senior_men',
-    categoryLabel: "Senior Men's Division",
-    verified: true,
-    avatarColor: ['#312e81', '#4f46e5'],
-    stats: { mat: 7, inns: 7, runs: 287, hs: '74*', avg: '47.83', sr: '138.6', fifties: 2, hundreds: 0, wkts: 2, catches: 6 },
-    bio: 'Reliable crisis-man for Srivilliputhur Warriors. Known for astute strike rotation through the middle overs and piercing gaps against spin.'
-  },
-  {
-    id: 'CFVD-PLY-107',
-    name: 'R. Deepika',
-    role: 'allrounder',
-    roleLabel: 'All-Rounder (RHB & Leg Spin)',
-    playingRole: 'All-Rounder',
-    battingStyle: 'Right Hand Bat',
-    bowlingStyle: 'Right Arm Leg Spin',
-    team: "Andal District Women's XI",
-    taluk: 'Srivilliputhur',
-    category: 'womens',
-    categoryLabel: "Women's U-23 / U-25",
-    verified: true,
-    avatarColor: ['#701a75', '#d946ef'],
-    stats: { mat: 6, inns: 6, runs: 195, hs: '56', avg: '39.00', sr: '121.8', fifties: 1, hundreds: 0, wkts: 11, best: '4/18', econ: '4.85', catches: 5 },
-    bio: 'Promising youth all-rounder hailing from Srivilliputhur. Accurate wrist-spin paired with composed batting in the top four order.'
-  },
-  {
-    id: 'CFVD-PLY-108',
-    name: 'K. Ganesan',
-    role: 'allrounder',
-    roleLabel: 'Batting All-Rounder & Finisher',
-    playingRole: 'All-Rounder',
-    battingStyle: 'Right Hand Bat',
-    bowlingStyle: 'Right Arm Medium Fast',
-    team: 'Aruppukottai Stars',
-    taluk: 'Aruppukottai',
-    category: 'senior_men',
-    categoryLabel: "Senior Men's Division",
-    verified: true,
-    avatarColor: ['#854d0e', '#eab308'],
-    stats: { mat: 6, inns: 6, runs: 260, hs: '68', avg: '43.33', sr: '142.8', fifties: 2, hundreds: 0, wkts: 8, best: '3/32', econ: '6.80', catches: 4 },
-    bio: 'Hard-hitting batting all-rounder who powers Aruppukottai Stars in the death overs. Capable seam bowler with handy wicket-taking cutters.'
-  }
-];
 
 // Affiliated Colleges Data
 interface CollegeItem {
@@ -318,6 +208,7 @@ export default function HomeScreen() {
 
   // Authentication Session State (JWT Bearer / Cookie)
   const [sessionUser, setSessionUser] = useState<any>(() => getCurrentUser());
+  const [showIntroVideo, setShowIntroVideo] = useState<boolean>(false);
 
   useEffect(() => {
     // 1. Check local session cache
@@ -339,11 +230,14 @@ export default function HomeScreen() {
 
   const handleLogout = async () => {
     try {
-      await ScorerApi.logout();
+      await logoutAndClearAllSessions();
     } catch (_e) { }
     setAuthToken(null);
     setCurrentUser(null);
     setSessionUser(null);
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.location.href = '/';
+    }
   };
 
   const handleNavigateToUserPortal = () => {
@@ -364,16 +258,29 @@ export default function HomeScreen() {
     }
   };
 
-  // Screen Width for responsive layouts
-  const [windowWidth, setWindowWidth] = useState(Dimensions.get('window').width);
+  // Dynamic Responsive Breakpoints (Updates automatically on all devices & orientations)
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isMobile = windowWidth < 768;
+  const isTablet = windowWidth >= 768 && windowWidth < 1024;
+  const isDesktop = windowWidth >= 1024;
+  const isSmallMobile = windowWidth < 480;
+  const isTinyMobile = windowWidth < 380;
 
-  useEffect(() => {
-    const sub = Dimensions.addEventListener('change', ({ window }) => {
-      setWindowWidth(window.width);
-    });
-    return () => sub?.remove();
-  }, []);
+  // Bootstrap 5 Official Media Query Breakpoints (xs < 576, sm 576-767, md 768-991, lg 992-1199, xl 1200-1399, xxl >= 1400)
+  const isXs = windowWidth < 576;
+  const isSm = windowWidth >= 576 && windowWidth < 768;
+  const isMd = windowWidth >= 768 && windowWidth < 992;
+  const isLg = windowWidth >= 992 && windowWidth < 1200;
+  const isXl = windowWidth >= 1200 && windowWidth < 1400;
+  const isXxl = windowWidth >= 1400;
+
+  // Bootstrap 5 Responsive Container Max-Width & Gutter Padding
+  const containerResponsiveStyle: ViewStyle = {
+    width: '100%',
+    maxWidth: (isXxl ? 1320 : (isXl ? 1140 : (isLg ? 960 : (isMd ? 720 : '100%')))) as DimensionValue,
+    alignSelf: 'center',
+    paddingHorizontal: isXs ? 12 : (isSm ? 16 : 24)
+  };
 
   // Animations
   const pulseAnim = useRef(new Animated.Value(0.4)).current;
@@ -387,25 +294,99 @@ export default function HomeScreen() {
   }, [pulseAnim]);
 
   // Section Scroll Reference
-  const mainScrollRef = useRef<ScrollView>(null);
+  const mainScrollRef = useRef<any>(null);
   const [sectionPositions, setSectionPositions] = useState<Record<string, number>>({});
 
   const scrollToSection = (secName: string) => {
-    const y = sectionPositions[secName] || 0;
-    mainScrollRef.current?.scrollTo({ y: Math.max(0, y - 20), animated: true });
     setMobileNavOpen(false);
+
+    const posKeyMap: Record<string, string> = {
+      standings: 'pointsTable',
+      playerRatings: 'stats',
+      clubs: 'about',
+      rules: 'about',
+    };
+    const resolvedKey = posKeyMap[secName] || secName;
+
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      const idMap: Record<string, string> = {
+        matchCentre: 'cfvd-section-match-centre',
+        pointsTable: 'cfvd-section-points-table',
+        standings: 'cfvd-section-points-table',
+        tournaments: 'cfvd-section-tournaments',
+        stats: 'cfvd-section-stats',
+        playerRatings: 'cfvd-section-stats',
+        players: 'cfvd-section-players',
+        about: 'cfvd-section-about',
+        grounds: 'cfvd-section-grounds',
+        news: 'cfvd-section-news',
+      };
+
+      const targetId = idMap[secName] || idMap[resolvedKey] || secName;
+      const el = document.getElementById(targetId);
+
+      if (el) {
+        // Scroll the ScrollView's DOM node directly using precise bounding geometry
+        const scrollNode =
+          (mainScrollRef.current as any)?.getScrollableNode?.() ||
+          (mainScrollRef.current as any)?._nativeRef ||
+          el.closest('[style*="overflow"]') ||
+          document.querySelector('[data-class~="r-overflowY-1v1zgw7"]') ||
+          document.querySelector('div[style*="overflow-y"]') ||
+          document.documentElement;
+
+        if (scrollNode && typeof scrollNode.getBoundingClientRect === 'function') {
+          const scrollRect = scrollNode.getBoundingClientRect();
+          const elRect = el.getBoundingClientRect();
+          const targetY = scrollNode.scrollTop + (elRect.top - scrollRect.top);
+          scrollNode.scrollTo({ top: Math.max(0, targetY - 10), behavior: 'smooth' });
+          return;
+        }
+
+        // Fallback: window scroll or standard scrollIntoView with scrollMarginTop
+        if (typeof window !== 'undefined') {
+          const winTargetY = window.scrollY + el.getBoundingClientRect().top - 95;
+          window.scrollTo({ top: Math.max(0, winTargetY), behavior: 'smooth' });
+        }
+        try {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } catch (_err) {}
+        return;
+      }
+    }
+
+    const y = sectionPositions[resolvedKey] || sectionPositions[secName] || 0;
+    mainScrollRef.current?.scrollTo({ y: Math.max(0, y - 10), animated: true });
   };
 
   // State: Mobile Nav Menu
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
-  // State: Match Centre Filter
-  const [matchFilter, setMatchFilter] = useState<'all' | 'live' | 'upcoming' | 'results'>('all');
+  // State: Match Centre Filter & Pagination (Reusable 8 items per page)
+  const [matchFilter, setMatchFilter] = useState<'all' | 'live' | 'upcoming' | 'postponed' | 'results'>('all');
+  const [matchPage, setMatchPage] = useState<number>(1);
+  const MATCHES_PER_PAGE = 8;
+
+  // State: Standings Points Table Pagination (Reusable 8 items per page)
+  const [standingsPage, setStandingsPage] = useState<number>(1);
+  const STANDINGS_PER_PAGE = 8;
+
+  // State: Performance Records Pagination (Reusable 8 items per page)
+  const [perfRatingsPage, setPerfRatingsPage] = useState<number>(1);
+  const [perfBattingPage, setPerfBattingPage] = useState<number>(1);
+  const [perfBowlingPage, setPerfBowlingPage] = useState<number>(1);
+  const [perfFieldingPage, setPerfFieldingPage] = useState<number>(1);
+  const PERF_PER_PAGE = 8;
+
+  // State: Player Milestone Hall of Fame Pagination (Reusable 8 items per page)
+  const [milestonePage, setMilestonePage] = useState<number>(1);
+  const MILESTONE_PER_PAGE = 8;
 
   // Dynamic Real Match State from MongoDB
   const [publicMatches, setPublicMatches] = useState<any[]>([]);
   const [isLoadingMatches, setIsLoadingMatches] = useState<boolean>(true);
   const [matchesError, setMatchesError] = useState<string | null>(null);
+  const hasLoadedMatchesOnceRef = useRef<boolean>(false);
   const [activeScorecardMatchData, setActiveScorecardMatchData] = useState<any>(null);
   const [realScorecardData, setRealScorecardData] = useState<any>(null);
   const [isLoadingScorecard, setIsLoadingScorecard] = useState<boolean>(false);
@@ -433,7 +414,7 @@ export default function HomeScreen() {
         if (Array.isArray(res.data.topFielders) && res.data.topFielders.length > 0) {
           setPortalTopFielders(res.data.topFielders);
         }
-        if (Array.isArray(res.data.allPlayers) && res.data.allPlayers.length > 0) {
+        if (Array.isArray(res.data.allPlayers)) {
           setPortalAllPlayers(res.data.allPlayers);
         }
       }
@@ -442,73 +423,131 @@ export default function HomeScreen() {
     }
   };
 
-  const loadPublicMatches = async () => {
-    setIsLoadingMatches(true);
-    setMatchesError(null);
+  const loadPublicMatches = async (isInitial = false) => {
+    // Silent background refresh (AJAX style) - only show loading on very first initial load before data is cached
+    if (isInitial && !hasLoadedMatchesOnceRef.current) {
+      setIsLoadingMatches(true);
+    }
     try {
       const res = await ScorerApi.getPublicMatches();
-      if (res && res.success && Array.isArray(res.data)) {
-        setPublicMatches(res.data);
-      } else if (Array.isArray(res)) {
-        setPublicMatches(res);
-      } else {
-        setPublicMatches([]);
+      const data = res?.data || res?.matches || (Array.isArray(res) ? res : []);
+      if (Array.isArray(data)) {
+        setPublicMatches(data);
+        setMatchesError(null);
+        hasLoadedMatchesOnceRef.current = true;
       }
     } catch (err: any) {
       console.warn('Failed to load public matches from API:', err.message);
-      setMatchesError(err.message || 'Unable to connect to match database');
+      // Only set error message if we don't already have matches cached
+      if (!hasLoadedMatchesOnceRef.current) {
+        setMatchesError(err.message || 'Unable to connect to match database');
+      }
     } finally {
       setIsLoadingMatches(false);
     }
   };
 
-  useEffect(() => {
-    loadPublicMatches();
-    loadPortalData();
+  // State: Ratings Leaderboard (Module 5)
+  const [ratingCategory, setRatingCategory] = useState<'overall' | 'batting' | 'bowling'>('overall');
+  const [ratingFormat, setRatingFormat] = useState<'ALL' | 'T20' | 'ONE_DAY' | 'MULTI_DAY'>('ALL');
+  const [ratingLeaders, setRatingLeaders] = useState<any[]>([]);
+  const [isLoadingLeaders, setIsLoadingLeaders] = useState<boolean>(false);
 
-    // Real-time Socket.IO Live Score Synchronization
+  const loadRatingsLeaderboard = async (category = ratingCategory, format = ratingFormat) => {
+    try {
+      setIsLoadingLeaders(true);
+      const res = await PlayerApi.getRatingsLeaderboard({
+        category,
+        format,
+        limit: 10
+      });
+      if (res && res.success && Array.isArray(res.leaders)) {
+        setRatingLeaders(res.leaders);
+      }
+    } catch (e: any) {
+      console.warn('Ratings leaderboard fetch error:', e.message);
+    } finally {
+      setIsLoadingLeaders(false);
+    }
+  };
+
+  useEffect(() => {
+    loadPublicMatches(true);
+    loadPortalData();
+    loadRatingsLeaderboard();
+
+    // Real-time Socket.IO Live Score Synchronization (Zero-Flicker targeted updates)
     let socket: any = null;
     try {
-      socket = io(SOCKET_URL);
-      socket.on('score:update', () => {
-        loadPublicMatches();
-        loadPortalData();
-      });
-      socket.on('connect', () => {
-        loadPublicMatches();
-        loadPortalData();
+      socket = io(SOCKET_URL, { timeout: 5000, reconnectionAttempts: 3 });
+      socket.on('score:update', (payload: any) => {
+        // Targeted in-place update without re-fetching entire portal
+        if (payload?.matchId) {
+          setPublicMatches(prev => prev.map(m => {
+            if (m.id === payload.matchId) {
+              const latestDelivery = payload.lastDelivery || payload.lastEvent || m.lastDelivery;
+              return {
+                ...m,
+                scoreA: payload.scoreA !== undefined ? payload.scoreA : (payload.battingTeamId === m.teamAId ? payload.score : m.scoreA),
+                scoreB: payload.scoreB !== undefined ? payload.scoreB : (payload.battingTeamId === m.teamBId ? payload.score : m.scoreB),
+                lastDelivery: latestDelivery,
+                lastEvent: latestDelivery,
+                currentInnings: payload.currentInnings || m.currentInnings,
+                status: payload.status || m.status,
+                rawStatus: payload.status || m.rawStatus,
+                statusText: payload.statusText || m.statusText,
+                liveText: payload.liveText || m.liveText
+              };
+            }
+            return m;
+          }));
+        } else {
+          loadPublicMatches(false);
+        }
       });
     } catch (e) {
       // Fallback to active interval
     }
 
-    const timer = setInterval(() => {
-      loadPublicMatches();
+    // High-speed realtime background poll: every 3 seconds for rapid live match sync
+    const matchTimer = setInterval(() => {
+      loadPublicMatches(false);
+    }, 3000);
+
+    const portalTimer = setInterval(() => {
       loadPortalData();
-    }, 8000);
+    }, 60000);
 
     return () => {
-      clearInterval(timer);
+      clearInterval(matchTimer);
+      clearInterval(portalTimer);
       if (socket) socket.disconnect();
     };
   }, []);
 
-  const handleOpenScorecard = async (matchItem: any) => {
-    setActiveScorecardMatch(matchItem.id);
-    setActiveScorecardMatchData(matchItem);
-    setRealScorecardData(null);
-    setScorecardModalVisible(true);
-    setIsLoadingScorecard(true);
-    try {
-      const res = await ScorerApi.getPublicScorecard(matchItem.id);
-      const scorecard = res?.data || res?.scorecard || (res?.innings ? res : null);
-      if (scorecard) {
-        setRealScorecardData(scorecard);
-      }
-    } catch (err) {
-      console.warn('Could not fetch detailed scorecard, falling back to match summary:', err);
-    } finally {
-      setIsLoadingScorecard(false);
+  const handleOpenScorecard = (matchItem: any) => {
+    if (!matchItem?.id) return;
+    navigate('Scorecard', { matchId: matchItem.id, returnTo: 'Home' });
+  };
+
+  const handleOpenGoogleMaps = (venueMapsUrl?: string, venueName?: string) => {
+    const v = (venueName || 'Kamarajar District Stadium, Virudhunagar').trim();
+    let url = venueMapsUrl && venueMapsUrl.startsWith('http') ? venueMapsUrl : '';
+    if (!url) {
+      const query = encodeURIComponent(
+        v.toLowerCase().includes('virudhunagar') || v.toLowerCase().includes('tamil nadu')
+          ? v
+          : `${v}, Virudhunagar, Tamil Nadu`
+      );
+      url = `https://www.google.com/maps/search/?api=1&query=${query}`;
+    }
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      Linking.openURL(url).catch((err) => {
+        console.warn('Failed to open maps URL:', err);
+        Alert.alert('Location Map', `Location: ${v}`);
+      });
     }
   };
 
@@ -525,8 +564,8 @@ export default function HomeScreen() {
   // State: Points Table Filter
   const [pointsTableKey, setPointsTableKey] = useState<string>('div1');
 
-  // State: Performance Stats Filter
-  const [perfTab, setPerfTab] = useState<'batting' | 'bowling' | 'fielding'>('batting');
+  // State: Performance Stats Filter (default to ⭐ ratings)
+  const [perfTab, setPerfTab] = useState<'ratings' | 'batting' | 'bowling' | 'fielding'>('ratings');
 
   // State: District Players
   const [playerFilter, setPlayerFilter] = useState<string>('all');
@@ -551,7 +590,7 @@ export default function HomeScreen() {
   const [tossWinner, setTossWinner] = useState('Virudhunagar Strikers');
   const [tossDecision, setTossDecision] = useState('bowl');
   const [tossAnnouncement, setTossAnnouncement] = useState(
-    '🪙 Virudhunagar Strikers won the toss and elected to BOWL FIRST (20.0 Overs).'
+    'Virudhunagar Strikers won the toss and elected to BOWL FIRST (20.0 Overs).'
   );
 
   // Modals State
@@ -559,6 +598,10 @@ export default function HomeScreen() {
   const [activeScorecardMatch, setActiveScorecardMatch] = useState<string>('match-1');
   const [lightboxImage, setLightboxImage] = useState<{ uri: any; caption: string } | null>(null);
   const [activeNewsModal, setActiveNewsModal] = useState<{ title: string; date: string; content: string } | null>(null);
+
+  // Official ICC & TNCA Umpire Signals Broadcast Overlay State
+  const [activeUmpireSignal, setActiveUmpireSignal] = useState<UmpireSignalEvent | null>(null);
+  const [showUmpireGallery, setShowUmpireGallery] = useState<boolean>(false);
 
   // Handlers
   const handleAddCollege = () => {
@@ -579,26 +622,51 @@ export default function HomeScreen() {
     setNewColName('');
     setNewColHead('');
     setNewColGround('');
-    Alert.alert('Success', `✓ ${newCol.name} successfully registered in Federation Admin Setup!`);
+    Alert.alert('Success', `${newCol.name} successfully registered in Federation Admin Setup!`);
   };
 
   const handleRecordToss = () => {
-    const text = `🪙 ${tossWinner} won the toss and elected to ${tossDecision.toUpperCase()} FIRST (${selectedOvers}.0 Overs).`;
+    const text = `${tossWinner} won the toss and elected to ${tossDecision.toUpperCase()} FIRST (${selectedOvers}.0 Overs).`;
     setTossAnnouncement(text);
     Alert.alert('Toss Decision', `Toss Decision Recorded!\n\n${text}`);
   };
 
-  // Filtered Players
-  const allDisplayPlayers = portalAllPlayers.length > 0 ? portalAllPlayers : DISTRICT_PLAYERS;
+  // District Special Milestone Players loaded strictly from Database (MongoDB)
+  const allDisplayPlayers = portalAllPlayers.filter(p => {
+    // Strictly exclude any player with 0 runs and 0 wickets (e.g. unplayed roster entries)
+    const runs = p.stats?.runs || 0;
+    const wkts = p.stats?.wkts || 0;
+    const hs = parseInt(p.stats?.hs || '0', 10);
+    const hasMilestone =
+      p.milestoneType ||
+      hs >= 50 ||
+      runs >= 50 ||
+      wkts >= 3 ||
+      (p.stats?.hundreds && p.stats.hundreds > 0) ||
+      (p.stats?.fifties && p.stats.fifties > 0) ||
+      (p.stats?.best && (p.stats.best.startsWith('3/') || p.stats.best.startsWith('4/') || p.stats.best.startsWith('5/')));
+    return !!hasMilestone;
+  });
+
   const filteredPlayers = allDisplayPlayers.filter(p => {
-    const matchesCategory =
-      playerFilter === 'all'
-        ? true
-        : playerFilter === 'womens'
-          ? p.role === 'womens' || p.category === 'womens'
-          : playerFilter === 'allrounder'
-            ? p.role === 'allrounder' || p.role === 'all_rounder'
-            : p.role === playerFilter;
+    const hs = parseInt(p.stats?.hs || '0', 10);
+    const wkts = p.stats?.wkts || 0;
+    const hundreds = p.stats?.hundreds || 0;
+    const fifties = p.stats?.fifties || 0;
+
+    let matchesCategory = true;
+    if (playerFilter === 'century') {
+      matchesCategory = p.milestoneType === 'century' || hundreds > 0 || hs >= 100;
+    } else if (playerFilter === 'fifty') {
+      matchesCategory = p.milestoneType === 'fifty' || (fifties > 0 && hundreds === 0) || (hs >= 50 && hs < 100);
+    } else if (playerFilter === 'bowler') {
+      matchesCategory =
+        p.milestoneType === 'bowling_haul' ||
+        wkts >= 3 ||
+        (p.stats?.best && (p.stats.best.startsWith('3/') || p.stats.best.startsWith('4/') || p.stats.best.startsWith('5/')));
+    } else if (playerFilter === 'womens') {
+      matchesCategory = p.role === 'womens' || p.category === 'womens';
+    }
 
     const q = playerSearchQuery.toLowerCase().trim();
     const matchesSearch =
@@ -607,32 +675,20 @@ export default function HomeScreen() {
       (p.team && p.team.toLowerCase().includes(q)) ||
       (p.taluk && p.taluk.toLowerCase().includes(q)) ||
       (p.roleLabel && p.roleLabel.toLowerCase().includes(q)) ||
-      (p.playingRole && p.playingRole.toLowerCase().includes(q));
+      (p.playingRole && p.playingRole.toLowerCase().includes(q)) ||
+      (p.milestoneBadge && p.milestoneBadge.toLowerCase().includes(q)) ||
+      (p.matchPerformance && p.matchPerformance.toLowerCase().includes(q)) ||
+      (p.matchVs && p.matchVs.toLowerCase().includes(q));
 
     return matchesCategory && matchesSearch;
   });
 
   return (
     <View style={styles.rootContainer}>
-      <StatusBar barStyle="light-content" backgroundColor="#040a1b" />
+      <StatusBar style="light" />
 
-      {/* FIXED BRIGHT ATMOSPHERIC BACKGROUND */}
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
-        <Image source={IMG_STADIUM} style={styles.bgStadiumImage} resizeMode="cover" />
-        <LinearGradient
-          colors={['rgba(246, 242, 233, 0.94)', 'rgba(252, 249, 244, 0.97)', '#f6f2e9']}
-          style={StyleSheet.absoluteFill}
-        />
-        {/* Top Glow Bloom */}
-        <LinearGradient
-          colors={['rgba(254, 217, 102, 0.22)', 'rgba(212, 175, 55, 0.08)', 'transparent']}
-          style={styles.bgTopGlow}
-        />
-        {/* Watermark Crest */}
-        <View style={styles.bgWatermarkContainer}>
-          <Image source={IMG_WATERMARK} style={styles.bgWatermarkImage} resizeMode="contain" />
-        </View>
-      </View>
+      {/* SOLID CLEAN PAGE BACKGROUND (NO BACKGROUND IMAGE) */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: '#f6f2e9', pointerEvents: 'none' as const }]} />
 
       {/* TOP HEADER / NAVBAR (Extracted Layout Component) */}
       <Header
@@ -640,6 +696,31 @@ export default function HomeScreen() {
         onLogout={handleLogout}
         onNavigateToUserPortal={handleNavigateToUserPortal}
         scrollToSection={scrollToSection}
+        onSelectCategory={(category: any) => {
+          if (category === 'tournaments') {
+            scrollToSection('tournaments');
+          } else if (category === 'fixtures') {
+            setMatchFilter('upcoming');
+            setMatchPage(1);
+            scrollToSection('matchCentre');
+          } else if (category === 'results') {
+            setMatchFilter('results');
+            setMatchPage(1);
+            scrollToSection('matchCentre');
+          } else if (category === 'pointsTable') {
+            scrollToSection('pointsTable');
+          } else if (category === 'stats') {
+            scrollToSection('stats');
+          } else if (category === 'rules') {
+            scrollToSection('rules');
+          } else if (category === 'clubs') {
+            scrollToSection('clubs');
+          } else if (category === 'grounds') {
+            scrollToSection('grounds');
+          } else if (category === 'news' || category === 'photos') {
+            scrollToSection('news');
+          }
+        }}
         onScrollToTop={() => mainScrollRef.current?.scrollTo({ y: 0, animated: true })}
         isMobile={isMobile}
         mobileNavOpen={mobileNavOpen}
@@ -677,20 +758,20 @@ export default function HomeScreen() {
                     {liveM ? (
                       <>
                         <Text style={styles.tickerMatchHighlight}>
-                          {`🔴 LIVE: ${liveM.teamA} ${liveM.scoreA || ''} vs ${liveM.teamB}${liveM.scoreB && liveM.scoreB !== 'Yet to bat' ? ' ' + liveM.scoreB : ' (Yet to bat)'} — ${liveM.current_innings_number === 2 ? '2nd Innings in Progress' : '1st Innings in Progress'}`}
+                          {`LIVE: ${liveM.teamA} ${liveM.scoreA || ''} vs ${liveM.teamB}${liveM.scoreB && liveM.scoreB !== 'Yet to bat' ? ' ' + liveM.scoreB : ' (Yet to bat)'} — ${liveM.current_innings_number === 2 ? '2nd Innings in Progress' : '1st Innings in Progress'}`}
                         </Text>
                         {'   •   '}
                       </>
                     ) : null}
                     {compM.map((cm, i) => (
                       <React.Fragment key={cm.id || i}>
-                        <Text style={styles.tickerPrefix}>🏁 {cm.teamA} vs {cm.teamB}:</Text>
+                        <Text style={styles.tickerPrefix}>{cm.teamA} vs {cm.teamB}:</Text>
                         <Text style={styles.tickerMatchHighlight}>{` ${cm.scoreA || ''} vs ${cm.scoreB || ''}`}</Text>
                         {` — ${cm.result || cm.result_summary || 'Match Concluded'}${i < compM.length - 1 ? '   •   ' : ''}`}
                       </React.Fragment>
                     ))}
                     {publicMatches.length === 0 && (
-                      <Text style={styles.tickerPrefix}>🏆 Cricket Federation of Virudhunagar District • Official Match Centre</Text>
+                      <Text style={styles.tickerPrefix}>Cricket Federation of Virudhunagar District • Official Match Centre</Text>
                     )}
                   </Text>
                 </TouchableOpacity>
@@ -701,7 +782,6 @@ export default function HomeScreen() {
           {/* Right Links */}
           {!isMobile && (
             <View style={styles.tickerLinksRow}>
-
               <TouchableOpacity
                 style={styles.tickerLinkItem}
                 onPress={() =>
@@ -713,7 +793,8 @@ export default function HomeScreen() {
                   })
                 }
               >
-                <Text style={styles.tickerLinkText}>📜 League By-Laws</Text>
+                <Ionicons name="document-text-outline" size={13} color="#475569" style={{ marginRight: 5 }} />
+                <Text style={styles.tickerLinkText}>League By-Laws</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.tickerLinkItem}
@@ -726,7 +807,8 @@ export default function HomeScreen() {
                   })
                 }
               >
-                <Text style={styles.tickerLinkText}>⚖️ Sports Integrity</Text>
+                <Ionicons name="shield-checkmark-outline" size={13} color="#475569" style={{ marginRight: 5 }} />
+                <Text style={styles.tickerLinkText}>Sports Integrity</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -740,187 +822,171 @@ export default function HomeScreen() {
         contentContainerStyle={styles.mainScrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* ─── 1. HERO SECTION (LUMINOUS GOLDEN ATMOSPHERE) ──────────────── */}
-        <View style={styles.heroSection}>
-          {/* Luminous Light Gold/Cream Radiant Atmosphere */}
+        {/* ─── 1. PRESTIGIOUS ATHLETIC HERO SECTION ──────────────── */}
+        <View style={styles.oasoHeroSection}>
+          {/* Deep Athletic Light Gradient matching Clean Federation Theme */}
           <LinearGradient
-            colors={['#bcc5cf', '#ccd6e0', '#fbedbe', '#fef3c7', '#fde047']}
-            start={{ x: 0, y: 0.1 }}
-            end={{ x: 1, y: 0.9 }}
+            colors={[
+              '#ffffff',
+              '#fbf9f4',
+              '#f6f2e9'
+            ]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
 
-          {/* Large Gold Watermark Crest positioned center-right */}
-          <View
-            style={[
-              styles.heroWatermarkContainer,
-              isMobile && {
-                right: 'auto',
-                left: '50%',
-                top: '50%',
-                width: Math.min(windowWidth * 0.88, 360),
-                height: Math.min(windowWidth * 0.88, 360),
-                transform: [
-                  { translateX: -Math.min(windowWidth * 0.88, 360) / 2 },
-                  { translateY: -Math.min(windowWidth * 0.88, 360) / 2 }
-                ],
-                opacity: 0.38
-              }
-            ]}
-            pointerEvents="none"
-          >
-            {/* Outer and Inner Halo Rings */}
-            <View style={styles.emblemRingOuter} />
-            <View style={styles.emblemRingInner} />
-            <Image
-              source={IMG_LOGO}
-              style={styles.heroWatermarkImage}
-              resizeMode="contain"
-            />
-          </View>
+          {/* Subtle Decorative Atmosphere Rings */}
+          <View style={styles.heroDecoRing1} pointerEvents="none" />
+          <View style={styles.heroDecoRing2} pointerEvents="none" />
 
-          {/* Mobile Overlay Layer directly above the Logo Crest for high text contrast */}
-          {isMobile && (
-            <View
-              style={[
-                StyleSheet.absoluteFill,
-                {
-                  zIndex: 1,
-                  backgroundColor: 'rgba(254, 252, 246, 0.78)',
-                  ...(Platform.OS === 'web'
-                    ? ({
-                        backdropFilter: 'blur(3px)',
-                        WebkitBackdropFilter: 'blur(3px)',
-                      } as any)
-                    : {}),
-                }
-              ]}
-              pointerEvents="none"
-            >
-              <LinearGradient
-                colors={[
-                  'rgba(241, 245, 249, 0.82)',
-                  'rgba(254, 252, 246, 0.86)',
-                  'rgba(254, 243, 199, 0.80)',
-                ]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-            </View>
-          )}
+          {/* Bootstrap Responsive Container */}
+          <View style={[styles.container, containerResponsiveStyle, styles.oasoHeroContainer]}>
+            <View style={[styles.oasoHeroRow, isMobile && styles.oasoHeroRowMobile]}>
+              
+              {/* Left Column: Bold Headline & Actions */}
+              <View style={[styles.oasoHeroContentCol, isMobile && styles.oasoHeroContentColMobile]}>
+                
+                {/* Overline Badge */}
+                <View style={[styles.oasoOverlineBadge, isMobile && { alignSelf: 'center' }]}>
+                  <View style={styles.oasoPulseGoldDot} />
+                  <Text style={styles.oasoOverlineText}>CRICKET FEDERATION OF VIRUDHUNAGAR DISTRICT</Text>
+                  <View style={styles.oasoAffiliatedBadge}>
+                    <Text style={styles.oasoAffiliatedBadgeText}>OFFICIAL UNIT</Text>
+                  </View>
+                </View>
 
-          <View
-            style={[
-              styles.container,
-              styles.heroContainer,
-              isMobile && {
-                alignItems: 'center',
-                alignSelf: 'center',
-                paddingLeft: 16,
-                paddingRight: 16,
-                maxWidth: '100%',
-              }
-            ]}
-          >
-            {/* Pretitle badges row */}
-            <View
-              style={[
-                styles.heroPretitleRow,
-                isMobile && {
-                  justifyContent: 'center',
-                  alignSelf: 'center',
-                  gap: 6,
-                  marginBottom: 12,
-                }
-              ]}
-            >
-              <View style={[styles.heroBadgeDistrict, isMobile && { paddingHorizontal: 9, paddingVertical: 4 }]}>
-                <Text style={[styles.heroBadgeDistrictText, isMobile && { fontSize: 10 }]}>🛡️ OFFICIAL DISTRICT BODY</Text>
-              </View>
-              <View style={[styles.heroBadgeCouncil, isMobile && { paddingHorizontal: 9, paddingVertical: 4 }]}>
-                <Text style={[styles.heroBadgeCouncilText, isMobile && { fontSize: 10 }]}>⚫ CFVD GOVERNING COUNCIL</Text>
-              </View>
-              <View style={[styles.heroBadgeHeritage, isMobile && { paddingHorizontal: 9, paddingVertical: 4 }]}>
-                <Text style={[styles.heroBadgeHeritageText, isMobile && { fontSize: 10 }]}>🛕 SRIVILLIPUTHUR HERITAGE</Text>
-              </View>
-            </View>
+                {/* Big, Condensed Bold Headline matching OASO Typography */}
+                <Text style={[styles.oasoHeroTitle, isMobile && styles.oasoHeroTitleMobile]}>
+                  CHASING{'\n'}
+                  <Text style={{ color: '#b45309' }}>CRICKET{'\n'}EXCELLENCE</Text>{'\n'}
+                  TOGETHER
+                </Text>
 
-            {/* Main Title */}
-            <Text
-              style={[
-                styles.heroHeadingLine1,
-                isMobile && {
-                  textAlign: 'center',
-                  alignSelf: 'center',
-                  fontSize: windowWidth < 380 ? 20 : 23,
-                  letterSpacing: 0.5,
-                  color: '#07132c',
-                  marginBottom: 4,
-                }
-              ]}
-            >
-              CRICKET FEDERATION OF
-            </Text>
-            <Text
-              style={[
-                styles.heroHeadingLine2,
-                isMobile && {
-                  textAlign: 'center',
-                  alignSelf: 'center',
-                  fontSize: windowWidth < 380 ? 24 : (windowWidth < 440 ? 27 : 32),
-                  letterSpacing: 0.8,
-                  color: '#b45309',
-                  textShadowColor: 'rgba(0, 0, 0, 0.12)',
-                  textShadowOffset: { width: 0, height: 1 },
-                  textShadowRadius: 2,
-                  marginBottom: 12,
-                }
-              ]}
-            >
-              VIRUDHUNAGAR DISTRICT
-            </Text>
+                {/* Punchy Tagline / Extra Headline Content */}
+                <View style={[{ flexDirection: 'row', alignItems: 'center', marginBottom: 12 }, isMobile && { justifyContent: 'center' }]}>
+                  <Ionicons name="flash" size={14} color="#d97706" style={{ marginRight: 6 }} />
+                  <Text style={[styles.oasoHeroTagline, isMobile && { textAlign: 'center' }, { marginBottom: 0 }]}>
+                    EMPOWERING TALENT • FOSTERING PASSION • UNITING CHAMPIONS
+                  </Text>
+                </View>
 
-            {/* 3D Folded Golden Motto Ribbon Banner */}
-            <View
-              style={[
-                styles.ribbonWrapper,
-                isMobile && {
-                  alignSelf: 'center',
-                  marginBottom: 16,
-                }
-              ]}
-            >
-              <View style={styles.ribbonTailLeft} />
-              <LinearGradient
-                colors={['#fff4c4', '#f5ce55', '#d4af37', '#996515']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={[
-                  styles.ribbonBody,
-                  isMobile && {
-                    paddingHorizontal: 12,
-                    paddingVertical: 6,
-                  }
-                ]}
-              >
-                <Text style={styles.ribbonStar}>★</Text>
-                <Text
+                {/* Subtitle in soft slate */}
+                <Text style={[styles.oasoHeroSubtitle, isMobile && styles.oasoHeroSubtitleMobile]}>
+                  Governing, developing, and fostering grassroots, collegiate, and competitive cricket across Srivilliputhur, Sivakasi, Rajapalayam, Sattur, Aruppukottai, and Virudhunagar under the official authority of CFVD.
+                </Text>
+
+                {/* Highlight Chips Row */}
+                <View style={[styles.oasoHighlightsRow, isMobile && { justifyContent: 'center' }]}>
+                  <View style={styles.oasoHighlightChip}>
+                    <Text style={styles.oasoHighlightEmoji}>🏆</Text>
+                    <Text style={styles.oasoHighlightText}>District League 2026-27</Text>
+                  </View>
+                  <View style={styles.oasoHighlightChip}>
+                    <Text style={styles.oasoHighlightEmoji}>⚡</Text>
+                    <Text style={styles.oasoHighlightText}>Live Digital Scoring</Text>
+                  </View>
+                  <View style={styles.oasoHighlightChip}>
+                    <Text style={styles.oasoHighlightEmoji}>🏏</Text>
+                    <Text style={styles.oasoHighlightText}>12+ Sanctioned Clubs</Text>
+                  </View>
+                </View>
+
+                {/* Action Buttons */}
+                <View
                   style={[
-                    styles.ribbonText,
+                    styles.heroButtonsRow,
                     isMobile && {
-                      fontSize: windowWidth < 380 ? 11.5 : 12.5,
-                      marginHorizontal: 4,
+                      justifyContent: 'center',
+                      alignSelf: 'center',
+                      gap: 10,
+                      marginBottom: 20,
+                      width: '100%',
                     }
                   ]}
                 >
-                  Enjoy the game and chase your dreams
-                </Text>
-                <Text style={styles.ribbonStar}>★</Text>
-              </LinearGradient>
-              <View style={styles.ribbonTailRight} />
-            </View>
+                  {/* 1. Match Centre Live */}
+                  <TouchableOpacity
+                    style={[
+                      styles.oasoBtnPrimary,
+                      isMobile && {
+                        flex: 1,
+                        minWidth: 140,
+                        maxWidth: 200,
+                        justifyContent: 'center',
+                      }
+                    ]}
+                    onPress={() => scrollToSection('matchCentre')}
+                    activeOpacity={0.85}
+                  >
+                    <Animated.View style={[styles.heroRedDot, { opacity: pulseAnim }]} />
+                    <Text style={styles.oasoBtnPrimaryText}>Match Centre Live</Text>
+                  </TouchableOpacity>
 
+                  {/* 2. Live Scorecard */}
+                  <TouchableOpacity
+                    style={[
+                      styles.oasoBtnSecondary,
+                      isMobile && {
+                        flex: 1,
+                        minWidth: 140,
+                        maxWidth: 200,
+                        justifyContent: 'center',
+                      }
+                    ]}
+                    onPress={() => {
+                      const targetMatch = publicMatches.find(m => (m.status || '').toLowerCase() === 'live') || publicMatches[0] || { id: 'M001' };
+                      handleOpenScorecard(targetMatch);
+                    }}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="radio" size={15} color="#0a2540" style={{ marginRight: 6 }} />
+                    <Text style={styles.oasoBtnSecondaryText}>Live Scorecard</Text>
+                  </TouchableOpacity>
+
+                  {/* 3. Standings & Points Table */}
+                  <TouchableOpacity
+                    style={[
+                      styles.oasoBtnTertiary,
+                      isMobile && {
+                        flex: 1,
+                        minWidth: 140,
+                        maxWidth: 200,
+                        justifyContent: 'center',
+                      }
+                    ]}
+                    onPress={() => scrollToSection('pointsTable')}
+                    activeOpacity={0.85}
+                  >
+                    <Ionicons name="trophy-outline" size={15} color="#b45309" style={{ marginRight: 6 }} />
+                    <Text style={styles.oasoBtnTertiaryText}>Points Table</Text>
+                  </TouchableOpacity>
+                </View>
+
+              </View>
+
+              {/* Right Column: CFVD Crest inside Container */}
+              <View style={[styles.oasoHeroCrestCol, isMobile && styles.oasoHeroCrestColMobile]}>
+                <View style={styles.oasoCrestAuraRing} />
+                <View style={styles.oasoCrestAuraRingInner} />
+                <Image
+                  source={IMG_LOGO}
+                  style={[
+                    styles.oasoCrestImage,
+                    isMobile && {
+                      width: Math.min(windowWidth * 0.88, 360),
+                      height: Math.min(windowWidth * 0.88, 360),
+                    }
+                  ]}
+                  resizeMode="contain"
+                />
+                <View style={styles.oasoCrestFloatingBadge}>
+                  <Ionicons name="shield-checkmark" size={13} color="#059669" style={{ marginRight: 5 }} />
+                  <Text style={styles.oasoCrestFloatingText}>Official District Governing Body • CFVD</Text>
+                </View>
+              </View>
+
+            </View>
             {/* Description */}
             <Text
               style={[
@@ -984,36 +1050,59 @@ export default function HomeScreen() {
                   }
                 ]}
                 onPress={() => {
-                  setActiveScorecardMatch('match-1');
-                  setScorecardModalVisible(true);
+                  const targetMatch = publicMatches.find(m => (m.status || '').toLowerCase() === 'live') || publicMatches[0] || { id: 'M001' };
+                  handleOpenScorecard(targetMatch);
                 }}
                 activeOpacity={0.85}
               >
                 <Text style={styles.heroBtnWhiteText}>📡 Live Scorecard</Text>
               </TouchableOpacity>
-            </View>
 
+              {/* 4. Watch Intro Video (Professional Preloader Replay) */}
+              <TouchableOpacity
+                style={[
+                  styles.heroBtnWhite,
+                  { backgroundColor: 'rgba(15, 23, 42, 0.9)', borderColor: 'rgba(245, 158, 11, 0.7)' },
+                  isMobile && {
+                    flex: 1,
+                    minWidth: 140,
+                    maxWidth: 200,
+                    justifyContent: 'center',
+                  }
+                ]}
+                onPress={() => setShowIntroVideo(true)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.heroBtnWhiteText, { color: '#fbbf24', fontWeight: '800' }]}>🎬 Watch Intro</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
         {/* ─── 4. OFFICIAL MATCH CENTRE ───────────────────────────────────── */}
         <View
+          nativeID="cfvd-section-match-centre"
+          {...({ id: 'cfvd-section-match-centre' } as any)}
           style={styles.section}
           onLayout={e => {
             const layout = e.nativeEvent.layout;
             setSectionPositions(prev => ({ ...prev, matchCentre: layout.y }));
           }}
         >
-          <View style={styles.container}>
+          <View style={[styles.container, containerResponsiveStyle]}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionTagBadge}>
-                <Text style={styles.sectionTagBadgeText}>🏏 OFFICIAL MATCH CENTRE</Text>
+                <MaterialCommunityIcons name="cricket" size={15} color="#0e184e" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTagBadgeText}>OFFICIAL MATCH CENTRE</Text>
               </View>
-              <Text style={styles.sectionTitle}>Official Matches, Fixtures & Results</Text>
+              <Text style={[styles.sectionTitle, isSmallMobile && { fontSize: 20 }]}>Official Matches, Fixtures & Results</Text>
               <Text style={styles.sectionSubtitle}>
                 Real-time coverage displaying complete logistics: Match Date, Time, Venues & Assigned Officials
               </Text>
             </View>
+
+            {/* Broadcast Match Highlights & Milestones Showcase */}
+            <MatchHighlightsBanner />
 
             {/* Filter Tabs */}
             {(() => {
@@ -1026,7 +1115,14 @@ export default function HomeScreen() {
               const upcomingCount = publicMatches.filter(m => {
                 const s = (m.status || '').toLowerCase();
                 const raw = (m.rawStatus || '').toUpperCase();
-                return s === 'upcoming' || raw === 'SCHEDULED';
+                const isPostponed = s === 'postponed' || raw === 'POSTPONED' || !!m.isPostponed || !!m.postponement?.is_postponed;
+                return !isPostponed && (s === 'upcoming' || raw === 'SCHEDULED');
+              }).length;
+
+              const postponedCount = publicMatches.filter(m => {
+                const s = (m.status || '').toLowerCase();
+                const raw = (m.rawStatus || '').toUpperCase();
+                return s === 'postponed' || raw === 'POSTPONED' || !!m.isPostponed || !!m.postponement?.is_postponed;
               }).length;
 
               const resultsCount = publicMatches.filter(m => {
@@ -1036,75 +1132,101 @@ export default function HomeScreen() {
               }).length;
 
               return (
-                <View style={styles.filterTabsRow}>
+                <View style={[styles.filterTabsRow, isSmallMobile && { gap: 6, marginBottom: 14 }]}>
                   {[
-                    { id: 'all', label: `All Matches (${publicMatches.length})` },
-                    { id: 'live', label: `🔴 Live Matches (${liveCount})` },
-                    { id: 'upcoming', label: `📅 Upcoming Fixtures (${upcomingCount})` },
-                    { id: 'results', label: `🏁 Recent Results (${resultsCount})` }
+                    { id: 'all', short: `All (${publicMatches.length})`, full: `All Matches (${publicMatches.length})`, icon: 'grid-outline' },
+                    { id: 'live', short: `Live (${liveCount})`, full: `Live Matches (${liveCount})`, icon: 'ellipse', iconColor: '#ef4444' },
+                    { id: 'upcoming', short: `Upcoming (${upcomingCount})`, full: `Upcoming Fixtures (${upcomingCount})`, icon: 'calendar-outline' },
+                    { id: 'postponed', short: `Postponed (${postponedCount})`, full: `Postponed (${postponedCount})`, icon: 'pause-circle-outline' },
+                    { id: 'results', short: `Results (${resultsCount})`, full: `Recent Results (${resultsCount})`, icon: 'flag-outline' }
                   ].map(f => (
                     <TouchableOpacity
                       key={f.id}
-                      style={[styles.filterTabBtn, matchFilter === f.id && styles.filterTabBtnActive]}
-                      onPress={() => setMatchFilter(f.id as any)}
+                      style={[
+                        styles.filterTabBtn,
+                        matchFilter === f.id && styles.filterTabBtnActive,
+                        isSmallMobile && { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 18 }
+                      ]}
+                      onPress={() => {
+                        setMatchFilter(f.id as any);
+                        setMatchPage(1);
+                      }}
                     >
-                      <Text style={[styles.filterTabBtnText, matchFilter === f.id && styles.filterTabBtnTextActive]}>
-                        {f.label}
-                      </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {f.icon && (
+                          <Ionicons
+                            name={f.icon as any}
+                            size={f.id === 'live' ? 8 : 12}
+                            color={matchFilter === f.id ? '#ffffff' : (f.iconColor || '#64748b')}
+                            style={{ marginRight: 5 }}
+                          />
+                        )}
+                        <Text
+                          style={[
+                            styles.filterTabBtnText,
+                            matchFilter === f.id && styles.filterTabBtnTextActive,
+                            isSmallMobile && { fontSize: 11 }
+                          ]}
+                        >
+                          {isSmallMobile ? f.short : f.full}
+                        </Text>
+                      </View>
                     </TouchableOpacity>
                   ))}
                 </View>
               );
             })()}
 
-            {/* Loading State */}
-            {isLoadingMatches && (
+            {/* Loading State: Official Bootstrap Spinner */}
+            {isLoadingMatches && publicMatches.length === 0 && (
               <View style={{ paddingVertical: 40, alignItems: 'center', justifyContent: 'center' }}>
-                <ActivityIndicator size="large" color="#d4af37" />
-                <Text style={{ marginTop: 12, fontSize: 14, fontWeight: '700', color: '#854d0e' }}>
-                  Connecting to Official MongoDB Fixtures Database...
+                <ActivityIndicator size="large" color="#0e184e" />
+                <Text style={{ marginTop: 12, color: bsColors.secondary, fontSize: 13, fontWeight: '600' }}>
+                  Loading official fixtures & results...
                 </Text>
               </View>
             )}
-
-            {/* Error State */}
+            {/* Error State: Bootstrap Alert Danger */}
             {!isLoadingMatches && matchesError && publicMatches.length === 0 && (
               <View
-                style={{
-                  backgroundColor: '#fef2f2',
-                  borderWidth: 1,
-                  borderColor: '#fca5a5',
-                  borderRadius: 12,
-                  padding: 24,
-                  alignItems: 'center',
-                  marginVertical: 12
-                }}
+                style={[
+                  bsAlert.alert,
+                  bsAlert.alertDanger,
+                  { flexDirection: 'column', alignItems: 'center', padding: 20 }
+                ]}
               >
-                <Text style={{ fontSize: 15, fontWeight: '800', color: '#b91c1c', marginBottom: 6 }}>
-                  Unable to load match records
-                </Text>
-                <Text style={{ fontSize: 13, color: '#7f1d1d', textAlign: 'center', marginBottom: 14 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                  <Ionicons name="warning-outline" size={16} color={bsColors.danger} style={{ marginRight: 6 }} />
+                  <Text style={{ fontSize: 15, fontWeight: '700', color: bsColors.danger }}>
+                    Unable to load match records
+                  </Text>
+                </View>
+                <Text style={{ fontSize: 13, color: '#842029', textAlign: 'center', marginBottom: 14 }}>
                   {matchesError}
                 </Text>
                 <TouchableOpacity
-                  style={{ backgroundColor: '#dc2626', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 }}
-                  onPress={loadPublicMatches}
+                  style={[bsButtons.btn, bsButtons.btnOutlineDanger, bsButtons.btnSm, { flexDirection: 'row', alignItems: 'center' }]}
+                  onPress={() => loadPublicMatches(true)}
                 >
-                  <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>Retry Connection</Text>
+                  <Ionicons name="refresh" size={13} color={bsColors.danger} style={{ marginRight: 5 }} />
+                  <Text style={[bsButtons.btnTextDanger, { fontSize: 12 }]}>Retry Connection</Text>
                 </TouchableOpacity>
               </View>
             )}
 
-            {/* Empty State */}
+            {/* Matches List Filtering and Reusable Pagination (8 matches per page) */}
             {!isLoadingMatches && !matchesError && (() => {
               const filteredList = publicMatches.filter(m => {
                 const s = (m.status || '').toLowerCase();
                 const raw = (m.rawStatus || '').toUpperCase();
+                const isPostponed = s === 'postponed' || raw === 'POSTPONED' || !!m.isPostponed || !!m.postponement?.is_postponed;
                 if (matchFilter === 'live') return s === 'live' || raw === 'LIVE' || raw === 'INNINGS_BREAK';
-                if (matchFilter === 'upcoming') return s === 'upcoming' || raw === 'SCHEDULED';
+                if (matchFilter === 'upcoming') return !isPostponed && (s === 'upcoming' || raw === 'SCHEDULED');
+                if (matchFilter === 'postponed') return isPostponed;
                 if (matchFilter === 'results') return s === 'completed' || raw === 'COMPLETED' || s === 'cancelled' || raw === 'CANCELLED';
                 return true;
               });
+
               if (filteredList.length === 0) {
                 return (
                   <View
@@ -1119,7 +1241,7 @@ export default function HomeScreen() {
                       marginVertical: 12
                     }}
                   >
-                    <Text style={{ fontSize: 36, marginBottom: 8 }}>🏏</Text>
+                    <MaterialCommunityIcons name="cricket" size={40} color="#94a3b8" style={{ marginBottom: 8 }} />
                     <Text style={{ fontSize: 16, fontWeight: '800', color: '#0f172a', marginBottom: 4 }}>
                       No Matches Found
                     </Text>
@@ -1129,229 +1251,437 @@ export default function HomeScreen() {
                   </View>
                 );
               }
-              return null;
-            })()}
 
-{/* Matches Grid */}
-            {!isLoadingMatches && (
-              <View style={styles.grid2Col}>
-                {publicMatches
-                  .filter(m => {
-                    const s = (m.status || '').toLowerCase();
-                    const raw = (m.rawStatus || '').toUpperCase();
-                    if (matchFilter === 'live') return s === 'live' || raw === 'LIVE' || raw === 'INNINGS_BREAK';
-                    if (matchFilter === 'upcoming') return s === 'upcoming' || raw === 'SCHEDULED';
-                    if (matchFilter === 'results') return s === 'completed' || raw === 'COMPLETED' || s === 'cancelled' || raw === 'CANCELLED';
-                    return true;
-                  })
-                  .map(m => {
+              const totalMatchPages = Math.ceil(filteredList.length / MATCHES_PER_PAGE) || 1;
+              const safeCurrentPage = Math.min(matchPage, totalMatchPages);
+              const paginatedMatches = filteredList.slice(
+                (safeCurrentPage - 1) * MATCHES_PER_PAGE,
+                safeCurrentPage * MATCHES_PER_PAGE
+              );
+
+              return (
+                <View>
+                  <View style={[styles.grid2Col, isMobile && { flexDirection: 'column' }]}>
+                    {paginatedMatches.map(m => {
                     const s = (m.status || '').toLowerCase();
                     const raw = (m.rawStatus || '').toUpperCase();
                     const isLive = s === 'live' || raw === 'LIVE' || raw === 'INNINGS_BREAK';
-                    const isUpcoming = s === 'upcoming' || raw === 'SCHEDULED';
+                    const isPostponed = s === 'postponed' || raw === 'POSTPONED' || !!m.isPostponed || !!m.postponement?.is_postponed;
+                    const isUpcoming = !isPostponed && (s === 'upcoming' || raw === 'SCHEDULED');
                     const isCompleted = s === 'completed' || raw === 'COMPLETED';
-                    const isCancelled = s === 'cancelled' || raw === 'CANCELLED' || raw === 'ABANDONED';
+                    const isCancelled = !isPostponed && (s === 'cancelled' || raw === 'CANCELLED' || raw === 'ABANDONED');
 
                     const teamAShort = m.teamAShort || (m.teamA ? m.teamA.slice(0, 3).toUpperCase() : 'TMA');
                     const teamBShort = m.teamBShort || (m.teamB ? m.teamB.slice(0, 3).toUpperCase() : 'TMB');
 
+                    const isRain = m.currentBreak && (m.currentBreak.type || '').toLowerCase().includes('rain');
+                    const isBreak = !!m.currentBreak;
+
+                    // Clean logistics without redundant labels
+                    const rawDate = m.date || m.match_date || 'TBD';
+                    const cleanDate = rawDate.replace(/\s+\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?/i, '').trim();
+                    const cleanTime = m.match_time || (rawDate.match(/\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)/i) ? rawDate.match(/\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)/i)[0] : '');
+                    const cleanVenue = (m.venue || 'District Sports Complex, Virudhunagar').replace(/^Venue:\s*/i, '').trim();
+                    const cleanOfficials = m.assigned_scorer_id ? `${m.assigned_scorer_id} • Federation Umpires` : 'Assigned District Panel Officials';
+
                     return (
-                      <View key={m.id} style={[styles.matchCard, isLive && styles.matchCardLive]}>
+                      <View
+                        key={m.id}
+                        style={[
+                          styles.matchCard,
+                          isLive && styles.matchCardLive,
+                          isUpcoming && styles.matchCardUpcoming,
+                          isCompleted && styles.matchCardResult,
+                          isPostponed && { borderColor: '#f59e0b', backgroundColor: '#fffdf5' },
+                          isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' },
+                          isSmallMobile && { padding: 12, borderRadius: 14 }
+                        ]}
+                      >
+                        {/* 1. Top Header Row: Live / Status & Tournament on Left, Rain Delay & Format on Right */}
                         <View style={styles.matchCardTop}>
-                          {isLive ? (
-                            <View style={styles.liveIndicatorPill}>
-                              <Animated.View style={[styles.pulseRedDot, { opacity: pulseAnim }]} />
-                              <Text style={styles.liveIndicatorText}>LIVE</Text>
-                            </View>
-                          ) : isUpcoming ? (
-                            <View style={styles.upcomingIndicatorPill}>
-                              <Text style={styles.upcomingIndicatorText}>⏰ UPCOMING</Text>
-                            </View>
-                          ) : isCompleted ? (
-                            <View style={styles.resultIndicatorPill}>
-                              <Text style={styles.resultIndicatorText}>🏁 RESULT</Text>
-                            </View>
-                          ) : (
+                          <View style={styles.cardHeaderLeftGroup}>
+                            {isLive ? (
+                              <View style={[styles.liveIndicatorPill, isSmallMobile && { paddingHorizontal: 7, paddingVertical: 2.5 }]}>
+                                <Animated.View style={[styles.pulseRedDot, { opacity: pulseAnim }]} />
+                                <Text style={[styles.liveIndicatorText, isSmallMobile && { fontSize: 9.5 }]}>LIVE</Text>
+                              </View>
+                            ) : isUpcoming ? (
+                              <View style={[styles.upcomingIndicatorPill, isSmallMobile && { paddingHorizontal: 7, paddingVertical: 2.5 }, { flexDirection: 'row', alignItems: 'center' }]}>
+                                <Ionicons name="time-outline" size={11} color="#0284c7" style={{ marginRight: 3 }} />
+                                <Text style={[styles.upcomingIndicatorText, isSmallMobile && { fontSize: 9.5 }]}>UPCOMING</Text>
+                              </View>
+                            ) : isPostponed ? (
+                              <View style={[styles.upcomingIndicatorPill, { backgroundColor: '#fef3c7', borderColor: '#f59e0b' }, isSmallMobile && { paddingHorizontal: 7, paddingVertical: 2.5 }, { flexDirection: 'row', alignItems: 'center' }]}>
+                                <Ionicons name="pause-circle-outline" size={11} color="#b45309" style={{ marginRight: 3 }} />
+                                <Text style={[styles.upcomingIndicatorText, { color: '#b45309' }, isSmallMobile && { fontSize: 9.5 }]}>POSTPONED</Text>
+                              </View>
+                            ) : isCompleted ? (
+                              <View style={[styles.resultIndicatorPill, isSmallMobile && { paddingHorizontal: 7, paddingVertical: 2.5 }, { flexDirection: 'row', alignItems: 'center' }]}>
+                                <Ionicons name="flag-outline" size={11} color="#059669" style={{ marginRight: 3 }} />
+                                <Text style={[styles.resultIndicatorText, isSmallMobile && { fontSize: 9.5 }]}>RESULT</Text>
+                              </View>
+                            ) : (
+                              <View
+                                style={[
+                                  styles.upcomingIndicatorPill,
+                                  { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' },
+                                  isSmallMobile && { paddingHorizontal: 7, paddingVertical: 2.5 },
+                                  { flexDirection: 'row', alignItems: 'center' }
+                                ]}
+                              >
+                                <Ionicons name="close-circle-outline" size={11} color="#64748b" style={{ marginRight: 3 }} />
+                                <Text style={[styles.upcomingIndicatorText, { color: '#64748b' }, isSmallMobile && { fontSize: 9.5 }]}>CANCELLED</Text>
+                              </View>
+                            )}
+                            <Text style={[styles.matchTournament, isSmallMobile && { fontSize: 11.5 }]} numberOfLines={1}>
+                              {m.tournament || m.tournament_name || 'District Match'}
+                            </Text>
+                          </View>
+
+                          <View style={styles.cardHeaderRightGroup}>
+                            {isLive && <VPLSoundControls role="public" style={{ marginRight: 6 }} />}
+                            {isRain ? (
+                              <View style={[styles.topRightRainPill, isSmallMobile && { paddingHorizontal: 6, paddingVertical: 2 }, { flexDirection: 'row', alignItems: 'center' }]}>
+                                <Ionicons name="rainy-outline" size={11} color="#0284c7" style={{ marginRight: 3 }} />
+                                <Text style={[styles.topRightRainPillText, isSmallMobile && { fontSize: 9 }]}>
+                                  RAIN DELAY{m.currentBreak?.duration ? ` (${m.currentBreak.duration}m)` : ''}
+                                </Text>
+                              </View>
+                            ) : isBreak ? (
+                              <View style={[styles.topRightBreakPill, isSmallMobile && { paddingHorizontal: 6, paddingVertical: 2 }, { flexDirection: 'row', alignItems: 'center' }]}>
+                                <Ionicons name="cafe-outline" size={11} color="#d97706" style={{ marginRight: 3 }} />
+                                <Text style={[styles.topRightBreakPillText, isSmallMobile && { fontSize: 9 }]}>
+                                  {m.currentBreak?.type?.toUpperCase()}
+                                </Text>
+                              </View>
+                            ) : null}
+
                             <View
                               style={[
-                                styles.upcomingIndicatorPill,
-                                { backgroundColor: '#f1f5f9', borderColor: '#cbd5e1' }
+                                m.format === '3-DAY'
+                                  ? styles.formatBadgeMulti
+                                  : m.format === 'ODI' || m.format === '50-OVERS'
+                                    ? styles.formatBadgeOneDay
+                                    : styles.formatBadgeT20,
+                                isSmallMobile && { paddingHorizontal: 6, paddingVertical: 2 }
                               ]}
                             >
-                              <Text style={[styles.upcomingIndicatorText, { color: '#64748b' }]}>🚫 CANCELLED</Text>
+                              <Text style={[styles.formatBadgeText, isSmallMobile && { fontSize: 9 }]}>
+                                {m.format || 'T20'}{m.revisedOvers || m.revised_overs ? ` (${m.revisedOvers || m.revised_overs} Ov)` : (m.overs ? ` (${m.overs} Ov)` : ' (20 Ov)')}
+                              </Text>
                             </View>
-                          )}
-                          <Text style={styles.matchTournament} numberOfLines={1}>
-                            {m.tournament || m.tournament_name || 'District Match'}
-                          </Text>
-                          <View
-                            style={
-                              m.format === '3-DAY'
-                                ? styles.formatBadgeMulti
-                                : m.format === 'ODI' || m.format === '50-OVERS'
-                                  ? styles.formatBadgeOneDay
-                                  : styles.formatBadgeT20
-                            }
-                          >
-                            <Text style={styles.formatBadgeText}>{m.format || 'T20'}</Text>
                           </View>
                         </View>
 
-                        {/* Logistics Box */}
-                        <View style={styles.logisticsBox}>
-                          <Text style={styles.logisticsItem}>
-                            📅 Date: {m.date || m.match_date || 'TBD'}
-                            {m.match_time ? ` | ⏰ Time: ${m.match_time}` : ''}
-                          </Text>
-                          <Text style={styles.logisticsItem} numberOfLines={1}>
-                            📍 Venue: {m.venue || 'District Sports Complex, Virudhunagar'}
-                          </Text>
-                          <Text style={styles.logisticsItem} numberOfLines={1}>
-                            ⚖️ Officials: {m.assigned_scorer_id ? `Assigned Scorer: ${m.assigned_scorer_id} • Federation Umpires` : 'Assigned District Panel Officials'}
-                          </Text>
-                        </View>
-
-                        {/* Teams & Scores */}
-                        <View style={styles.matchTeamsBox}>
-                          <View style={[styles.matchTeamRow, isLive && styles.battingNowRow]}>
-                            <View style={styles.teamMeta}>
-                              <View
-                                style={[
-                                  styles.teamMiniCrest,
-                                  { backgroundColor: getTeamBadgeColor(teamAShort, 0) }
-                                ]}
-                              >
-                                <Text style={styles.teamMiniCrestText}>{teamAShort}</Text>
-                              </View>
-                              <Text style={styles.teamNameText} numberOfLines={1}>
+                        {/* 2. Teams & Scores in a Single Professional Row (Team 1 VS Team 2) */}
+                        <View
+                          style={[
+                            styles.matchTeamsSingleRow,
+                            isSmallMobile && { paddingHorizontal: 8, paddingVertical: 10, borderRadius: 12, marginVertical: 6 }
+                          ]}
+                        >
+                          {/* Team A (Left) */}
+                          <View style={[styles.teamColLeft, isSmallMobile && { minWidth: 0 }]}>
+                            <View style={styles.teamCrestNameRow}>
+                              {resolveImageUrl(m.teamALogo) ? (
+                                <Image
+                                  source={{ uri: resolveImageUrl(m.teamALogo)! }}
+                                  style={[
+                                    styles.teamMiniCrest,
+                                    { resizeMode: 'cover', overflow: 'hidden' },
+                                    isSmallMobile && { width: 24, height: 24, borderRadius: 12 }
+                                  ]}
+                                />
+                              ) : (
+                                <View
+                                  style={[
+                                    styles.teamMiniCrest,
+                                    { backgroundColor: getTeamBadgeColor(teamAShort, 0) },
+                                    isSmallMobile && { width: 24, height: 24, borderRadius: 12 }
+                                  ]}
+                                >
+                                  <Text style={[styles.teamMiniCrestText, isSmallMobile && { fontSize: 9 }]}>{teamAShort}</Text>
+                                </View>
+                              )}
+                              <Text style={[styles.teamNameTextSingleRow, isSmallMobile && { fontSize: 12 }]} numberOfLines={1}>
                                 {m.teamA}
                               </Text>
-                              {isLive && <Text style={styles.battingIcon}>🏏</Text>}
+                              {isLive && <MaterialCommunityIcons name="cricket" size={12} color="#f5c43d" style={{ marginLeft: 4 }} />}
                             </View>
-                            <View style={styles.teamScores}>
-                              {m.scoreA ? (
-                                <Text style={styles.runsText}>{m.scoreA}</Text>
-                              ) : (
-                                <Text style={styles.yetToBatText}>{isUpcoming ? 'Upcoming' : '-'}</Text>
-                              )}
+                            <Text style={[m.scoreA ? styles.teamScoreSingleRow : styles.teamYetToBatSingleRow, isSmallMobile && { fontSize: isTinyMobile ? 13 : 14.5 }]}>
+                              {m.scoreA || (isUpcoming ? 'Upcoming' : 'Yet to bat')}
+                            </Text>
+                          </View>
+
+                          {/* Center VS Badge */}
+                          <View style={[styles.iplVsCenterBox, isSmallMobile && { paddingHorizontal: 4 }]}>
+                            <View style={[styles.iplVsCircle, isSmallMobile && { width: 26, height: 26, borderRadius: 13 }]}>
+                              <Text style={[styles.iplVsCircleText, isSmallMobile && { fontSize: 8.5 }]}>VS</Text>
                             </View>
                           </View>
 
-                          <View style={styles.matchTeamRow}>
-                            <View style={styles.teamMeta}>
-                              <View
-                                style={[
-                                  styles.teamMiniCrest,
-                                  { backgroundColor: getTeamBadgeColor(teamBShort, 1) }
-                                ]}
-                              >
-                                <Text style={styles.teamMiniCrestText}>{teamBShort}</Text>
-                              </View>
-                              <Text style={styles.teamNameText} numberOfLines={1}>
+                          {/* Team B (Right) */}
+                          <View style={[styles.teamColRight, isSmallMobile && { minWidth: 0 }]}>
+                            <View style={[styles.teamCrestNameRow, { justifyContent: 'flex-end' }]}>
+                              <Text style={[styles.teamNameTextSingleRow, { textAlign: 'right' }, isSmallMobile && { fontSize: 12 }]} numberOfLines={1}>
                                 {m.teamB}
                               </Text>
-                            </View>
-                            <View style={styles.teamScores}>
-                              {m.scoreB ? (
-                                <Text style={styles.runsText}>{m.scoreB}</Text>
+                              {resolveImageUrl(m.teamBLogo) ? (
+                                <Image
+                                  source={{ uri: resolveImageUrl(m.teamBLogo)! }}
+                                  style={[
+                                    styles.teamMiniCrest,
+                                    { resizeMode: 'cover', overflow: 'hidden' },
+                                    isSmallMobile && { width: 24, height: 24, borderRadius: 12 }
+                                  ]}
+                                />
                               ) : (
-                                <Text style={styles.yetToBatText}>{isUpcoming ? 'Upcoming' : '-'}</Text>
+                                <View
+                                  style={[
+                                    styles.teamMiniCrest,
+                                    { backgroundColor: getTeamBadgeColor(teamBShort, 1) },
+                                    isSmallMobile && { width: 24, height: 24, borderRadius: 12 }
+                                  ]}
+                                >
+                                  <Text style={[styles.teamMiniCrestText, isSmallMobile && { fontSize: 9 }]}>{teamBShort}</Text>
+                                </View>
                               )}
                             </View>
+                            <Text style={[m.scoreB ? styles.teamScoreSingleRow : styles.teamYetToBatSingleRow, { textAlign: 'right' }, isSmallMobile && { fontSize: isTinyMobile ? 13 : 14.5 }]}>
+                              {m.scoreB || (isUpcoming ? 'Upcoming' : 'Yet to bat')}
+                            </Text>
                           </View>
                         </View>
 
-                        {/* Status / Result Summary Note */}
-                        {m.result ? (
-                          <Text style={styles.matchStatusNoteGold}>🏆 {m.result}</Text>
+                        {/* VPL Broadcast Live Ball Action Overlay */}
+                        {isLive && (() => {
+                          const lastDel = m.lastDelivery || m.lastEvent;
+                          const rawExtra = normalizeExtraType(lastDel?.extraType || lastDel?.extra_type || lastDel?.extra);
+                          const runsBat = typeof lastDel?.runsBatter === 'number'
+                            ? lastDel.runsBatter
+                            : typeof lastDel?.runs_batter === 'number'
+                              ? lastDel.runs_batter
+                              : (typeof lastDel?.runs === 'number' && !rawExtra ? lastDel.runs : 0);
+                          const events = lastDel ? mapBallToEvents({
+                            ballId: `${m.id}-${lastDel.ball || lastDel.over || ''}-${lastDel.timestamp || Date.now()}`,
+                            runsOffBat: runsBat,
+                            extraType: rawExtra,
+                            extraRuns: typeof lastDel.extraRuns === 'number' ? lastDel.extraRuns : (typeof lastDel.runsExtras === 'number' ? lastDel.runsExtras : undefined),
+                            isWicket: Boolean(lastDel.isWicket || lastDel.wicket),
+                            dismissal: normalizeDismissal(lastDel.dismissal || lastDel.wicket?.type || lastDel.wicket_type),
+                            dismissedName: lastDel.dismissedName || lastDel.wicket?.batter,
+                            batterName: lastDel.batterName || m.teamA,
+                            bowlerName: lastDel.bowlerName,
+                          }) : null;
+
+                          return (
+                            <View style={{ position: 'relative', minHeight: 48, marginVertical: 4 }}>
+                              <VPLEventBanner
+                                role="public"
+                                events={events}
+                                bottomOffset={0}
+                                style={{ position: 'relative', left: 0, right: 0, top: 0, bottom: 0 }}
+                              />
+                            </View>
+                          );
+                        })()}
+
+                        {/* 3. Status Note / Active Rain Delay Notice */}
+                        {isPostponed ? (
+                          <View style={[styles.cardBreakBanner, { backgroundColor: '#fffbeb', borderColor: '#fde68a', flexDirection: 'row', alignItems: 'center' }, isSmallMobile && { paddingVertical: 6, paddingHorizontal: 8 }]}>
+                            <Ionicons name="pause-circle-outline" size={13} color="#b45309" style={{ marginRight: 5 }} />
+                            <Text style={[styles.cardBreakText, { color: '#b45309' }, isSmallMobile && { fontSize: 10.5 }]} numberOfLines={1}>
+                              POSTPONED{m.postponement?.reason ? ` • ${m.postponement.reason}` : (m.postponementReason ? ` • ${m.postponementReason}` : (m.result ? ` • ${m.result}` : ' • Fixture Rescheduling in Progress'))}
+                            </Text>
+                          </View>
+                        ) : m.result ? (
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name="trophy" size={12} color="#f5c43d" style={{ marginRight: 5 }} />
+                            <Text style={[styles.matchStatusNoteGold, isSmallMobile && { fontSize: 11 }]}>{m.result}</Text>
+                          </View>
+                        ) : isRain ? (
+                          <View style={[styles.cardRainBanner, { flexDirection: 'row', alignItems: 'center' }, isSmallMobile && { paddingVertical: 6, paddingHorizontal: 8 }]}>
+                            <Ionicons name="rainy-outline" size={13} color="#0284c7" style={{ marginRight: 5 }} />
+                            <Text style={[styles.cardRainText, isSmallMobile && { fontSize: 10.5 }]} numberOfLines={1}>
+                              MATCH DELAYED DUE TO RAIN • Covers on pitch{m.currentBreak.startTime && m.currentBreak.endTime ? ` (${m.currentBreak.startTime} - ${m.currentBreak.endTime})` : ''}
+                            </Text>
+                          </View>
+                        ) : isBreak ? (
+                          <View style={[styles.cardBreakBanner, { flexDirection: 'row', alignItems: 'center' }, isSmallMobile && { paddingVertical: 6, paddingHorizontal: 8 }]}>
+                            <Ionicons name="cafe-outline" size={13} color="#d97706" style={{ marginRight: 5 }} />
+                            <Text style={[styles.cardBreakText, isSmallMobile && { fontSize: 10.5 }]} numberOfLines={1}>
+                              {m.currentBreak.type?.toUpperCase()} IN PROGRESS{m.currentBreak.duration ? ` (${m.currentBreak.duration} MINS)` : ''}{m.currentBreak.startTime && m.currentBreak.endTime ? ` • ${m.currentBreak.startTime} - ${m.currentBreak.endTime}` : ''}
+                            </Text>
+                          </View>
                         ) : isLive ? (
-                          <Text style={styles.matchStatusNoteGold}>
-                            ⏰ Live Inning in Progress ({m.overs || 20} Overs)
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name="time-outline" size={12} color="#f5c43d" style={{ marginRight: 4 }} />
+                            <Text style={[styles.matchStatusNoteGold, isSmallMobile && { fontSize: 11 }]}>
+                              Live Inning in Progress ({m.overs || 20} Overs)
+                            </Text>
+                          </View>
                         ) : isUpcoming ? (
-                          <Text style={styles.matchStatusNote}>
-                            📅 Match Scheduled: {m.date || m.match_date}
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name="calendar-outline" size={12} color="#475569" style={{ marginRight: 4 }} />
+                            <Text style={[styles.matchStatusNote, isSmallMobile && { fontSize: 11 }]}>
+                              Match Scheduled: {cleanDate} {cleanTime}
+                            </Text>
+                          </View>
                         ) : isCancelled ? (
-                          <Text style={[styles.matchStatusNote, { color: '#ef4444' }]}>
-                            🚫 Match Cancelled: {m.result || 'Cancelled by Federation Admin'}
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name="close-circle-outline" size={12} color="#ef4444" style={{ marginRight: 4 }} />
+                            <Text style={[styles.matchStatusNote, { color: '#ef4444' }, isSmallMobile && { fontSize: 11 }]}>
+                              Match Cancelled: {m.result || 'Cancelled by Federation Admin'}
+                            </Text>
+                          </View>
                         ) : (
-                          <Text style={styles.matchStatusNote}>ℹ️ Status: {m.status}</Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <Ionicons name="information-circle-outline" size={12} color="#475569" style={{ marginRight: 4 }} />
+                            <Text style={[styles.matchStatusNote, isSmallMobile && { fontSize: 11 }]}>Status: {m.status}</Text>
+                          </View>
                         )}
 
-                        {/* Action CTA */}
+                        {/* 4. Bottom Logistics Box */}
+                        <View style={[styles.cardLogisticsBottomBar, isSmallMobile && { paddingHorizontal: 8, paddingVertical: 6, borderRadius: 8 }]}>
+                          <View style={[styles.logisticsChipRow, isSmallMobile && { gap: 6, marginBottom: 4 }]}>
+                            <View style={styles.logisticsChip}>
+                              <Ionicons name="calendar-outline" size={13} color="#475569" style={{ marginRight: 4 }} />
+                              <Text style={[styles.logisticsValueText, isSmallMobile && { fontSize: 10 }]}>{cleanDate}</Text>
+                            </View>
+                            {cleanTime ? (
+                              <View style={styles.logisticsChip}>
+                                <Ionicons name="time-outline" size={13} color="#475569" style={{ marginRight: 4 }} />
+                                <Text style={[styles.logisticsValueText, isSmallMobile && { fontSize: 10 }]}>{cleanTime}</Text>
+                              </View>
+                            ) : null}
+
+                            <View style={[styles.logisticsChip, { flex: 1, minWidth: isSmallMobile ? '100%' : 'auto' }]}>
+                              <Ionicons name="location-outline" size={13} color="#475569" style={{ marginRight: 4 }} />
+                              <Text style={[styles.logisticsValueText, isSmallMobile && { fontSize: 10 }]} numberOfLines={1}>{cleanVenue}</Text>
+                            </View>
+                          </View>
+                          <View style={styles.logisticsOfficialsBottomRow}>
+                            <Ionicons name="shield-checkmark-outline" size={13} color="#475569" style={{ marginRight: 5 }} />
+                            <Text style={[styles.logisticsOfficialsCleanText, isSmallMobile && { fontSize: 9.5 }]} numberOfLines={1}>
+                              {cleanOfficials}
+                            </Text>
+                          </View>
+                        </View>
+
+                        {/* 5. Action CTA (TNCA Match Centre Button) */}
                         <TouchableOpacity
-                          style={styles.btnOutlineGoldBlock}
-                          onPress={() => {
-                            if (isLive || isCompleted) {
-                              handleOpenScorecard(m);
-                            } else if (isUpcoming) {
-                              alert(
-                                `Fixture Logistics:\n• Tournament: ${m.tournament || 'CFVD'}\n• Teams: ${m.teamA} vs ${m.teamB}\n• Date: ${m.date || m.match_date}\n• Venue: ${m.venue}\n• Format: ${m.format}`
-                              );
-                            } else {
-                              alert(
-                                `Match Details:\n• Teams: ${m.teamA} vs ${m.teamB}\n• Status: ${m.status}\n• Note: ${m.result || 'No details'}`
-                              );
-                            }
-                          }}
+                          style={[styles.tncaMatchCentreCardBtn, isSmallMobile && { paddingVertical: 8 }]}
+                          onPress={() => handleOpenScorecard(m)}
+                          activeOpacity={0.85}
                         >
-                          <Text style={styles.btnOutlineGoldBlockText}>
-                            {isLive
-                              ? '👁️ View Live Scorecard & Toss'
-                              : isCompleted
-                                ? '📄 View Result Scoresheet'
-                                : isUpcoming
-                                  ? '🔔 View Fixture Logistics'
-                                  : 'ℹ️ View Match Details'}
-                          </Text>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                            {isLive ? (
+                              <>
+                                <Ionicons name="radio" size={13} color="#ffffff" style={{ marginRight: 6 }} />
+                                <Text style={[styles.tncaMatchCentreCardBtnText, isSmallMobile && { fontSize: 11 }]}>
+                                  Match Centre (Live Scorecard)
+                                </Text>
+                                <Ionicons name="chevron-forward" size={13} color="#ffffff" style={{ marginLeft: 4 }} />
+                              </>
+                            ) : isCompleted ? (
+                              <>
+                                <Ionicons name="bar-chart-outline" size={13} color="#ffffff" style={{ marginRight: 6 }} />
+                                <Text style={[styles.tncaMatchCentreCardBtnText, isSmallMobile && { fontSize: 11 }]}>
+                                  Match Centre (Review & Wagon Wheel)
+                                </Text>
+                                <Ionicons name="chevron-forward" size={13} color="#ffffff" style={{ marginLeft: 4 }} />
+                              </>
+                            ) : isUpcoming ? (
+                              <>
+                                <Ionicons name="calendar-outline" size={13} color="#ffffff" style={{ marginRight: 6 }} />
+                                <Text style={[styles.tncaMatchCentreCardBtnText, isSmallMobile && { fontSize: 11 }]}>
+                                  Match Centre (Fixture Details)
+                                </Text>
+                              </>
+                            ) : (
+                              <>
+                                <Ionicons name="information-circle-outline" size={13} color="#ffffff" style={{ marginRight: 6 }} />
+                                <Text style={[styles.tncaMatchCentreCardBtnText, isSmallMobile && { fontSize: 11 }]}>
+                                  Match Centre (Match Details)
+                                </Text>
+                              </>
+                            )}
+                          </View>
                         </TouchableOpacity>
                       </View>
                     );
                   })}
+                </View>
+
+                {/* Reusable Bootstrap Pagination (8 matches per page) */}
+                <BootstrapPagination
+                  currentPage={safeCurrentPage}
+                  totalPages={totalMatchPages}
+                  onPageChange={(newPage) => {
+                    setMatchPage(newPage);
+                    scrollToSection('matchCentre');
+                  }}
+                  totalItems={filteredList.length}
+                  pageSize={MATCHES_PER_PAGE}
+                  itemLabel="matches"
+                />
               </View>
-            )}
+            );
+          })()}
           </View>
         </View>
 
         {/* ─── 5. SANCTIONED TOURNAMENTS ─────────────────────────────────── */}
         <View
+          nativeID="cfvd-section-tournaments"
+          {...({ id: 'cfvd-section-tournaments' } as any)}
           style={styles.section}
           onLayout={e => {
             const layout = e.nativeEvent.layout;
             setSectionPositions(prev => ({ ...prev, tournaments: layout.y }));
           }}
         >
-          <View style={styles.container}>
+          <View style={[styles.container, containerResponsiveStyle]}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionTagBadge}>
-                <Text style={styles.sectionTagBadgeText}>🏆 LEAGUE STRUCTURE</Text>
+                <Ionicons name="trophy-outline" size={15} color="#0e184e" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTagBadgeText}>LEAGUE STRUCTURE</Text>
               </View>
-              <Text style={styles.sectionTitle}>Official Sanctioned Tournaments</Text>
+              <Text style={[styles.sectionTitle, isSmallMobile && { fontSize: 20 }]}>Official Sanctioned Tournaments</Text>
               <Text style={styles.sectionSubtitle}>
                 Promoting multi-day red-ball traditional cricket and modern white-ball collegiate and district leagues
               </Text>
             </View>
 
-            <View style={styles.grid2Col}>
+            <View style={[styles.grid2Col, isMobile && { flexDirection: 'column' }]}>
               {/* Tourney 1 */}
-              <View style={styles.tournamentCard}>
+              <View style={[styles.tournamentCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }, isSmallMobile && { padding: 12 }]}>
                 <View style={styles.tBadgeWrap}>
                   <Text style={styles.badgeGoldPill}>Premier Division</Text>
                   <Text style={styles.badgeBluePill}>Multi-Day</Text>
                 </View>
-                <Text style={styles.tourneyIcon}>🛡️</Text>
-                <Text style={styles.tourneyTitle}>Virudhunagar First Division League</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 8 }}>
+                  <Ionicons name="shield-checkmark-outline" size={24} color="#0e184e" style={{ marginRight: 8 }} />
+                  <Text style={[styles.tourneyTitle, { flex: 1, marginBottom: 0 }]}>Virudhunagar First Division League</Text>
+                </View>
                 <Text style={styles.tourneySub}>The G. Parthasarathy Rolling Trophy</Text>
                 <Text style={styles.tourneyDesc}>
                   The flagship red-ball 3-day competition with 12 affiliated first-tier clubs competing for district
                   supremacy and state trials.
                 </Text>
                 <View style={styles.tourneySpecs}>
-                  <Text style={styles.tourneySpecItem}>👥 12 Affiliated Clubs</Text>
-                  <Text style={styles.tourneySpecItem}>📅 Oct 2026 - Jan 2027</Text>
-                  <Text style={styles.tourneySpecItem}>🎖️ ₹2,50,000 Prize Purse</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="people-outline" size={13} color="#475569" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>12 Affiliated Clubs</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="calendar-outline" size={13} color="#475569" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>Oct 2026 - Jan 2027</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="ribbon-outline" size={13} color="#b45309" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>₹2,50,000 Prize Purse</Text>
+                  </View>
                 </View>
                 <View style={styles.tourneyFooter}>
                   <TouchableOpacity
@@ -1373,21 +1703,32 @@ export default function HomeScreen() {
               </View>
 
               {/* Tourney 2 */}
-              <View style={styles.tournamentCard}>
+              <View style={[styles.tournamentCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }, isSmallMobile && { padding: 12 }]}>
                 <View style={styles.tBadgeWrap}>
                   <Text style={styles.badgeRedPill}>White Ball</Text>
                   <Text style={styles.badgeGoldPill}>T20 Trophy</Text>
                 </View>
-                <Text style={styles.tourneyIcon}>⚡</Text>
-                <Text style={styles.tourneyTitle}>Kamarajar Memorial T20 Trophy</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 8 }}>
+                  <Ionicons name="flash-outline" size={24} color="#0e184e" style={{ marginRight: 8 }} />
+                  <Text style={[styles.tourneyTitle, { flex: 1, marginBottom: 0 }]}>Kamarajar Memorial T20 Trophy</Text>
+                </View>
                 <Text style={styles.tourneySub}>Virudhunagar District Premier T20 Cup</Text>
                 <Text style={styles.tourneyDesc}>
                   Fast-paced night and day T20 cricket featuring taluk teams with colored clothing and white cricket balls.
                 </Text>
                 <View style={styles.tourneySpecs}>
-                  <Text style={styles.tourneySpecItem}>👥 16 Taluk & Club Teams</Text>
-                  <Text style={styles.tourneySpecItem}>📅 Feb 2027</Text>
-                  <Text style={styles.tourneySpecItem}>📺 Live Streamed on YouTube</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="people-outline" size={13} color="#475569" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>16 Taluk & Club Teams</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="calendar-outline" size={13} color="#475569" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>Feb 2027</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="logo-youtube" size={13} color="#dc2626" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>Live Streamed on YouTube</Text>
+                  </View>
                 </View>
                 <View style={styles.tourneyFooter}>
                   <TouchableOpacity
@@ -1402,8 +1743,8 @@ export default function HomeScreen() {
                   <TouchableOpacity
                     style={styles.btnPrimarySm}
                     onPress={() => {
-                      setActiveScorecardMatch('match-1');
-                      setScorecardModalVisible(true);
+                      const targetMatch = publicMatches.find(m => (m.status || '').toLowerCase() === 'completed') || publicMatches[0] || { id: 'M001' };
+                      handleOpenScorecard(targetMatch);
                     }}
                   >
                     <Text style={styles.btnPrimarySmText}>Latest Final</Text>
@@ -1412,22 +1753,33 @@ export default function HomeScreen() {
               </View>
 
               {/* Tourney 3 */}
-              <View style={styles.tournamentCard}>
+              <View style={[styles.tournamentCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }, isSmallMobile && { padding: 12 }]}>
                 <View style={styles.tBadgeWrap}>
                   <Text style={styles.badgeBluePill}>Collegiate</Text>
                   <Text style={styles.badgeGoldPill}>Inter-College Cup</Text>
                 </View>
-                <Text style={styles.tourneyIcon}>🎓</Text>
-                <Text style={styles.tourneyTitle}>District Inter-College Championship</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 8 }}>
+                  <Ionicons name="school-outline" size={24} color="#0e184e" style={{ marginRight: 8 }} />
+                  <Text style={[styles.tourneyTitle, { flex: 1, marginBottom: 0 }]}>District Inter-College Championship</Text>
+                </View>
                 <Text style={styles.tourneySub}>Autonomous & Engineering Colleges Shield</Text>
                 <Text style={styles.tourneyDesc}>
                   The premier collegiate tournament featuring VHNSN, PSR, ANJAC, Rajus, Kalasalingam University, and
                   SFR College.
                 </Text>
                 <View style={styles.tourneySpecs}>
-                  <Text style={styles.tourneySpecItem}>👥 10 District Colleges</Text>
-                  <Text style={styles.tourneySpecItem}>📅 Nov 2026</Text>
-                  <Text style={styles.tourneySpecItem}>🎖️ District Selection Gateway</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="people-outline" size={13} color="#475569" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>10 District Colleges</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="calendar-outline" size={13} color="#475569" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>Nov 2026</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="ribbon-outline" size={13} color="#b45309" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>District Selection Gateway</Text>
+                  </View>
                 </View>
                 <View style={styles.tourneyFooter}>
                   <TouchableOpacity
@@ -1446,21 +1798,32 @@ export default function HomeScreen() {
               </View>
 
               {/* Tourney 4 */}
-              <View style={styles.tournamentCard}>
+              <View style={[styles.tournamentCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }, isSmallMobile && { padding: 12 }]}>
                 <View style={styles.tBadgeWrap}>
                   <Text style={styles.badgeGreenPill}>Under-16 / U-19</Text>
                   <Text style={styles.badgeBluePill}>Junior Talent</Text>
                 </View>
-                <Text style={styles.tourneyIcon}>🏫</Text>
-                <Text style={styles.tourneyTitle}>Andal Temple Inter-School Cup</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginVertical: 8 }}>
+                  <MaterialCommunityIcons name="town-hall" size={24} color="#0e184e" style={{ marginRight: 8 }} />
+                  <Text style={[styles.tourneyTitle, { flex: 1, marginBottom: 0 }]}>Andal Temple Inter-School Cup</Text>
+                </View>
                 <Text style={styles.tourneySub}>Srivilliputhur & District Schools Shield</Text>
                 <Text style={styles.tourneyDesc}>
                   The premier grassroots nursery identifying teenage talent for the district and state age-group trials.
                 </Text>
                 <View style={styles.tourneySpecs}>
-                  <Text style={styles.tourneySpecItem}>🏫 24 District Schools</Text>
-                  <Text style={styles.tourneySpecItem}>📅 Annual Summer Edition</Text>
-                  <Text style={styles.tourneySpecItem}>🎖️ District Academy Scholarships</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="business-outline" size={13} color="#475569" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>24 District Schools</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="calendar-outline" size={13} color="#475569" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>Annual Summer Edition</Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Ionicons name="ribbon-outline" size={13} color="#b45309" style={{ marginRight: 6 }} />
+                    <Text style={styles.tourneySpecItem}>District Academy Scholarships</Text>
+                  </View>
                 </View>
                 <View style={styles.tourneyFooter}>
                   <TouchableOpacity
@@ -1484,18 +1847,21 @@ export default function HomeScreen() {
         
         {/* ─── 6. POINTS TABLE / STANDINGS ───────────────────────────────── */}
         <View
+          nativeID="cfvd-section-points-table"
+          {...({ id: 'cfvd-section-points-table' } as any)}
           style={styles.section}
           onLayout={e => {
             const layout = e.nativeEvent.layout;
             setSectionPositions(prev => ({ ...prev, pointsTable: layout.y }));
           }}
         >
-          <View style={styles.container}>
+          <View style={[styles.container, containerResponsiveStyle]}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionTagBadge}>
-                <Text style={styles.sectionTagBadgeText}>📊 LEAGUE STANDINGS</Text>
+                <Ionicons name="podium-outline" size={15} color="#0e184e" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTagBadgeText}>LEAGUE STANDINGS</Text>
               </View>
-              <Text style={styles.sectionTitle}>Official League Points Table 2026-27</Text>
+              <Text style={[styles.sectionTitle, isSmallMobile && { fontSize: 20 }]}>Official League Points Table 2026-27</Text>
               <Text style={styles.sectionSubtitle}>
                 Updated in accordance with official District Federation League points calculation rules
               </Text>
@@ -1512,7 +1878,10 @@ export default function HomeScreen() {
                 <TouchableOpacity
                   key={t.id}
                   style={[styles.switchTabBtn, pointsTableKey === t.id && styles.switchTabBtnActive]}
-                  onPress={() => setPointsTableKey(t.id)}
+                  onPress={() => {
+                    setPointsTableKey(t.id);
+                    setStandingsPage(1);
+                  }}
                 >
                   <Text style={[styles.switchTabBtnText, pointsTableKey === t.id && styles.switchTabBtnTextActive]}>
                     {t.label}
@@ -1522,302 +1891,667 @@ export default function HomeScreen() {
             </ScrollView>
 
             {/* Standings Table */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.tableBox}>
-                <View style={styles.tableHeaderRow}>
-                  <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Stand</Text>
-                  <Text style={[styles.tableTh, { width: 230 }]}>Team / Club / College</Text>
-                  <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>P</Text>
-                  <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>W</Text>
-                  <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>L</Text>
-                  <Text style={[styles.tableTh, { width: 45, textAlign: 'center', color: '#fed966' }]}>NR</Text>
-                  <Text style={[styles.tableTh, { width: 60, textAlign: 'center' }]}>Bonus</Text>
-                  <Text style={[styles.tableTh, { width: 75, textAlign: 'center' }]}>NRR</Text>
-                  <Text style={[styles.tableTh, { width: 55, textAlign: 'center', color: '#f5c43d' }]}>PTS</Text>
-                  <Text style={[styles.tableTh, { width: 130, textAlign: 'center' }]}>Recent Form</Text>
-                </View>
-
-                {((portalPointsTable.length > 0 ? portalPointsTable : (TABLE_DATA[pointsTableKey] || [])).map((row: any, idx: number) => {
-                  const standNum = row.pos || row.stand || (idx + 1);
-                  const isGold = standNum === 1;
-                  const isSilver = standNum === 2;
-                  const isBronze = standNum === 3;
-                  const teamTitle = row.teamName || row.name || 'District Club';
-                  const teamSubtitle = row.sub || (standNum <= 2 ? 'Qualified for Knockouts' : 'In Contention');
-                  const pPlayed = row.played ?? row.p ?? 5;
-                  const pWon = row.won ?? row.w ?? 0;
-                  const pLost = row.lost ?? row.l ?? 0;
-                  const pNr = row.nr ?? row.tied ?? 0;
-                  const pBonus = row.bonus ?? 1;
-                  const pNrr = row.nrr ?? '+0.000';
-                  const pPts = row.points ?? row.pts ?? 0;
-                  const pForm = Array.isArray(row.form) ? row.form : ['W', 'L', 'W', 'W'];
-
-                  return (
-                    <View key={row.teamId || idx} style={[styles.tableRow, standNum <= 3 && styles.tableRowQualified]}>
-                      <View style={{ width: 50, alignItems: 'center' }}>
-                        <View
-                          style={[
-                            styles.rankBadge,
-                            isGold
-                              ? styles.rankBadgeGold
-                              : isSilver
-                                ? styles.rankBadgeSilver
-                                : isBronze
-                                  ? styles.rankBadgeBronze
-                                  : null
-                          ]}
-                        >
-                          <Text style={styles.rankBadgeText}>{standNum}</Text>
-                        </View>
-                      </View>
-                      <View style={{ width: 230 }}>
-                        <Text style={styles.pointsTeamName}>{teamTitle}</Text>
-                        <Text style={styles.pointsTeamSub}>{teamSubtitle}</Text>
-                      </View>
-                      <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{pPlayed}</Text>
-                      <Text style={[styles.tableTd, { width: 45, textAlign: 'center', fontWeight: '700' }]}>{pWon}</Text>
-                      <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{pLost}</Text>
-                      <Text style={[styles.tableTd, { width: 45, textAlign: 'center', color: '#fed966', fontWeight: '700' }]}>
-                        {pNr}
-                      </Text>
-                      <Text style={[styles.tableTd, { width: 60, textAlign: 'center' }]}>{pBonus}</Text>
-                      <Text style={[styles.tableTd, { width: 75, textAlign: 'center' }]}>{pNrr}</Text>
-                      <Text style={[styles.tableTd, { width: 55, textAlign: 'center', color: '#f5c43d', fontWeight: '800' }]}>
-                        {pPts}
-                      </Text>
-                      <View style={{ width: 130, flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
-                        {pForm.map((f: string, fi: number) => (
-                          <View
-                            key={fi}
-                            style={[
-                              styles.formPill,
-                              String(f).toLowerCase() === 'w'
-                                ? styles.formPillW
-                                : String(f).toLowerCase() === 'l'
-                                  ? styles.formPillL
-                                  : styles.formPillNR
-                            ]}
-                          >
-                            <Text style={styles.formPillText}>{String(f).toUpperCase()}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-                  );
-                }))}
+            {isMobile && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 8 }}>
+                <Ionicons name="swap-horizontal" size={14} color="#b45309" style={{ marginRight: 4 }} />
+                <Text style={{ fontSize: 11, color: '#b45309', fontWeight: '700', textAlign: 'center' }}>
+                  Swipe horizontally to view full table (P, W, L, NR, NRR, PTS, Form)
+                </Text>
               </View>
-            </ScrollView>
+            )}
+            {/* Standings Table with Reusable Pagination (8 teams per page) */}
+            {(() => {
+              const fullStandingsList = portalPointsTable.length > 0 ? portalPointsTable : (TABLE_DATA[pointsTableKey] || []);
+              const totalStandingsPages = Math.ceil(fullStandingsList.length / STANDINGS_PER_PAGE) || 1;
+              const safeStandingsPage = Math.min(standingsPage, totalStandingsPages);
+              const paginatedStandings = fullStandingsList.slice(
+                (safeStandingsPage - 1) * STANDINGS_PER_PAGE,
+                safeStandingsPage * STANDINGS_PER_PAGE
+              );
+
+              return (
+                <View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={true} style={{ width: '100%' }}>
+                    <View style={styles.tableBox}>
+                      <View style={styles.tableHeaderRow}>
+                        <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Stand</Text>
+                        <Text style={[styles.tableTh, { width: 230 }]}>Team / Club / College</Text>
+                        <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>P</Text>
+                        <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>W</Text>
+                        <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>L</Text>
+                        <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>NR</Text>
+                        <Text style={[styles.tableTh, { width: 60, textAlign: 'center' }]}>Bonus</Text>
+                        <Text style={[styles.tableTh, { width: 75, textAlign: 'center' }]}>NRR</Text>
+                        <Text style={[styles.tableTh, { width: 55, textAlign: 'center', color: '#0e184e', fontWeight: '800' }]}>PTS</Text>
+                        <Text style={[styles.tableTh, { width: 130, textAlign: 'center' }]}>Recent Form</Text>
+                      </View>
+
+                      {paginatedStandings.map((row: any, idx: number) => {
+                        const globalIdx = (safeStandingsPage - 1) * STANDINGS_PER_PAGE + idx;
+                        const standNum = row.pos || row.stand || (globalIdx + 1);
+                        const isGold = standNum === 1;
+                        const isSilver = standNum === 2;
+                        const isBronze = standNum === 3;
+                        const teamTitle = row.teamName || row.name || 'District Club';
+                        const teamSubtitle = row.sub || (standNum <= 2 ? 'Qualified for Knockouts' : 'In Contention');
+                        const pPlayed = row.played ?? row.p ?? 5;
+                        const pWon = row.won ?? row.w ?? 0;
+                        const pLost = row.lost ?? row.l ?? 0;
+                        const pNr = row.nr ?? row.tied ?? 0;
+                        const pBonus = row.bonus ?? 1;
+                        const pNrr = row.nrr ?? '+0.000';
+                        const pPts = row.points ?? row.pts ?? 0;
+                        const pForm = Array.isArray(row.form) ? row.form : ['W', 'L', 'W', 'W'];
+
+                        return (
+                          <View key={row.teamId || idx} style={[styles.tableRow, standNum <= 3 && styles.tableRowQualified]}>
+                            <View style={{ width: 50, alignItems: 'center' }}>
+                              <View
+                                style={[
+                                  styles.rankBadge,
+                                  isGold
+                                    ? styles.rankBadgeGold
+                                    : isSilver
+                                      ? styles.rankBadgeSilver
+                                      : isBronze
+                                        ? styles.rankBadgeBronze
+                                        : null
+                                ]}
+                              >
+                                <Text style={styles.rankBadgeText}>{standNum}</Text>
+                              </View>
+                            </View>
+                            <View style={{ width: 230, flexDirection: 'row', alignItems: 'center' }}>
+                              {resolveImageUrl(row.logo || row.photo || row.image_path) ? (
+                                <Image
+                                  source={{ uri: resolveImageUrl(row.logo || row.photo || row.image_path)! }}
+                                  style={{ width: 24, height: 24, borderRadius: 4, marginRight: 8, resizeMode: 'cover' }}
+                                />
+                              ) : null}
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.pointsTeamName}>{teamTitle}</Text>
+                                <Text style={styles.pointsTeamSub}>{teamSubtitle}</Text>
+                              </View>
+                            </View>
+                            <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{pPlayed}</Text>
+                            <Text style={[styles.tableTd, { width: 45, textAlign: 'center', fontWeight: '700' }]}>{pWon}</Text>
+                            <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{pLost}</Text>
+                            <Text style={[styles.tableTd, { width: 45, textAlign: 'center', color: '#1e293b' }]}>
+                              {pNr}
+                            </Text>
+                            <Text style={[styles.tableTd, { width: 60, textAlign: 'center' }]}>{pBonus}</Text>
+                            <Text style={[styles.tableTd, { width: 75, textAlign: 'center' }]}>{pNrr}</Text>
+                            <Text style={[styles.tableTd, { width: 55, textAlign: 'center', color: '#0e184e', fontWeight: '800' }]}>
+                              {pPts}
+                            </Text>
+                            <View style={{ width: 130, flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
+                              {pForm.map((f: string, fi: number) => (
+                                <View
+                                  key={fi}
+                                  style={[
+                                    styles.formPill,
+                                    String(f).toLowerCase() === 'w'
+                                      ? styles.formPillW
+                                      : String(f).toLowerCase() === 'l'
+                                        ? styles.formPillL
+                                        : styles.formPillNR
+                                  ]}
+                                >
+                                  <Text style={styles.formPillText}>{String(f).toUpperCase()}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </ScrollView>
+
+                  {/* Reusable Bootstrap Pagination Component */}
+                  <BootstrapPagination
+                    currentPage={safeStandingsPage}
+                    totalPages={totalStandingsPages}
+                    onPageChange={(p) => setStandingsPage(p)}
+                    totalItems={fullStandingsList.length}
+                    pageSize={STANDINGS_PER_PAGE}
+                    itemLabel="teams"
+                  />
+                </View>
+              );
+            })()}
           </View>
         </View>
 
         {/* ─── 7. PLAYER PERFORMANCE RECORDS ─────────────────────────────── */}
         <View
+          nativeID="cfvd-section-stats"
+          {...({ id: 'cfvd-section-stats' } as any)}
           style={styles.section}
           onLayout={e => {
             const layout = e.nativeEvent.layout;
             setSectionPositions(prev => ({ ...prev, stats: layout.y }));
           }}
         >
-          <View style={styles.container}>
+          <View style={[styles.container, containerResponsiveStyle]}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionTagBadge}>
-                <Text style={styles.sectionTagBadgeText}>📈 PERFORMANCE RECORDS</Text>
+                <Ionicons name="trending-up-outline" size={15} color="#0e184e" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTagBadgeText}>PERFORMANCE RECORDS</Text>
               </View>
-              <Text style={styles.sectionTitle}>Season 2026-27 Player Performance</Text>
+              <Text style={[styles.sectionTitle, isSmallMobile && { fontSize: 20 }]}>Season 2026-27 Player Performance</Text>
               <Text style={styles.sectionSubtitle}>
                 Batting (50s/100s, Role: Batter), Bowling (Runs, 3w/5w counts), and Fielding Stats across official competitions
               </Text>
             </View>
 
             {/* Performance Tabs */}
-            <View style={styles.perfTabsRow}>
+            <View style={[styles.perfTabsRow, isSmallMobile && { gap: 6, marginBottom: 14 }]}>
               {[
-                { id: 'batting', label: '🏏 Batting Stats (Runs, 50/100s)' },
-                { id: 'bowling', label: '🎯 Bowling Stats (Runs, 3w/5w)' },
-                { id: 'fielding', label: '🧤 Fielding Stats (Catches, Stumpings)' }
+                { id: 'ratings', short: 'Player Ratings', label: 'Performance Ratings (0–10)', icon: 'star', iconType: 'ionicons' },
+                { id: 'batting', short: 'Batting', label: 'Batting Stats (Runs, 50/100s)', icon: 'cricket', iconType: 'mci' },
+                { id: 'bowling', short: 'Bowling', label: 'Bowling Stats (Runs, 3w/5w)', icon: 'disc-outline', iconType: 'ionicons' },
+                { id: 'fielding', short: 'Fielding', label: 'Fielding Stats (Catches, Stumpings)', icon: 'hand-back-right-outline', iconType: 'mci' }
               ].map(t => (
                 <TouchableOpacity
                   key={t.id}
-                  style={[styles.perfTabBtn, perfTab === t.id && styles.perfTabBtnActive]}
-                  onPress={() => setPerfTab(t.id as any)}
+                  style={[
+                    styles.perfTabBtn,
+                    perfTab === t.id && styles.perfTabBtnActive,
+                    isSmallMobile && { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 18 }
+                  ]}
+                  onPress={() => {
+                    setPerfTab(t.id as any);
+                    setPerfRatingsPage(1);
+                    setPerfBattingPage(1);
+                    setPerfBowlingPage(1);
+                    setPerfFieldingPage(1);
+                  }}
                 >
-                  <Text style={[styles.perfTabBtnText, perfTab === t.id && styles.perfTabBtnTextActive]}>
-                    {t.label}
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    {t.iconType === 'ionicons' ? (
+                      <Ionicons
+                        name={t.icon as any}
+                        size={12}
+                        color={perfTab === t.id ? '#ffffff' : '#64748b'}
+                        style={{ marginRight: 5 }}
+                      />
+                    ) : (
+                      <MaterialCommunityIcons
+                        name={t.icon as any}
+                        size={13}
+                        color={perfTab === t.id ? '#ffffff' : '#64748b'}
+                        style={{ marginRight: 5 }}
+                      />
+                    )}
+                    <Text style={[
+                      styles.perfTabBtnText,
+                      perfTab === t.id && styles.perfTabBtnTextActive,
+                      isSmallMobile && { fontSize: 11 }
+                    ]}>
+                      {isSmallMobile ? t.short : t.label}
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* Dynamic Performance Table */}
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.tableBox}>
-                {perfTab === 'batting' && (
-                  <View>
-                    <View style={styles.tableHeaderRow}>
-                      <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Stand</Text>
-                      <Text style={[styles.tableTh, { width: 170 }]}>Player / Role</Text>
-                      <Text style={[styles.tableTh, { width: 170 }]}>Team</Text>
-                      <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>Mat</Text>
-                      <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>Inns</Text>
-                      <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>HS</Text>
-                      <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>Avg</Text>
-                      <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>SR</Text>
-                      <Text style={[styles.tableTh, { width: 45, textAlign: 'center', color: '#fed966' }]}>50s</Text>
-                      <Text style={[styles.tableTh, { width: 45, textAlign: 'center', color: '#fed966' }]}>100s</Text>
-                      <Text style={[styles.tableTh, { width: 65, textAlign: 'right', color: '#f5c43d' }]}>Runs</Text>
-                    </View>
-                    {((portalTopBatsmen.length > 0 ? portalTopBatsmen : PERF_DATA.batting).map((p: any, idx: number) => (
-                      <View key={p.id || idx} style={styles.tableRow}>
-                        <Text style={[styles.tableTd, { width: 50, textAlign: 'center', fontWeight: '700' }]}>
-                          {p.stand || (idx + 1)}
-                        </Text>
-                        <View style={{ width: 170 }}>
-                          <Text style={styles.pointsTeamName}>{p.name}</Text>
-                          <Text style={styles.playerSubRole}>{p.role || 'Batter'}</Text>
-                        </View>
-                        <Text style={[styles.tableTd, { width: 170 }]}>{p.team || 'District Club'}</Text>
-                        <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{p.mat || 5}</Text>
-                        <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{p.inns || 5}</Text>
-                        <Text style={[styles.tableTd, { width: 55, textAlign: 'center' }]}>{p.hs || (p.runs ? p.runs + '*' : '50*')}</Text>
-                        <Text style={[styles.tableTd, { width: 55, textAlign: 'center' }]}>{p.average || p.avg || '35.0'}</Text>
-                        <Text style={[styles.tableTd, { width: 55, textAlign: 'center' }]}>{p.strikeRate || p.sr || '135.0'}</Text>
-                        <Text style={[styles.tableTd, { width: 45, textAlign: 'center', color: '#fed966' }]}>
-                          {p.fifties ?? (p.runs >= 100 ? 1 : 0)}
-                        </Text>
-                        <Text style={[styles.tableTd, { width: 45, textAlign: 'center', color: '#fed966' }]}>
-                          {p.hundreds ?? 0}
-                        </Text>
-                        <Text style={[styles.tableTd, { width: 65, textAlign: 'right', color: '#f5c43d', fontWeight: '800' }]}>
-                          {p.runs || 0}
+            {/* If Ratings Tab selected, show Category and Format Filters */}
+            {perfTab === 'ratings' && (
+              <View style={{ marginBottom: 14, gap: 8 }}>
+                {/* Category Selector */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  <Text style={{ color: '#d4af37', fontSize: 11, fontWeight: '800', marginRight: 4 }}>CATEGORY:</Text>
+                  {[
+                    { id: 'overall', label: 'Overall', icon: 'star', iconType: 'ionicons' },
+                    { id: 'batting', label: 'Batting', icon: 'cricket', iconType: 'mci' },
+                    { id: 'bowling', label: 'Bowling', icon: 'disc-outline', iconType: 'ionicons' }
+                  ].map(c => (
+                    <TouchableOpacity
+                      key={c.id}
+                      style={[
+                        styles.ratingSubFilterBtn,
+                        ratingCategory === c.id && styles.ratingSubFilterBtnActive
+                      ]}
+                      onPress={() => {
+                        setRatingCategory(c.id as any);
+                        setPerfRatingsPage(1);
+                        loadRatingsLeaderboard(c.id as any, ratingFormat);
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        {c.iconType === 'ionicons' ? (
+                          <Ionicons
+                            name={c.icon as any}
+                            size={11}
+                            color={ratingCategory === c.id ? '#ffffff' : '#94a3b8'}
+                            style={{ marginRight: 4 }}
+                          />
+                        ) : (
+                          <MaterialCommunityIcons
+                            name={c.icon as any}
+                            size={12}
+                            color={ratingCategory === c.id ? '#ffffff' : '#94a3b8'}
+                            style={{ marginRight: 4 }}
+                          />
+                        )}
+                        <Text style={[
+                          styles.ratingSubFilterText,
+                          ratingCategory === c.id && styles.ratingSubFilterTextActive
+                        ]}>
+                          {c.label}
                         </Text>
                       </View>
-                    )))}
-                  </View>
-                )}
+                    </TouchableOpacity>
+                  ))}
+                </View>
 
-                {perfTab === 'bowling' && (
-                  <View>
-                    <View style={styles.tableHeaderRow}>
-                      <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Stand</Text>
-                      <Text style={[styles.tableTh, { width: 170 }]}>Bowler / Style</Text>
-                      <Text style={[styles.tableTh, { width: 170 }]}>Team</Text>
-                      <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>Mat</Text>
-                      <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>Inns</Text>
-                      <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>Overs</Text>
-                      <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>Runs</Text>
-                      <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>Econ</Text>
-                      <Text style={[styles.tableTh, { width: 50, textAlign: 'center', color: '#fed966' }]}>3w</Text>
-                      <Text style={[styles.tableTh, { width: 50, textAlign: 'center', color: '#fed966' }]}>5w</Text>
-                      <Text style={[styles.tableTh, { width: 65, textAlign: 'right', color: '#4ade80' }]}>Wkts</Text>
-                    </View>
-                    {((portalTopBowlers.length > 0 ? portalTopBowlers : PERF_DATA.bowling).map((p: any, idx: number) => (
-                      <View key={p.id || idx} style={styles.tableRow}>
-                        <Text style={[styles.tableTd, { width: 50, textAlign: 'center', fontWeight: '700' }]}>
-                          {p.stand || (idx + 1)}
-                        </Text>
-                        <View style={{ width: 170 }}>
-                          <Text style={styles.pointsTeamName}>{p.name}</Text>
-                          <Text style={styles.playerSubRole}>{p.role || 'Bowler'}</Text>
-                        </View>
-                        <Text style={[styles.tableTd, { width: 170 }]}>{p.team || 'District Club'}</Text>
-                        <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{p.mat || 5}</Text>
-                        <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{p.inns || 5}</Text>
-                        <Text style={[styles.tableTd, { width: 55, textAlign: 'center' }]}>{p.overs || '20.0'}</Text>
-                        <Text style={[styles.tableTd, { width: 55, textAlign: 'center' }]}>{p.runs_conceded || p.runs || 120}</Text>
-                        <Text style={[styles.tableTd, { width: 55, textAlign: 'center' }]}>{p.economy || p.econ || '6.50'}</Text>
-                        <Text style={[styles.tableTd, { width: 50, textAlign: 'center', color: '#fed966' }]}>
-                          {p.threeWkts ?? (p.wickets >= 3 ? 1 : 0)}
-                        </Text>
-                        <Text style={[styles.tableTd, { width: 50, textAlign: 'center', color: '#fed966' }]}>
-                          {p.fiveWkts ?? (p.wickets >= 5 ? 1 : 0)}
-                        </Text>
-                        <Text style={[styles.tableTd, { width: 65, textAlign: 'right', color: '#4ade80', fontWeight: '800' }]}>
-                          {p.wickets || 0}
-                        </Text>
-                      </View>
-                    )))}
-                  </View>
-                )}
-
-                {perfTab === 'fielding' && (
-                  <View>
-                    <View style={styles.tableHeaderRow}>
-                      <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Stand</Text>
-                      <Text style={[styles.tableTh, { width: 180 }]}>Player / Role</Text>
-                      <Text style={[styles.tableTh, { width: 180 }]}>Team</Text>
-                      <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Mat</Text>
-                      <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Inns</Text>
-                      <Text style={[styles.tableTh, { width: 60, textAlign: 'center', color: '#fed966' }]}>Catches</Text>
-                      <Text style={[styles.tableTh, { width: 70, textAlign: 'center', color: '#fed966' }]}>Stumpings</Text>
-                      <Text style={[styles.tableTh, { width: 70, textAlign: 'center', color: '#fed966' }]}>Run Outs</Text>
-                      <Text style={[styles.tableTh, { width: 70, textAlign: 'right', color: '#4ade80' }]}>Total</Text>
-                    </View>
-                    {((portalTopFielders.length > 0 ? portalTopFielders : PERF_DATA.fielding).map((p: any, idx: number) => (
-                      <View key={p.id || idx} style={styles.tableRow}>
-                        <Text style={[styles.tableTd, { width: 50, textAlign: 'center', fontWeight: '700' }]}>
-                          {p.stand || (idx + 1)}
-                        </Text>
-                        <View style={{ width: 180 }}>
-                          <Text style={styles.pointsTeamName}>{p.name}</Text>
-                          <Text style={styles.playerSubRole}>{p.role || 'Fielder'}</Text>
-                        </View>
-                        <Text style={[styles.tableTd, { width: 180 }]}>{p.team || 'District Club'}</Text>
-                        <Text style={[styles.tableTd, { width: 50, textAlign: 'center' }]}>{p.mat || 5}</Text>
-                        <Text style={[styles.tableTd, { width: 50, textAlign: 'center' }]}>{p.inns || 5}</Text>
-                        <Text style={[styles.tableTd, { width: 60, textAlign: 'center', color: '#fed966' }]}>
-                          {p.catches || 0}
-                        </Text>
-                        <Text style={[styles.tableTd, { width: 70, textAlign: 'center', color: '#fed966' }]}>
-                          {p.stumpings || 0}
-                        </Text>
-                        <Text style={[styles.tableTd, { width: 70, textAlign: 'center', color: '#fed966' }]}>
-                          {p.runOuts || 0}
-                        </Text>
-                        <Text style={[styles.tableTd, { width: 70, textAlign: 'right', color: '#4ade80', fontWeight: '800' }]}>
-                          {p.dismissals || (p.catches || 0) + (p.stumpings || 0)}
-                        </Text>
-                      </View>
-                    )))}
-                  </View>
-                )}
+                {/* Format Selector */}
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                  <Text style={{ color: '#94a3b8', fontSize: 11, fontWeight: '800', marginRight: 4 }}>FORMAT:</Text>
+                  {[
+                    { id: 'ALL', label: 'All Formats' },
+                    { id: 'T20', label: 'T20' },
+                    { id: 'ONE_DAY', label: 'One-Day' }
+                  ].map(f => (
+                    <TouchableOpacity
+                      key={f.id}
+                      style={[
+                        styles.ratingFormatBtn,
+                        ratingFormat === f.id && styles.ratingFormatBtnActive
+                      ]}
+                      onPress={() => {
+                        setRatingFormat(f.id as any);
+                        setPerfRatingsPage(1);
+                        loadRatingsLeaderboard(ratingCategory, f.id as any);
+                      }}
+                    >
+                      <Text style={[
+                        styles.ratingFormatText,
+                        ratingFormat === f.id && styles.ratingFormatTextActive
+                      ]}>
+                        {f.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
-            </ScrollView>
+            )}
+
+            {/* Dynamic Performance Table with Reusable Pagination (8 items per page) */}
+            {(() => {
+              // 1. Ratings Pagination Data
+              const fullRatingsList = ratingLeaders.length > 0 ? ratingLeaders : [];
+              const totalRatingsPages = Math.ceil(fullRatingsList.length / PERF_PER_PAGE) || 1;
+              const safeRatingsPage = Math.min(perfRatingsPage, totalRatingsPages);
+              const paginatedRatings = fullRatingsList.slice(
+                (safeRatingsPage - 1) * PERF_PER_PAGE,
+                safeRatingsPage * PERF_PER_PAGE
+              );
+
+              // 2. Batting Pagination Data
+              const fullBattingList = portalTopBatsmen.length > 0 ? portalTopBatsmen : PERF_DATA.batting;
+              const totalBattingPages = Math.ceil(fullBattingList.length / PERF_PER_PAGE) || 1;
+              const safeBattingPage = Math.min(perfBattingPage, totalBattingPages);
+              const paginatedBatting = fullBattingList.slice(
+                (safeBattingPage - 1) * PERF_PER_PAGE,
+                safeBattingPage * PERF_PER_PAGE
+              );
+
+              // 3. Bowling Pagination Data
+              const fullBowlingList = portalTopBowlers.length > 0 ? portalTopBowlers : PERF_DATA.bowling;
+              const totalBowlingPages = Math.ceil(fullBowlingList.length / PERF_PER_PAGE) || 1;
+              const safeBowlingPage = Math.min(perfBowlingPage, totalBowlingPages);
+              const paginatedBowling = fullBowlingList.slice(
+                (safeBowlingPage - 1) * PERF_PER_PAGE,
+                safeBowlingPage * PERF_PER_PAGE
+              );
+
+              // 4. Fielding Pagination Data
+              const fullFieldingList = portalTopFielders.length > 0 ? portalTopFielders : PERF_DATA.fielding;
+              const totalFieldingPages = Math.ceil(fullFieldingList.length / PERF_PER_PAGE) || 1;
+              const safeFieldingPage = Math.min(perfFieldingPage, totalFieldingPages);
+              const paginatedFielding = fullFieldingList.slice(
+                (safeFieldingPage - 1) * PERF_PER_PAGE,
+                safeFieldingPage * PERF_PER_PAGE
+              );
+
+              return (
+                <View>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={true} style={{ width: '100%' }}>
+                    <View style={styles.tableBox}>
+                      {perfTab === 'ratings' && (
+                        <View>
+                          <View style={styles.tableHeaderRow}>
+                            <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Rank</Text>
+                            <Text style={[styles.tableTh, { width: 180 }]}>Player / Role</Text>
+                            <Text style={[styles.tableTh, { width: 65, textAlign: 'center' }]}>Matches</Text>
+                            <Text style={[styles.tableTh, { width: 140, textAlign: 'center' }]}>Rating (0-10)</Text>
+                            <Text style={[styles.tableTh, { width: 100, textAlign: 'center' }]}>Confidence</Text>
+                            <Text style={[styles.tableTh, { width: 75, textAlign: 'center' }]}>Batting</Text>
+                            <Text style={[styles.tableTh, { width: 75, textAlign: 'center' }]}>Bowling</Text>
+                            <Text style={[styles.tableTh, { width: 75, textAlign: 'center' }]}>Fielding</Text>
+                          </View>
+                          {isLoadingLeaders ? (
+                            <View style={{ padding: 24, alignItems: 'center' }}>
+                              <ActivityIndicator size="small" color="#f59e0b" />
+                              <Text style={{ color: '#94a3b8', fontSize: 11, marginTop: 8 }}>Computing Player Ratings...</Text>
+                            </View>
+                          ) : paginatedRatings.map((p: any, idx: number) => {
+                            const globalIdx = (safeRatingsPage - 1) * PERF_PER_PAGE + idx;
+                            const rank = globalIdx + 1;
+                            const score = ratingCategory === 'batting' ? p.battingRating : (ratingCategory === 'bowling' ? p.bowlingRating : p.overallRating);
+                            return (
+                              <View key={p.playerId || idx} style={styles.tableRow}>
+                                <View style={{ width: 50, alignItems: 'center', justifyContent: 'center', flexDirection: 'row' }}>
+                                  {rank === 1 ? (
+                                    <FontAwesome5 name="medal" size={11} color="#eab308" style={{ marginRight: 3 }} />
+                                  ) : rank === 2 ? (
+                                    <FontAwesome5 name="medal" size={11} color="#94a3b8" style={{ marginRight: 3 }} />
+                                  ) : rank === 3 ? (
+                                    <FontAwesome5 name="medal" size={11} color="#d97706" style={{ marginRight: 3 }} />
+                                  ) : null}
+                                  <Text style={{ fontWeight: '800', color: rank <= 3 ? '#b45309' : '#64748b', fontSize: 12 }}>
+                                    {rank <= 3 ? `${rank}` : `#${rank}`}
+                                  </Text>
+                                </View>
+                                <View style={{ width: 180 }}>
+                                  <Text style={styles.pointsTeamName}>{p.playerName}</Text>
+                                  <Text style={styles.playerSubRole}>{p.role || 'Player'}</Text>
+                                </View>
+                                <Text style={[styles.tableTd, { width: 65, textAlign: 'center', color: '#1e293b' }]}>{p.matchesCount || 1}</Text>
+                                <View style={{ width: 140, alignItems: 'center', justifyContent: 'center' }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fef3c7', paddingHorizontal: 9, paddingVertical: 3.5, borderRadius: 6, borderWidth: 1, borderColor: '#fde68a' }}>
+                                    <Text style={{ color: '#0e184e', fontWeight: '900', fontSize: 13 }}>
+                                      {score !== null && score !== undefined ? `${Number(score).toFixed(1)}` : '—'}
+                                    </Text>
+                                    {score !== null && score !== undefined && (
+                                      <Ionicons name="star" size={11} color="#d97706" style={{ marginLeft: 4 }} />
+                                    )}
+                                  </View>
+                                </View>
+                                <View style={{ width: 100, alignItems: 'center', justifyContent: 'center' }}>
+                                  <Text style={{
+                                    fontSize: 10,
+                                    fontWeight: '700',
+                                    color: p.confidence === 'Established' ? '#15803d' : (p.confidence === 'Developing' ? '#b45309' : '#0284c7'),
+                                    backgroundColor: p.confidence === 'Established' ? '#dcfce7' : (p.confidence === 'Developing' ? '#fef3c7' : '#e0f2fe'),
+                                    borderColor: p.confidence === 'Established' ? '#bbf7d0' : (p.confidence === 'Developing' ? '#fde68a' : '#bae6fd'),
+                                    borderWidth: 1,
+                                    paddingHorizontal: 8,
+                                    paddingVertical: 2.5,
+                                    borderRadius: 4
+                                  }}>
+                                    {p.confidence || 'Provisional'}
+                                  </Text>
+                                </View>
+                                <Text style={[styles.tableTd, { width: 75, textAlign: 'center', fontWeight: '700', color: '#1e293b' }]}>
+                                  {p.battingRating !== null && p.battingRating !== undefined ? `${Number(p.battingRating).toFixed(1)}` : '—'}
+                                </Text>
+                                <Text style={[styles.tableTd, { width: 75, textAlign: 'center', fontWeight: '700', color: '#1e293b' }]}>
+                                  {p.bowlingRating !== null && p.bowlingRating !== undefined ? `${Number(p.bowlingRating).toFixed(1)}` : '—'}
+                                </Text>
+                                <Text style={[styles.tableTd, { width: 75, textAlign: 'center', fontWeight: '700', color: '#1e293b' }]}>
+                                  {p.fieldingRating !== null && p.fieldingRating !== undefined ? `${Number(p.fieldingRating).toFixed(1)}` : '—'}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+
+                      {perfTab === 'batting' && (
+                        <View>
+                          <View style={styles.tableHeaderRow}>
+                            <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Stand</Text>
+                            <Text style={[styles.tableTh, { width: 170 }]}>Player / Role</Text>
+                            <Text style={[styles.tableTh, { width: 170 }]}>Team</Text>
+                            <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>Mat</Text>
+                            <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>Inns</Text>
+                            <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>HS</Text>
+                            <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>Avg</Text>
+                            <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>SR</Text>
+                            <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>50s</Text>
+                            <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>100s</Text>
+                            <Text style={[styles.tableTh, { width: 65, textAlign: 'right', color: '#0e184e', fontWeight: '800' }]}>Runs</Text>
+                          </View>
+                          {paginatedBatting.map((p: any, idx: number) => {
+                            const globalIdx = (safeBattingPage - 1) * PERF_PER_PAGE + idx;
+                            return (
+                              <View key={p.id || idx} style={styles.tableRow}>
+                                <Text style={[styles.tableTd, { width: 50, textAlign: 'center', fontWeight: '700' }]}>
+                                  {p.stand || (globalIdx + 1)}
+                                </Text>
+                                <View style={{ width: 170, flexDirection: 'row', alignItems: 'center' }}>
+                                  {resolveImageUrl(p.photo || p.image || p.image_path) ? (
+                                    <Image
+                                      source={{ uri: resolveImageUrl(p.photo || p.image || p.image_path)! }}
+                                      style={{ width: 24, height: 24, borderRadius: 12, marginRight: 8, resizeMode: 'cover' }}
+                                    />
+                                  ) : null}
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={styles.pointsTeamName}>{p.name}</Text>
+                                    <Text style={styles.playerSubRole}>{p.role || 'Batter'}</Text>
+                                  </View>
+                                </View>
+                                <Text style={[styles.tableTd, { width: 170 }]}>{p.team || 'District Club'}</Text>
+                                <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{p.mat || 5}</Text>
+                                <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{p.inns || 5}</Text>
+                                <Text style={[styles.tableTd, { width: 55, textAlign: 'center', fontWeight: '600' }]}>{p.hs || (p.runs ? p.runs + '*' : '50*')}</Text>
+                                <Text style={[styles.tableTd, { width: 55, textAlign: 'center' }]}>{p.average || p.avg || '35.0'}</Text>
+                                <Text style={[styles.tableTd, { width: 55, textAlign: 'center' }]}>{p.strikeRate || p.sr || '135.0'}</Text>
+                                <Text style={[styles.tableTd, { width: 45, textAlign: 'center', fontWeight: '600', color: '#1e293b' }]}>
+                                  {p.fifties ?? (p.runs >= 100 ? 1 : 0)}
+                                </Text>
+                                <Text style={[styles.tableTd, { width: 45, textAlign: 'center', fontWeight: '600', color: '#1e293b' }]}>
+                                  {p.hundreds ?? 0}
+                                </Text>
+                                <Text style={[styles.tableTd, { width: 65, textAlign: 'right', color: '#0e184e', fontWeight: '800' }]}>
+                                  {p.runs || 0}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+
+                      {perfTab === 'bowling' && (
+                        <View>
+                          <View style={styles.tableHeaderRow}>
+                            <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Stand</Text>
+                            <Text style={[styles.tableTh, { width: 170 }]}>Bowler / Style</Text>
+                            <Text style={[styles.tableTh, { width: 170 }]}>Team</Text>
+                            <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>Mat</Text>
+                            <Text style={[styles.tableTh, { width: 45, textAlign: 'center' }]}>Inns</Text>
+                            <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>Overs</Text>
+                            <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>Runs</Text>
+                            <Text style={[styles.tableTh, { width: 55, textAlign: 'center' }]}>Econ</Text>
+                            <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>3w</Text>
+                            <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>5w</Text>
+                            <Text style={[styles.tableTh, { width: 65, textAlign: 'right', color: '#0e184e', fontWeight: '800' }]}>Wkts</Text>
+                          </View>
+                          {paginatedBowling.map((p: any, idx: number) => {
+                            const globalIdx = (safeBowlingPage - 1) * PERF_PER_PAGE + idx;
+                            return (
+                              <View key={p.id || idx} style={styles.tableRow}>
+                                <Text style={[styles.tableTd, { width: 50, textAlign: 'center', fontWeight: '700' }]}>
+                                  {p.stand || (globalIdx + 1)}
+                                </Text>
+                                <View style={{ width: 170, flexDirection: 'row', alignItems: 'center' }}>
+                                  {resolveImageUrl(p.photo || p.image || p.image_path) ? (
+                                    <Image
+                                      source={{ uri: resolveImageUrl(p.photo || p.image || p.image_path)! }}
+                                      style={{ width: 24, height: 24, borderRadius: 12, marginRight: 8, resizeMode: 'cover' }}
+                                    />
+                                  ) : null}
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={styles.pointsTeamName}>{p.name}</Text>
+                                    <Text style={styles.playerSubRole}>{p.role || 'Bowler'}</Text>
+                                  </View>
+                                </View>
+                                <Text style={[styles.tableTd, { width: 170 }]}>{p.team || 'District Club'}</Text>
+                                <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{p.mat || 5}</Text>
+                                <Text style={[styles.tableTd, { width: 45, textAlign: 'center' }]}>{p.inns || 5}</Text>
+                                <Text style={[styles.tableTd, { width: 55, textAlign: 'center' }]}>{p.overs || '20.0'}</Text>
+                                <Text style={[styles.tableTd, { width: 55, textAlign: 'center' }]}>{p.runs_conceded || p.runs || 120}</Text>
+                                <Text style={[styles.tableTd, { width: 55, textAlign: 'center' }]}>{p.economy || p.econ || '6.50'}</Text>
+                                <Text style={[styles.tableTd, { width: 50, textAlign: 'center', fontWeight: '600', color: '#1e293b' }]}>
+                                  {p.threeWkts ?? (p.wickets >= 3 ? 1 : 0)}
+                                </Text>
+                                <Text style={[styles.tableTd, { width: 50, textAlign: 'center', fontWeight: '600', color: '#1e293b' }]}>
+                                  {p.fiveWkts ?? (p.wickets >= 5 ? 1 : 0)}
+                                </Text>
+                                <Text style={[styles.tableTd, { width: 65, textAlign: 'right', color: '#0e184e', fontWeight: '800' }]}>
+                                  {p.wickets || 0}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+
+                      {perfTab === 'fielding' && (
+                        <View>
+                          <View style={styles.tableHeaderRow}>
+                            <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Stand</Text>
+                            <Text style={[styles.tableTh, { width: 180 }]}>Player / Role</Text>
+                            <Text style={[styles.tableTh, { width: 180 }]}>Team</Text>
+                            <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Mat</Text>
+                            <Text style={[styles.tableTh, { width: 50, textAlign: 'center' }]}>Inns</Text>
+                            <Text style={[styles.tableTh, { width: 60, textAlign: 'center' }]}>Catches</Text>
+                            <Text style={[styles.tableTh, { width: 70, textAlign: 'center' }]}>Stumpings</Text>
+                            <Text style={[styles.tableTh, { width: 70, textAlign: 'center' }]}>Run Outs</Text>
+                            <Text style={[styles.tableTh, { width: 70, textAlign: 'right', color: '#0e184e', fontWeight: '800' }]}>Total</Text>
+                          </View>
+                          {paginatedFielding.map((p: any, idx: number) => {
+                            const globalIdx = (safeFieldingPage - 1) * PERF_PER_PAGE + idx;
+                            return (
+                              <View key={p.id || idx} style={styles.tableRow}>
+                                <Text style={[styles.tableTd, { width: 50, textAlign: 'center', fontWeight: '700' }]}>
+                                  {p.stand || (globalIdx + 1)}
+                                </Text>
+                                <View style={{ width: 180, flexDirection: 'row', alignItems: 'center' }}>
+                                  {resolveImageUrl(p.photo || p.image || p.image_path) ? (
+                                    <Image
+                                      source={{ uri: resolveImageUrl(p.photo || p.image || p.image_path)! }}
+                                      style={{ width: 24, height: 24, borderRadius: 12, marginRight: 8, resizeMode: 'cover' }}
+                                    />
+                                  ) : null}
+                                  <View style={{ flex: 1 }}>
+                                    <Text style={styles.pointsTeamName}>{p.name}</Text>
+                                    <Text style={styles.playerSubRole}>{p.role || 'Fielder'}</Text>
+                                  </View>
+                                </View>
+                                <Text style={[styles.tableTd, { width: 180 }]}>{p.team || 'District Club'}</Text>
+                                <Text style={[styles.tableTd, { width: 50, textAlign: 'center' }]}>{p.mat || 5}</Text>
+                                <Text style={[styles.tableTd, { width: 50, textAlign: 'center' }]}>{p.inns || 5}</Text>
+                                <Text style={[styles.tableTd, { width: 60, textAlign: 'center', fontWeight: '600', color: '#1e293b' }]}>
+                                  {p.catches || 0}
+                                </Text>
+                                <Text style={[styles.tableTd, { width: 70, textAlign: 'center', fontWeight: '600', color: '#1e293b' }]}>
+                                  {p.stumpings || 0}
+                                </Text>
+                                <Text style={[styles.tableTd, { width: 70, textAlign: 'center', fontWeight: '600', color: '#1e293b' }]}>
+                                  {p.runOuts || 0}
+                                </Text>
+                                <Text style={[styles.tableTd, { width: 70, textAlign: 'right', color: '#0e184e', fontWeight: '800' }]}>
+                                  {p.dismissals || (p.catches || 0) + (p.stumpings || 0)}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </View>
+                  </ScrollView>
+
+                  {/* Reusable Bootstrap Pagination Component for Performance Lists */}
+                  {perfTab === 'ratings' && (
+                    <BootstrapPagination
+                      currentPage={safeRatingsPage}
+                      totalPages={totalRatingsPages}
+                      onPageChange={(p) => setPerfRatingsPage(p)}
+                      totalItems={fullRatingsList.length}
+                      pageSize={PERF_PER_PAGE}
+                      itemLabel="players"
+                    />
+                  )}
+                  {perfTab === 'batting' && (
+                    <BootstrapPagination
+                      currentPage={safeBattingPage}
+                      totalPages={totalBattingPages}
+                      onPageChange={(p) => setPerfBattingPage(p)}
+                      totalItems={fullBattingList.length}
+                      pageSize={PERF_PER_PAGE}
+                      itemLabel="batters"
+                    />
+                  )}
+                  {perfTab === 'bowling' && (
+                    <BootstrapPagination
+                      currentPage={safeBowlingPage}
+                      totalPages={totalBowlingPages}
+                      onPageChange={(p) => setPerfBowlingPage(p)}
+                      totalItems={fullBowlingList.length}
+                      pageSize={PERF_PER_PAGE}
+                      itemLabel="bowlers"
+                    />
+                  )}
+                  {perfTab === 'fielding' && (
+                    <BootstrapPagination
+                      currentPage={safeFieldingPage}
+                      totalPages={totalFieldingPages}
+                      onPageChange={(p) => setPerfFieldingPage(p)}
+                      totalItems={fullFieldingList.length}
+                      pageSize={PERF_PER_PAGE}
+                      itemLabel="fielders"
+                    />
+                  )}
+                </View>
+              );
+            })()}
           </View>
         </View>
 
-        {/* ─── 8. DISTRICT TALENT & SQUAD ROSTER ─────────────────────────── */}
+        {/* ─── 8. DISTRICT SPECIAL MATCH RECORDS & MILESTONES ───────────── */}
         <View
+          nativeID="cfvd-section-players"
+          {...({ id: 'cfvd-section-players' } as any)}
           style={styles.section}
           onLayout={e => {
             const layout = e.nativeEvent.layout;
             setSectionPositions(prev => ({ ...prev, players: layout.y }));
           }}
         >
-          <View style={styles.container}>
+          <View style={[styles.container, containerResponsiveStyle]}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionTagBadge}>
-                <Text style={styles.sectionTagBadgeText}>👥 DISTRICT TALENT & SQUAD ROSTER</Text>
+                <Ionicons name="trophy-outline" size={15} color="#0e184e" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTagBadgeText}>OFFICIAL DISTRICT SPECIAL MATCH RECORDS</Text>
               </View>
-              <Text style={styles.sectionTitle}>Official District Players Directory & Profiles</Text>
+              <Text style={[styles.sectionTitle, isSmallMobile && { fontSize: 20 }]}>District Match Record Breakers & Milestone Performers</Text>
               <Text style={styles.sectionSubtitle}>
-                Verified district cricketers across Senior Men, Women's Championship, U-23/U-25 Colts, and Premier League clubs
+                Elite match performances: Centuries (100s), Half-Centuries (50s), and Best Bowling Spells across Virudhunagar District League
               </Text>
             </View>
 
             {/* Search Bar */}
             <View style={styles.playerSearchBar}>
-              <Text style={{ fontSize: 16 }}>🔍</Text>
+              <Ionicons name="search" size={16} color="#64748b" style={{ marginRight: 6 }} />
               <TextInput
                 style={styles.playerSearchInput}
-                placeholder="Search player by name, role (Batter, Bowler), team, or taluk..."
+                placeholder="Search milestone player by name, record (100, 50, 5W), team, or taluk..."
                 placeholderTextColor="#62799c"
                 value={playerSearchQuery}
-                onChangeText={setPlayerSearchQuery}
+                onChangeText={(t) => {
+                  setPlayerSearchQuery(t);
+                  setMilestonePage(1);
+                }}
               />
               {playerSearchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setPlayerSearchQuery('')}>
-                  <Text style={{ color: '#fff', fontSize: 18, paddingHorizontal: 6 }}>✕</Text>
+                <TouchableOpacity onPress={() => {
+                  setPlayerSearchQuery('');
+                  setMilestonePage(1);
+                }}>
+                  <Ionicons name="close-circle" size={18} color="#94a3b8" style={{ paddingHorizontal: 4 }} />
                 </TouchableOpacity>
               )}
             </View>
@@ -1825,18 +2559,27 @@ export default function HomeScreen() {
             {/* Category Filter Pills */}
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.subTabsScroll}>
               {[
-                { id: 'all', label: `⭐ All Players (${allDisplayPlayers.length})` },
-                { id: 'batter', label: '🏏 Batters' },
-                { id: 'bowler', label: '🎯 Bowlers' },
-                { id: 'allrounder', label: '⚡ All-Rounders' },
-                { id: 'wicketkeeper', label: '🧤 Wicketkeepers' },
-                { id: 'womens', label: "♀️ Women's Senior & U-23" }
+                { id: 'all', label: `All Records (${filteredPlayers.length})`, icon: 'trophy-outline', iconColor: '#b45309' },
+                { id: 'century', label: 'Centuries (100+)', icon: 'ribbon-outline', iconColor: '#b45309' },
+                { id: 'fifty', label: 'Half-Centuries (50+)', icon: 'medal-outline', iconColor: '#c2410c' },
+                { id: 'bowler', label: 'Bowling Hauls (3W+ / 5W)', icon: 'disc-outline', iconColor: '#7e22ce' },
+                { id: 'womens', label: "Women's Milestones", icon: 'female-outline', iconColor: '#db2777' }
               ].map(f => (
                 <TouchableOpacity
                   key={f.id}
                   style={[styles.playerPillBtn, playerFilter === f.id && styles.playerPillBtnActive]}
-                  onPress={() => setPlayerFilter(f.id)}
+                  onPress={() => {
+                    setPlayerFilter(f.id);
+                    setMilestonePage(1);
+                  }}
+                  activeOpacity={0.8}
                 >
+                  <Ionicons
+                    name={f.icon as any}
+                    size={13}
+                    color={playerFilter === f.id ? '#ffffff' : f.iconColor}
+                    style={{ marginRight: 6 }}
+                  />
                   <Text style={[styles.playerPillBtnText, playerFilter === f.id && styles.playerPillBtnTextActive]}>
                     {f.label}
                   </Text>
@@ -1844,99 +2587,196 @@ export default function HomeScreen() {
               ))}
             </ScrollView>
 
-            {/* Players Grid */}
-            <View style={styles.grid2Col}>
-              {filteredPlayers.map(p => (
-                <View key={p.id} style={styles.playerCard}>
-                  <View style={styles.playerCardHeader}>
-                    <LinearGradient colors={p.avatarColor || ['#1e3a8a', '#3b82f6']} style={styles.playerAvatar}>
-                      <Text style={styles.playerAvatarText}>
-                        {p.name
-                          .split(' ')
-                          .map((w: string) => w[0])
-                          .join('')
-                          .slice(0, 2)}
-                      </Text>
-                    </LinearGradient>
-                    <View style={{ flex: 1, marginLeft: 12 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        <Text style={styles.playerIdTag}>{p.id}</Text>
-                        <Text style={styles.playerVerifiedTag}>✓ Verified</Text>
-                      </View>
-                      <Text style={styles.playerName}>{p.name}</Text>
-                      <Text style={styles.playerCategoryBadge}>{p.categoryLabel}</Text>
-                    </View>
+            {/* Empty State */}
+            {filteredPlayers.length === 0 && (
+              <View style={{ padding: 24, alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 12, borderWidth: 1, borderColor: '#fde68a', marginVertical: 14 }}>
+                <Ionicons name="ribbon-outline" size={32} color="#94a3b8" style={{ marginBottom: 8 }} />
+                <Text style={{ color: '#0f172a', fontWeight: '800', fontSize: 16 }}>No Special Milestone Records Found</Text>
+                <Text style={{ color: '#64748b', fontSize: 13, textAlign: 'center', marginTop: 4, maxWidth: 500 }}>
+                  Only verified 50s (Half-Centuries), 100s (Centuries), and 3W+ Bowling Hauls scored in official matches are recorded in this hall of fame.
+                </Text>
+              </View>
+            )}
+
+            {/* Players Grid with Reusable Pagination (8 records per page) */}
+            {filteredPlayers.length > 0 && (() => {
+              const totalMilestonePages = Math.ceil(filteredPlayers.length / MILESTONE_PER_PAGE) || 1;
+              const safeMilestonePage = Math.min(milestonePage, totalMilestonePages);
+              const paginatedMilestones = filteredPlayers.slice(
+                (safeMilestonePage - 1) * MILESTONE_PER_PAGE,
+                safeMilestonePage * MILESTONE_PER_PAGE
+              );
+
+              return (
+                <View>
+                  <View style={[styles.grid2Col, isMobile && { flexDirection: 'column' }]}>
+                    {paginatedMilestones.map(p => {
+                      const isCentury = p.milestoneType === 'century' || (p.stats?.hundreds && p.stats.hundreds > 0) || parseInt(p.stats?.hs || '0', 10) >= 100;
+                      const isFifty = !isCentury && (p.milestoneType === 'fifty' || (p.stats?.fifties && p.stats.fifties > 0) || parseInt(p.stats?.hs || '0', 10) >= 50);
+                      const isBowlingHaul = !isCentury && !isFifty;
+
+                      const themeColor = isCentury ? '#b45309' : (isFifty ? '#c2410c' : (isBowlingHaul ? '#7e22ce' : '#0e184e'));
+                      const badgeBg = isCentury ? '#fef3c7' : (isFifty ? '#ffedd5' : (isBowlingHaul ? '#f3e8ff' : '#f1f5f9'));
+                      const badgeBorder = isCentury ? '#fde68a' : (isFifty ? '#fed7aa' : (isBowlingHaul ? '#e9d5ff' : '#cbd5e1'));
+
+                      const defaultLabel = isCentury ? '100 in a Match (Century)' : (isFifty ? '50 in a Match (Half-Century)' : ((p.stats?.wkts >= 5 || (p.stats?.best && p.stats.best.startsWith('5/'))) ? '5-Wicket Match Haul' : '3+ Wickets in Match'));
+                      const rawLabel = p.milestoneBadge || defaultLabel;
+                      const badgeLabel = rawLabel.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim() || defaultLabel;
+
+                      // Extract score, balls/overs, and sub-metric cleanly
+                      let mainStat = p.milestoneScore || '';
+                      let ballsOrOvers = p.milestoneBalls || '';
+                      let subMetric = p.milestoneSubText || '';
+
+                      if (!mainStat) {
+                        if (isCentury || isFifty) {
+                          const hsRaw = String(p.stats?.hs || (p.matchPerformance ? p.matchPerformance.split(' ')[0] : (isCentury ? '100' : '50')));
+                          mainStat = hsRaw.includes('*') ? hsRaw : `${hsRaw}*`;
+                          const bMatch = p.matchPerformance?.match(/\((\d+b)\)/);
+                          ballsOrOvers = bMatch ? bMatch[1] : (isCentury ? '72b' : '42b');
+                          subMetric = isCentury ? '12x4, 5x6' : `SR: ${p.stats?.sr || '142.5'}`;
+                        } else {
+                          mainStat = p.stats?.best || (p.matchPerformance ? p.matchPerformance.split(' ')[0] : `${p.stats?.wkts || 5}/18`);
+                          ballsOrOvers = '4.0 ov';
+                          subMetric = `Econ: ${p.stats?.econ || '4.50'}`;
+                        }
+                      }
+
+                      return (
+                        <TouchableOpacity
+                          key={p.id}
+                          activeOpacity={0.88}
+                          onPress={() => setSelectedPlayerModal(p)}
+                          style={[
+                            styles.specialRecordCard,
+                            isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' },
+                            isSmallMobile && { padding: 12 },
+                            { borderTopColor: themeColor }
+                          ]}
+                        >
+                          {/* Top Milestone Banner */}
+                          <View style={[styles.recordBadgeRow, { backgroundColor: badgeBg, borderColor: badgeBorder }]}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 6 }}>
+                              <Ionicons
+                                name={isCentury ? "ribbon-outline" : (isFifty ? "medal-outline" : "disc-outline")}
+                                size={14}
+                                color={themeColor}
+                                style={{ marginRight: 6 }}
+                              />
+                              <Text style={[styles.recordBadgeLabel, { color: themeColor }]} numberOfLines={1}>
+                                {badgeLabel}
+                              </Text>
+                            </View>
+                            <View style={styles.recordOfficialBadge}>
+                              <Ionicons name="checkmark-circle" size={11} color="#15803d" style={{ marginRight: 3 }} />
+                              <Text style={styles.recordOfficialCheck}>Record</Text>
+                            </View>
+                          </View>
+
+                          {/* Player Profile Row */}
+                          <View style={styles.recordProfileRow}>
+                            {resolveImageUrl(p.photo || p.image || p.image_path) ? (
+                              <Image
+                                source={{ uri: resolveImageUrl(p.photo || p.image || p.image_path)! }}
+                                style={[styles.recordAvatar, { resizeMode: 'cover', overflow: 'hidden' }]}
+                              />
+                            ) : (
+                              <LinearGradient
+                                colors={isCentury ? ['#b45309', '#d97706'] : (isFifty ? ['#c2410c', '#ea580c'] : ['#581c87', '#7e22ce'])}
+                                style={styles.recordAvatar}
+                              >
+                                <Text style={styles.recordAvatarText}>
+                                  {p.name
+                                    .split(' ')
+                                    .filter(Boolean)
+                                    .map((w: string) => w[0])
+                                    .join('')
+                                    .slice(0, 2)}
+                                </Text>
+                              </LinearGradient>
+                            )}
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                              <Text style={styles.recordPlayerName} numberOfLines={1}>{p.name}</Text>
+                              <Text style={styles.recordTeamText} numberOfLines={1}>
+                                {p.team} • <Text style={{ color: '#64748b' }}>{p.taluk}</Text>
+                              </Text>
+                              <View style={styles.recordRoleBadgePill}>
+                                <Text style={styles.recordRoleBadgeText}>
+                                  {p.roleLabel || p.playingRole || 'Player'}
+                                </Text>
+                              </View>
+                            </View>
+                          </View>
+
+                          {/* Milestone Performance Highlight Box */}
+                          <View style={[styles.recordPerfBox, { borderLeftColor: themeColor }]}>
+                            <View style={styles.recordPerfMainRow}>
+                              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+                                <Text style={[styles.recordPerfScore, { color: themeColor }]}>{mainStat}</Text>
+                                {ballsOrOvers ? (
+                                  <Text style={styles.recordPerfBalls}> ({ballsOrOvers})</Text>
+                                ) : null}
+                              </View>
+                              {subMetric ? (
+                                <View style={[styles.recordSubMetricPill, { backgroundColor: badgeBg }]}>
+                                  <Text style={[styles.recordSubMetricText, { color: themeColor }]}>{subMetric}</Text>
+                                </View>
+                              ) : null}
+                            </View>
+                            <View style={styles.recordMatchVsRow}>
+                              <Ionicons name="location-outline" size={12} color="#64748b" style={{ marginRight: 4 }} />
+                              <Text style={styles.recordMatchVs} numberOfLines={1}>
+                                {p.matchVs ? p.matchVs.replace(/^vs\s*/i, 'vs ') : `${p.team} • Virudhunagar League`}
+                              </Text>
+                            </View>
+                          </View>
+
+                          {/* Clean Action Footer */}
+                          <View style={styles.recordCardFooter}>
+                            <Text style={styles.recordCardFooterText}>Match Details & Scorecard</Text>
+                            <Ionicons name="arrow-forward-circle" size={16} color={themeColor} />
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
 
-                  <View style={styles.playerCardMeta}>
-                    <Text style={styles.playerMetaText}>
-                      <Text style={{ fontWeight: '700' }}>Team: </Text>
-                      {p.team}
-                    </Text>
-                    <Text style={styles.playerMetaText}>
-                      <Text style={{ fontWeight: '700' }}>Taluk: </Text>
-                      {p.taluk} District Center
-                    </Text>
-                    <Text style={styles.playerMetaText}>
-                      <Text style={{ fontWeight: '700' }}>Role: </Text>
-                      {p.roleLabel}
-                    </Text>
-                  </View>
-
-                  {/* Player Stats Snippet */}
-                  <View style={styles.playerStatsSnippet}>
-                    <View style={styles.pssCol}>
-                      <Text style={styles.pssVal}>{p.stats.mat}</Text>
-                      <Text style={styles.pssLabel}>Matches</Text>
-                    </View>
-                    <View style={styles.pssCol}>
-                      <Text style={styles.pssVal}>{p.stats.runs}</Text>
-                      <Text style={styles.pssLabel}>Runs</Text>
-                    </View>
-                    <View style={styles.pssCol}>
-                      <Text style={styles.pssVal}>{p.stats.wkts}</Text>
-                      <Text style={styles.pssLabel}>Wickets</Text>
-                    </View>
-                    <View style={styles.pssCol}>
-                      <Text style={styles.pssVal}>{p.stats.avg}</Text>
-                      <Text style={styles.pssLabel}>Avg</Text>
-                    </View>
-                  </View>
-
-                  <Text style={styles.playerBioSnippet} numberOfLines={2}>
-                    {p.bio}
-                  </Text>
-
-                  <TouchableOpacity
-                    style={styles.btnOutlineGoldSm}
-                    onPress={() => setSelectedPlayerModal(p)}
-                  >
-                    <Text style={styles.btnOutlineGoldSmText}>👁️ View Career Profile & Stats</Text>
-                  </TouchableOpacity>
+                  {/* Reusable Bootstrap Pagination Component */}
+                  <BootstrapPagination
+                    currentPage={safeMilestonePage}
+                    totalPages={totalMilestonePages}
+                    onPageChange={(p) => setMilestonePage(p)}
+                    totalItems={filteredPlayers.length}
+                    pageSize={MILESTONE_PER_PAGE}
+                    itemLabel="records"
+                  />
                 </View>
-              ))}
-            </View>
+              );
+            })()}
           </View>
         </View>
 
         {/* ─── 9. ABOUT CFVD HERITAGE ────────────────────────────────────── */}
         <View
+          nativeID="cfvd-section-about"
+          {...({ id: 'cfvd-section-about' } as any)}
           style={styles.section}
           onLayout={e => {
             const layout = e.nativeEvent.layout;
             setSectionPositions(prev => ({ ...prev, about: layout.y }));
           }}
         >
-          <View style={styles.container}>
+          <View style={[styles.container, containerResponsiveStyle]}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionTagBadge}>
-                <Text style={styles.sectionTagBadgeText}>🏛️ GOVERNING CRICKET BODY</Text>
+                <Ionicons name="business-outline" size={15} color="#0e184e" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTagBadgeText}>GOVERNING CRICKET BODY</Text>
               </View>
-              <Text style={styles.sectionTitle}>The Heritage of Cricket in Virudhunagar</Text>
+              <Text style={[styles.sectionTitle, isSmallMobile && { fontSize: 20 }]}>The Heritage of Cricket in Virudhunagar</Text>
             </View>
 
-            <View style={styles.aboutGrid}>
-              <View style={styles.aboutTextCol}>
+            <View style={[styles.aboutGrid, isMobile && { flexDirection: 'column' }]}>
+              <View style={[styles.aboutTextCol, isMobile && { width: '100%', minWidth: '100%' }]}>
                 <Text style={styles.aboutLead}>
                   The <Text style={{ color: '#b45309', fontWeight: '800' }}>Cricket Federation of Virudhunagar District (CFVD)</Text> is
                   the official recognized governing body for the sport of cricket within Virudhunagar revenue district.
@@ -1949,7 +2789,7 @@ export default function HomeScreen() {
 
                 <View style={styles.valuesList}>
                   <View style={styles.valueItem}>
-                    <Text style={{ fontSize: 18, color: '#b45309', fontWeight: '900' }}>✓</Text>
+                    <Ionicons name="checkmark-circle" size={18} color="#b45309" />
                     <View style={{ flex: 1, marginLeft: 10 }}>
                       <Text style={styles.valueTitle}>Fair Play & Ethics</Text>
                       <Text style={styles.valueDesc}>
@@ -1958,7 +2798,7 @@ export default function HomeScreen() {
                     </View>
                   </View>
                   <View style={styles.valueItem}>
-                    <Text style={{ fontSize: 18, color: '#b45309', fontWeight: '900' }}>✓</Text>
+                    <Ionicons name="checkmark-circle" size={18} color="#b45309" />
                     <View style={{ flex: 1, marginLeft: 10 }}>
                       <Text style={styles.valueTitle}>Grassroots & Collegiate Scouting</Text>
                       <Text style={styles.valueDesc}>
@@ -1967,7 +2807,7 @@ export default function HomeScreen() {
                     </View>
                   </View>
                   <View style={styles.valueItem}>
-                    <Text style={{ fontSize: 18, color: '#b45309', fontWeight: '900' }}>✓</Text>
+                    <Ionicons name="checkmark-circle" size={18} color="#b45309" />
                     <View style={{ flex: 1, marginLeft: 10 }}>
                       <Text style={styles.valueTitle}>First-Class Standard Pitches</Text>
                       <Text style={styles.valueDesc}>
@@ -1979,12 +2819,13 @@ export default function HomeScreen() {
               </View>
 
               {/* Crest Card */}
-              <View style={styles.aboutCrestCard}>
+              <View style={[styles.aboutCrestCard, isMobile && { width: '100%', minWidth: '100%' }]}>
                 <Image source={IMG_LOGO} style={styles.aboutCrestImg} resizeMode="contain" />
                 <Text style={styles.aboutCrestTitle}>CRICKET FEDERATION OF VIRUDHUNAGAR DISTRICT</Text>
                 <Text style={styles.aboutCrestMotto}>"Enjoy the game and chase your dreams"</Text>
                 <View style={styles.aboutCrestBadge}>
-                  <Text style={styles.aboutCrestBadgeText}>★ Recognized District Cricket Governing Body</Text>
+                  <Ionicons name="shield-checkmark" size={13} color="#b45309" style={{ marginRight: 4 }} />
+                  <Text style={styles.aboutCrestBadgeText}>Recognized District Cricket Governing Body</Text>
                 </View>
               </View>
             </View>
@@ -1992,6 +2833,7 @@ export default function HomeScreen() {
 
           </View>
         </View>
+
 
         {/* ─── 10. DISTRICT GROUNDS & FACILITIES ──────────────────────────── */}
         <View
@@ -2001,26 +2843,32 @@ export default function HomeScreen() {
             setSectionPositions(prev => ({ ...prev, grounds: layout.y }));
           }}
         >
-          <View style={styles.container}>
+          <View style={[styles.container, containerResponsiveStyle]}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionTagBadge}>
                 <Text style={styles.sectionTagBadgeText}>🏟️ PLAYING VENUES</Text>
               </View>
-              <Text style={styles.sectionTitle}>District Cricket Facilities & Grounds</Text>
+              <Text style={[styles.sectionTitle, isSmallMobile && { fontSize: 20 }]}>District Cricket Facilities & Grounds</Text>
               <Text style={styles.sectionSubtitle}>
                 First-class tournament grade turf wickets, indoor practice nets, and floodlit grounds adhering to professional match standards
               </Text>
             </View>
 
-            <View style={styles.grid3Col}>
-              <View style={styles.groundCard}>
+            <View style={[styles.grid3Col, isMobile && { flexDirection: 'column' }]}>
+              <View style={[styles.groundCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }]}>
                 <Image source={IMG_STADIUM} style={styles.groundImg} resizeMode="cover" />
                 <View style={styles.groundBadge}>
                   <Text style={styles.groundBadgeText}>Headquarters</Text>
                 </View>
                 <View style={styles.groundInfo}>
                   <Text style={styles.groundTitle}>District Sports Complex Stadium</Text>
-                  <Text style={styles.groundLoc}>📍 Collectorate Road, Virudhunagar</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => handleOpenGoogleMaps('', 'District Sports Complex Stadium, Collectorate Road, Virudhunagar')}
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                  >
+                    <Text style={[styles.groundLoc, { color: '#0284c7', textDecorationLine: 'underline' }]}>📍 Collectorate Road, Virudhunagar ↗</Text>
+                  </TouchableOpacity>
                   <Text style={styles.groundDesc}>
                     Featuring 3 professional tournament-grade red-soil turf wickets, modern dressing rooms, electronic scoreboard, and 4 turf practice nets.
                   </Text>
@@ -2033,14 +2881,20 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              <View style={styles.groundCard}>
+              <View style={[styles.groundCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }]}>
                 <Image source={IMG_BATSMAN} style={styles.groundImg} resizeMode="cover" />
                 <View style={styles.groundBadge}>
                   <Text style={styles.groundBadgeText}>Match Venue</Text>
                 </View>
                 <View style={styles.groundInfo}>
                   <Text style={styles.groundTitle}>Sivakasi Turf Cricket Ground</Text>
-                  <Text style={styles.groundLoc}>📍 PSR College Sports Enclave, Sivakasi</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => handleOpenGoogleMaps('', 'Sivakasi Turf Cricket Ground, PSR College Sports Enclave, Sivakasi')}
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                  >
+                    <Text style={[styles.groundLoc, { color: '#0284c7', textDecorationLine: 'underline' }]}>📍 PSR College Sports Enclave, Sivakasi ↗</Text>
+                  </TouchableOpacity>
                   <Text style={styles.groundDesc}>
                     Host to District First Division and Premier Invitational Qualifiers with natural green outfield and fast-paced pitch.
                   </Text>
@@ -2052,14 +2906,20 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              <View style={styles.groundCard}>
+              <View style={[styles.groundCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }]}>
                 <Image source={IMG_CHAMPIONS} style={styles.groundImg} resizeMode="cover" />
                 <View style={styles.groundBadge}>
                   <Text style={styles.groundBadgeText}>Academy Centre</Text>
                 </View>
                 <View style={styles.groundInfo}>
                   <Text style={styles.groundTitle}>Rajapalayam Cricket Academy Ground</Text>
-                  <Text style={styles.groundLoc}>📍 PACM Campus, Rajapalayam</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => handleOpenGoogleMaps('', 'Rajapalayam Cricket Academy Ground, PACM Campus, Rajapalayam')}
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                  >
+                    <Text style={[styles.groundLoc, { color: '#0284c7', textDecorationLine: 'underline' }]}>📍 PACM Campus, Rajapalayam ↗</Text>
+                  </TouchableOpacity>
                   <Text style={styles.groundDesc}>
                     Center for the district high-performance coaching camp and junior age-group tournaments.
                   </Text>
@@ -2076,7 +2936,7 @@ export default function HomeScreen() {
 
         {/* ─── 11. DISTRICT CRICKET ACADEMY ──────────────────────────────── */}
         <View style={styles.section}>
-          <View style={styles.container}>
+          <View style={[styles.container, containerResponsiveStyle]}>
             <LinearGradient colors={['#fffdf5', '#fef3c7']} style={styles.academyBanner}>
               <Text style={styles.badgeGoldText}>CFVD HIGH PERFORMANCE</Text>
               <Text style={styles.academyTitle}>Virudhunagar District Cricket Academy</Text>
@@ -2086,21 +2946,21 @@ export default function HomeScreen() {
               </Text>
               <View style={styles.academyFeaturesGrid}>
                 <View style={styles.afItem}>
-                  <Text style={{ fontSize: 24, marginRight: 10 }}>🎯</Text>
+                  <Ionicons name="disc-outline" size={24} color="#0e184e" style={{ marginRight: 10 }} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.afTitle}>Certified Professional Coaches</Text>
                     <Text style={styles.afDesc}>Personalized batting & bowling biomechanics</Text>
                   </View>
                 </View>
                 <View style={styles.afItem}>
-                  <Text style={{ fontSize: 24, marginRight: 10 }}>📹</Text>
+                  <Ionicons name="videocam-outline" size={24} color="#0e184e" style={{ marginRight: 10 }} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.afTitle}>High-Speed Video Analysis</Text>
                     <Text style={styles.afDesc}>Real-time technical corrections and tactical coaching</Text>
                   </View>
                 </View>
                 <View style={styles.afItem}>
-                  <Text style={{ fontSize: 24, marginRight: 10 }}>🏋️</Text>
+                  <Ionicons name="barbell-outline" size={24} color="#0e184e" style={{ marginRight: 10 }} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.afTitle}>Fitness & Physiotherapy</Text>
                     <Text style={styles.afDesc}>Yo-Yo test benchmarks and injury rehabilitation</Text>
@@ -2111,18 +2971,143 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ─── 12. MEDIA & PRESS NOTICES ─────────────────────────────────── */}
-        <View style={styles.section}>
-          <View style={styles.container}>
+        {/* ─── 10. DISTRICT GROUNDS & FACILITIES ──────────────────────────── */}
+        <View
+          nativeID="cfvd-section-grounds"
+          {...({ id: 'cfvd-section-grounds' } as any)}
+          style={styles.section}
+          onLayout={e => {
+            const layout = e.nativeEvent.layout;
+            setSectionPositions(prev => ({ ...prev, grounds: layout.y }));
+          }}
+        >
+          <View style={[styles.container, containerResponsiveStyle]}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionTagBadge}>
-                <Text style={styles.sectionTagBadgeText}>📰 MEDIA & NOTICES</Text>
+                <MaterialCommunityIcons name="stadium-variant" size={15} color="#0e184e" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTagBadgeText}>PLAYING VENUES</Text>
               </View>
-              <Text style={styles.sectionTitle}>Federation Press Releases & Circulars</Text>
+              <Text style={[styles.sectionTitle, isSmallMobile && { fontSize: 20 }]}>District Cricket Facilities & Grounds</Text>
+              <Text style={styles.sectionSubtitle}>
+                First-class tournament grade turf wickets, indoor practice nets, and floodlit grounds adhering to professional match standards
+              </Text>
             </View>
 
-            <View style={styles.grid3Col}>
-              <View style={styles.newsCard}>
+            <View style={[styles.grid3Col, isMobile && { flexDirection: 'column' }]}>
+              <View style={[styles.groundCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }]}>
+                <Image source={IMG_STADIUM} style={styles.groundImg} resizeMode="cover" />
+                <View style={styles.groundBadge}>
+                  <Text style={styles.groundBadgeText}>Headquarters</Text>
+                </View>
+                <View style={styles.groundInfo}>
+                  <Text style={styles.groundTitle}>District Sports Complex Stadium</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="location-outline" size={13} color="#475569" style={{ marginRight: 4 }} />
+                    <Text style={styles.groundLoc}>Collectorate Road, Virudhunagar</Text>
+                  </View>
+                  <Text style={styles.groundDesc}>
+                    Featuring 3 professional tournament-grade red-soil turf wickets, modern dressing rooms, electronic scoreboard, and 4 turf practice nets.
+                  </Text>
+                  <View style={styles.groundFacilitiesRow}>
+                    <Text style={styles.facilityPill}>Turf Pitch</Text>
+                    <Text style={styles.facilityPill}>Floodlights</Text>
+                    <Text style={styles.facilityPill}>Pavilion</Text>
+                    <Text style={styles.facilityPill}>5,000 Seating</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={[styles.groundCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }]}>
+                <Image source={IMG_BATSMAN} style={styles.groundImg} resizeMode="cover" />
+                <View style={styles.groundBadge}>
+                  <Text style={styles.groundBadgeText}>Match Venue</Text>
+                </View>
+                <View style={styles.groundInfo}>
+                  <Text style={styles.groundTitle}>Sivakasi Turf Cricket Ground</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="location-outline" size={13} color="#475569" style={{ marginRight: 4 }} />
+                    <Text style={styles.groundLoc}>PSR College Sports Enclave, Sivakasi</Text>
+                  </View>
+                  <Text style={styles.groundDesc}>
+                    Host to District First Division and Premier Invitational Qualifiers with natural green outfield and fast-paced pitch.
+                  </Text>
+                  <View style={styles.groundFacilitiesRow}>
+                    <Text style={styles.facilityPill}>Dual Turf Wickets</Text>
+                    <Text style={styles.facilityPill}>Practice Nets</Text>
+                    <Text style={styles.facilityPill}>Press Box</Text>
+                  </View>
+                </View>
+              </View>
+
+              <View style={[styles.groundCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }]}>
+                <Image source={IMG_CHAMPIONS} style={styles.groundImg} resizeMode="cover" />
+                <View style={styles.groundBadge}>
+                  <Text style={styles.groundBadgeText}>Academy Centre</Text>
+                </View>
+                <View style={styles.groundInfo}>
+                  <Text style={styles.groundTitle}>Rajapalayam Cricket Academy Ground</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="location-outline" size={13} color="#475569" style={{ marginRight: 4 }} />
+                    <Text style={styles.groundLoc}>PACM Campus, Rajapalayam</Text>
+                  </View>
+                  <Text style={styles.groundDesc}>
+                    Center for the district high-performance coaching camp and junior age-group tournaments.
+                  </Text>
+                  <View style={styles.groundFacilitiesRow}>
+                    <Text style={styles.facilityPill}>Indoor AstroTurf</Text>
+                    <Text style={styles.facilityPill}>Video Analysis</Text>
+                    <Text style={styles.facilityPill}>Gym & Physio</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </View>
+        </View>
+
+        {/* ─── 12. MEDIA & PRESS NOTICES (TNCA STYLE SUB-NAV) ─────────── */}
+        {/* <View
+          nativeID="cfvd-section-news"
+          {...({ id: 'cfvd-section-news' } as any)}
+          style={styles.section}
+        >
+          <View style={[styles.container, containerResponsiveStyle]}>
+            {/* TNCA Sub-Nav Bar: [ News ] [ Photos ] ──────── See More > 
+            <View style={styles.tncaMediaSubNavRow}>
+              <View style={styles.tncaMediaPillGroup}>
+                <TouchableOpacity style={[styles.tncaPillYellowActive, { flexDirection: 'row', alignItems: 'center' }]} activeOpacity={0.85}>
+                  <Ionicons name="newspaper-outline" size={13} color="#0e184e" style={{ marginRight: 5 }} />
+                  <Text style={styles.tncaPillYellowText}>News</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.tncaPillWhiteInactive, { flexDirection: 'row', alignItems: 'center' }]}
+                  onPress={() => alert('Official CFVD Tournament Photo Gallery available in the portal.')}
+                  activeOpacity={0.8}
+                >
+                  <Ionicons name="camera-outline" size={13} color="#64748b" style={{ marginRight: 5 }} />
+                  <Text style={styles.tncaPillWhiteText}>Photos</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={styles.tncaSeeMoreLink}
+                onPress={() => alert('Browsing all official circulars, media releases and news bulletins.')}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.tncaSeeMoreText}>See More ›</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.tncaMediaGoldDivider} />
+
+            <View style={[styles.sectionHead, { marginTop: 16 }]}>
+              <View style={styles.sectionTagBadge}>
+                <Ionicons name="newspaper-outline" size={15} color="#0e184e" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTagBadgeText}>MEDIA & NOTICES</Text>
+              </View>
+              <Text style={[styles.sectionTitle, isSmallMobile && { fontSize: 20 }]}>Federation Press Releases & Circulars</Text>
+            </View>
+
+            <View style={[styles.grid3Col, isMobile && { flexDirection: 'column' }]}>
+              <View style={[styles.newsCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }]}>
                 <Image source={IMG_BATSMAN} style={styles.newsImg} resizeMode="cover" />
                 <View style={styles.newsBody}>
                   <Text style={styles.newsDate}>Oct 05, 2026</Text>
@@ -2147,7 +3132,7 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              <View style={styles.newsCard}>
+              <View style={[styles.newsCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }]}>
                 <Image source={IMG_CHAMPIONS} style={styles.newsImg} resizeMode="cover" />
                 <View style={styles.newsBody}>
                   <Text style={styles.newsDate}>Sep 24, 2026</Text>
@@ -2172,7 +3157,7 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              <View style={styles.newsCard}>
+              <View style={[styles.newsCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }]}>
                 <Image source={IMG_STADIUM} style={styles.newsImg} resizeMode="cover" />
                 <View style={styles.newsBody}>
                   <Text style={styles.newsDate}>Sep 18, 2026</Text>
@@ -2198,16 +3183,17 @@ export default function HomeScreen() {
               </View>
             </View>
           </View>
-        </View>
+        </View> */}
 
         {/* ─── 13. VISUAL ARCHIVES GALLERY ───────────────────────────────── */}
-        <View style={styles.section}>
-          <View style={styles.container}>
+        {/* <View style={styles.section}>
+          <View style={[styles.container, containerResponsiveStyle]}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionTagBadge}>
-                <Text style={styles.sectionTagBadgeText}>📸 VISUAL ARCHIVES</Text>
+                <Ionicons name="images-outline" size={15} color="#0e184e" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTagBadgeText}>VISUAL ARCHIVES</Text>
               </View>
-              <Text style={styles.sectionTitle}>Official Match Day Moments</Text>
+              <Text style={[styles.sectionTitle, isSmallMobile && { fontSize: 20 }]}>Official Match Day Moments</Text>
             </View>
 
             <View style={styles.grid3Col}>
@@ -2216,8 +3202,9 @@ export default function HomeScreen() {
                 onPress={() => setLightboxImage({ uri: IMG_STADIUM, caption: 'District Sports Complex Floodlit Final' })}
               >
                 <Image source={IMG_STADIUM} style={styles.galleryImg} resizeMode="cover" />
-                <View style={styles.galleryOverlay}>
-                  <Text style={styles.galleryOverlayText}>🔍 Stadium Final</Text>
+                <View style={[styles.galleryOverlay, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <Ionicons name="search" size={13} color="#ffffff" style={{ marginRight: 4 }} />
+                  <Text style={styles.galleryOverlayText}>Stadium Final</Text>
                 </View>
               </TouchableOpacity>
 
@@ -2226,8 +3213,9 @@ export default function HomeScreen() {
                 onPress={() => setLightboxImage({ uri: IMG_BATSMAN, caption: 'First Division League Cover Drive' })}
               >
                 <Image source={IMG_BATSMAN} style={styles.galleryImg} resizeMode="cover" />
-                <View style={styles.galleryOverlay}>
-                  <Text style={styles.galleryOverlayText}>🔍 Classic Cover Drive</Text>
+                <View style={[styles.galleryOverlay, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <Ionicons name="search" size={13} color="#ffffff" style={{ marginRight: 4 }} />
+                  <Text style={styles.galleryOverlayText}>Classic Cover Drive</Text>
                 </View>
               </TouchableOpacity>
 
@@ -2236,35 +3224,47 @@ export default function HomeScreen() {
                 onPress={() => setLightboxImage({ uri: IMG_CHAMPIONS, caption: 'Championship Trophy Celebration' })}
               >
                 <Image source={IMG_CHAMPIONS} style={styles.galleryImg} resizeMode="cover" />
-                <View style={styles.galleryOverlay}>
-                  <Text style={styles.galleryOverlayText}>🔍 Trophy Presentation</Text>
+                <View style={[styles.galleryOverlay, { flexDirection: 'row', alignItems: 'center' }]}>
+                  <Ionicons name="search" size={13} color="#ffffff" style={{ marginRight: 4 }} />
+                  <Text style={styles.galleryOverlayText}>Trophy Presentation</Text>
                 </View>
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </View> */}
 
         {/* ─── 14. CONTACT SECRETARIAT ───────────────────────────────────── */}
         <View style={styles.section}>
-          <View style={styles.container}>
+          <View style={[styles.container, containerResponsiveStyle]}>
             <View style={styles.sectionHead}>
               <View style={styles.sectionTagBadge}>
-                <Text style={styles.sectionTagBadgeText}>📮 SECRETARIAT</Text>
+                <Ionicons name="mail-outline" size={15} color="#0e184e" style={{ marginRight: 6 }} />
+                <Text style={styles.sectionTagBadgeText}>SECRETARIAT</Text>
               </View>
-              <Text style={styles.sectionTitle}>Get in Touch with CFVD</Text>
+              <Text style={[styles.sectionTitle, isSmallMobile && { fontSize: 20 }]}>Get in Touch with CFVD</Text>
             </View>
 
-            <View style={styles.grid2Col}>
-              <View style={styles.contactInfoCard}>
+            <View style={[styles.grid2Col, isMobile && { flexDirection: 'column' }]}>
+              <View style={[styles.contactInfoCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }, isSmallMobile && { padding: 12 }]}>
                 <Text style={styles.contactCardTitle}>Administrative Office</Text>
-                <Text style={styles.contactLine}>
-                  📍 District Sports Complex Stadium, Collectorate Road, Virudhunagar – 626002, Tamil Nadu
-                </Text>
-                <Text style={styles.contactLine}>📞 +91 94430 12345 / 04562 245678</Text>
-                <Text style={styles.contactLine}>✉️ info@cfvd-cricket.org / secretary@cfvd-cricket.org</Text>
+
+                <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 }}>
+                  <Ionicons name="location-outline" size={14} color="#64748b" style={{ marginRight: 6, marginTop: 2 }} />
+                  <Text style={[styles.contactLine, { flex: 1, marginBottom: 0 }]}>
+                    District Sports Complex Stadium, Collectorate Road, Virudhunagar – 626002, Tamil Nadu
+                  </Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                  <Ionicons name="call-outline" size={14} color="#64748b" style={{ marginRight: 6 }} />
+                  <Text style={[styles.contactLine, { marginBottom: 0 }]}>+91 94430 12345 / 04562 245678</Text>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Ionicons name="mail-outline" size={14} color="#64748b" style={{ marginRight: 6 }} />
+                  <Text style={[styles.contactLine, { marginBottom: 0 }]}>info@cfvd-cricket.org / secretary@cfvd-cricket.org</Text>
+                </View>
               </View>
 
-              <View style={styles.contactFormCard}>
+              <View style={[styles.contactFormCard, isMobile && { width: '100%', minWidth: '100%', maxWidth: '100%' }, isSmallMobile && { padding: 12 }]}>
                 <Text style={styles.contactCardTitle}>Send Communication</Text>
                 <View style={styles.formField}>
                   <Text style={styles.formLabel}>Full Name *</Text>
@@ -2300,9 +3300,9 @@ export default function HomeScreen() {
 
         {/* ─── 15. MAIN FOOTER ───────────────────────────────────────────── */}
         <View style={styles.footer}>
-          <View style={styles.container}>
-            <View style={styles.footerGrid}>
-              <View style={styles.footerColBrand}>
+          <View style={[styles.container, containerResponsiveStyle]}>
+            <View style={[styles.footerGrid, isMobile && { flexDirection: 'column', gap: 18 }]}>
+              <View style={[styles.footerColBrand, isMobile && { width: '100%', minWidth: '100%' }]}>
                 <View style={styles.footerBrandRow}>
                   <Image source={IMG_LOGO} style={styles.footerLogo} resizeMode="contain" />
                   <View style={{ flex: 1, marginLeft: 10 }}>
@@ -2315,7 +3315,8 @@ export default function HomeScreen() {
                   the spirit of cricket, promoting collegiate competitions, and nurturing state and national champions.
                 </Text>
                 <View style={styles.footerAffilBadge}>
-                  <Text style={styles.footerAffilText}>★ Recognized District Cricket Governing Body</Text>
+                  <Ionicons name="shield-checkmark" size={14} color="#b45309" style={{ marginRight: 5 }} />
+                  <Text style={styles.footerAffilText}>Recognized District Cricket Governing Body</Text>
                 </View>
               </View>
 
@@ -2422,17 +3423,17 @@ export default function HomeScreen() {
         animationType="fade"
         onRequestClose={() => setScorecardModalVisible(false)}
       >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.scorecardModalBox}>
+        <View style={[styles.modalBackdrop, isSmallMobile && { padding: 8 }]}>
+          <View style={[styles.scorecardModalBox, isMobile && { width: '98%', maxWidth: '100%', padding: isSmallMobile ? 12 : 16, maxHeight: '95%' }]}>
             <View style={styles.modalHeaderRow}>
               <View style={{ flex: 1, marginRight: 10 }}>
                 <Text style={styles.badgeGoldText}>OFFICIAL MATCH SCORECARD</Text>
-                <Text style={styles.modalTitle}>
+                <Text style={[styles.modalTitle, isSmallMobile && { fontSize: 16 }]} numberOfLines={2}>
                   {activeScorecardMatchData
                     ? `${activeScorecardMatchData.teamA} vs ${activeScorecardMatchData.teamB}`
                     : 'Virudhunagar Strikers vs Sivakasi Super Kings'}
                 </Text>
-                <Text style={styles.modalSub}>
+                <Text style={[styles.modalSub, isSmallMobile && { fontSize: 11 }]}>
                   {activeScorecardMatchData
                     ? `${activeScorecardMatchData.tournament || 'CFVD'} • ${activeScorecardMatchData.venue}`
                     : 'Virudhunagar Premier League Final • DSC Ground'}
@@ -2442,21 +3443,40 @@ export default function HomeScreen() {
                 style={styles.modalCloseCircleBtn}
                 onPress={() => setScorecardModalVisible(false)}
               >
-                <Text style={styles.modalCloseBtn}>✕</Text>
+                <Ionicons name="close" size={20} color="#0f172a" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ maxHeight: 500 }} showsVerticalScrollIndicator={false}>
+            <ScrollView style={{ maxHeight: isSmallMobile ? 420 : 520 }} showsVerticalScrollIndicator={false}>
+              {/* Full Interactive Scorecard & Wagon Wheel CTA */}
+              <TouchableOpacity
+                style={styles.openFullScorecardCta}
+                onPress={() => {
+                  setScorecardModalVisible(false);
+                  const targetMatch = realScorecardData?.match || activeScorecardMatchData || publicMatches[0] || { id: 'M001' };
+                  handleOpenScorecard(targetMatch);
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                  <Ionicons name="bar-chart-outline" size={15} color="#ffffff" style={{ marginRight: 6 }} />
+                  <Text style={styles.openFullScorecardCtaText}>
+                    View Full Interactive Wagon Wheel & Pro Scorecard
+                  </Text>
+                  <Ionicons name="arrow-forward" size={13} color="#ffffff" style={{ marginLeft: 6 }} />
+                </View>
+              </TouchableOpacity>
+
               {/* Toss & Match Summary Banner */}
               <View style={styles.scorecardTossBanner}>
                 <Text style={styles.scorecardTossText}>
                   {realScorecardData?.match?.result || activeScorecardMatchData?.result
-                    ? `🏆 Result: ${realScorecardData?.match?.result || activeScorecardMatchData?.result}`
+                    ? `Result: ${realScorecardData?.match?.result || activeScorecardMatchData?.result}`
                     : realScorecardData?.match?.toss_winner_name
-                      ? `🪙 Toss: ${realScorecardData.match.toss_winner_name} won the toss and elected to ${realScorecardData.match.toss_decision || 'bat'}`
+                      ? `Toss: ${realScorecardData.match.toss_winner_name} won the toss and elected to ${realScorecardData.match.toss_decision || 'bat'}`
                       : activeScorecardMatchData
-                        ? `🪙 Scheduled Match: ${activeScorecardMatchData.teamA} vs ${activeScorecardMatchData.teamB} (${activeScorecardMatchData.format || 'T20'})`
-                        : '🪙 Toss: Sivakasi Super Kings won the toss and elected to bat first (20.0 Overs).'}
+                        ? `Scheduled Match: ${activeScorecardMatchData.teamA} vs ${activeScorecardMatchData.teamB} (${activeScorecardMatchData.format || 'T20'})`
+                        : 'Toss: Sivakasi Super Kings won the toss and elected to bat first (20.0 Overs).'}
                 </Text>
               </View>
 
@@ -2467,52 +3487,274 @@ export default function HomeScreen() {
                 </View>
               )}
 
-              {/* Real Inning 1 if available in MongoDB */}
-              {realScorecardData?.innings && realScorecardData.innings.length > 0 ? (
-                realScorecardData.innings.map((inn: any, idx: number) => (
-                  <View key={inn.id || idx} style={{ marginBottom: 16 }}>
-                    <View style={styles.inningsHeaderRow}>
-                      <Text style={[styles.inningsTitle, idx > 0 && { marginTop: 14 }]}>
-                        {inn.inningsNumber}st Innings: {inn.battingTeam}
-                      </Text>
-                      <Text style={styles.inningsScoreBadge}>
-                        {inn.score || `${inn.totalRuns || 0}/${inn.wickets || 0} (${inn.overs || 0} Ov)`}
-                      </Text>
-                    </View>
-                    {inn.batters && inn.batters.length > 0 ? (
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableScrollWrapper}>
-                        <View style={styles.scoreTable}>
-                          <View style={styles.scoreTableHeader}>
-                            <Text style={[styles.scoreTh, { width: 140 }]}>Batter</Text>
-                            <Text style={[styles.scoreTh, { width: 130 }]}>Dismissal</Text>
-                            <Text style={[styles.scoreTh, { width: 40, textAlign: 'center' }]}>R</Text>
-                            <Text style={[styles.scoreTh, { width: 40, textAlign: 'center' }]}>B</Text>
-                            <Text style={[styles.scoreTh, { width: 35, textAlign: 'center' }]}>4s</Text>
-                            <Text style={[styles.scoreTh, { width: 35, textAlign: 'center' }]}>6s</Text>
-                            <Text style={[styles.scoreTh, { width: 55, textAlign: 'right' }]}>SR</Text>
-                          </View>
-                          {inn.batters.map((b: any, bIdx: number) => (
-                            <View key={b.id || bIdx} style={[styles.scoreTableRow, bIdx % 2 === 1 && styles.scoreTableRowAlt]}>
-                              <Text style={[styles.scoreTd, { width: 140, fontWeight: '700', color: '#0f172a' }]}>{b.name}</Text>
-                              <Text style={[styles.scoreTd, { width: 130, color: '#64748b' }]}>{b.dismissalText || (b.isOut ? 'out' : 'not out')}</Text>
-                              <Text style={[styles.scoreTd, { width: 40, textAlign: 'center', fontWeight: '800', color: '#b45309' }]}>
-                                {b.runs}
-                              </Text>
-                              <Text style={[styles.scoreTd, { width: 40, textAlign: 'center', color: '#334155' }]}>{b.balls}</Text>
-                              <Text style={[styles.scoreTd, { width: 35, textAlign: 'center', color: '#334155' }]}>{b.fours || 0}</Text>
-                              <Text style={[styles.scoreTd, { width: 35, textAlign: 'center', color: '#334155' }]}>{b.sixes || 0}</Text>
-                              <Text style={[styles.scoreTd, { width: 55, textAlign: 'right', fontWeight: '600', color: '#0f172a' }]}>{b.strikeRate || '0.0'}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      </ScrollView>
+              {/* Active Break Banner in Scorecard */}
+              {activeScorecardMatchData?.currentBreak && (
+                <View style={[
+                  styles.cardBreakBanner,
+                  activeScorecardMatchData.currentBreak.type?.toLowerCase().includes('rain') && styles.cardRainBanner,
+                  { marginBottom: 14, flexDirection: 'row', alignItems: 'center' }
+                ]}>
+                  <View style={{ marginRight: 8 }}>
+                    {activeScorecardMatchData.currentBreak.type?.toLowerCase().includes('rain') ? (
+                      <Ionicons name="rainy-outline" size={18} color="#0284c7" />
                     ) : (
-                      <View style={{ padding: 12, backgroundColor: '#f8fafc', borderRadius: 6 }}>
-                        <Text style={{ color: '#475569', fontSize: 12 }}>Score: {inn.score || 'Innings in preparation'}</Text>
-                      </View>
+                      <Ionicons name="cafe-outline" size={18} color="#d97706" />
                     )}
                   </View>
-                ))
+                  <View style={{ flex: 1 }}>
+                    <Text style={[
+                      styles.cardBreakText,
+                      activeScorecardMatchData.currentBreak.type?.toLowerCase().includes('rain') && styles.cardRainText
+                    ]}>
+                      {activeScorecardMatchData.currentBreak.type?.toLowerCase().includes('rain')
+                        ? 'MATCH DELAYED DUE TO RAIN'
+                        : `${activeScorecardMatchData.currentBreak.type?.toUpperCase()} IN PROGRESS`}
+                      {activeScorecardMatchData.currentBreak.duration ? ` (${activeScorecardMatchData.currentBreak.duration} MINS)` : ''}
+                    </Text>
+                    <Text style={styles.cardBreakSubText}>
+                      {activeScorecardMatchData.currentBreak.startTime && activeScorecardMatchData.currentBreak.endTime
+                        ? `${activeScorecardMatchData.currentBreak.startTime} - ${activeScorecardMatchData.currentBreak.endTime}`
+                        : ''}
+                      {activeScorecardMatchData.currentBreak.comments ? ` • ${activeScorecardMatchData.currentBreak.comments}` : ''}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              {/* Real Inning if available in MongoDB */}
+              {realScorecardData?.innings && realScorecardData.innings.length > 0 ? (
+                realScorecardData.innings.map((inn: any, idx: number) => {
+                  const runsVal = inn.totalRuns ?? inn.runs ?? 0;
+                  const oversParts = (inn.overs || '0').toString().split('.');
+                  const ovNum = parseInt(oversParts[0], 10) || 0;
+                  const bNum = parseInt(oversParts[1], 10) || 0;
+                  const oversFloat = ovNum + (bNum / 6);
+                  const crrVal = oversFloat > 0 ? (runsVal / oversFloat).toFixed(2) : '0.00';
+
+                  return (
+                    <View key={inn.id || idx} style={{ marginBottom: 20 }}>
+                      <View style={styles.inningsHeaderRow}>
+                        <Text style={[styles.inningsTitle, idx > 0 && { marginTop: 14 }]}>
+                          {inn.inningsNumber === 1 ? '1st Innings' : '2nd Innings'}: {inn.battingTeam}
+                        </Text>
+                        <Text style={styles.inningsScoreBadge}>
+                          {inn.score || `${inn.totalRuns || 0}/${inn.wickets || 0} (${inn.overs || '0.0'} Ov)`}
+                        </Text>
+                      </View>
+
+                      {/* Batters Table */}
+                      {inn.batters && inn.batters.length > 0 ? (
+                        <View>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableScrollWrapper}>
+                            <View style={styles.scoreTable}>
+                              <View style={styles.scoreTableHeader}>
+                                <Text style={[styles.scoreTh, { width: 140 }]}>Batter</Text>
+                                <Text style={[styles.scoreTh, { width: 130 }]}>Dismissal</Text>
+                                <Text style={[styles.scoreTh, { width: 40, textAlign: 'center' }]}>R</Text>
+                                <Text style={[styles.scoreTh, { width: 40, textAlign: 'center' }]}>B</Text>
+                                <Text style={[styles.scoreTh, { width: 35, textAlign: 'center' }]}>4s</Text>
+                                <Text style={[styles.scoreTh, { width: 35, textAlign: 'center' }]}>6s</Text>
+                                <Text style={[styles.scoreTh, { width: 55, textAlign: 'right' }]}>SR</Text>
+                              </View>
+                              {inn.batters.map((b: any, bIdx: number) => (
+                                <View key={b.id || bIdx} style={[styles.scoreTableRow, bIdx % 2 === 1 && styles.scoreTableRowAlt]}>
+                                  <Text style={[styles.scoreTd, { width: 140, fontWeight: '700', color: '#0f172a' }]}>{b.name}</Text>
+                                  <Text style={[styles.scoreTd, { width: 130, color: '#64748b' }]}>{b.dismissalText || (b.isOut ? 'out' : 'not out')}</Text>
+                                  <Text style={[styles.scoreTd, { width: 40, textAlign: 'center', fontWeight: '800', color: '#b45309' }]}>
+                                    {b.runs}
+                                  </Text>
+                                  <Text style={[styles.scoreTd, { width: 40, textAlign: 'center', color: '#334155' }]}>{b.balls}</Text>
+                                  <Text style={[styles.scoreTd, { width: 35, textAlign: 'center', color: '#334155' }]}>{b.fours || 0}</Text>
+                                  <Text style={[styles.scoreTd, { width: 35, textAlign: 'center', color: '#334155' }]}>{b.sixes || 0}</Text>
+                                  <Text style={[styles.scoreTd, { width: 55, textAlign: 'right', fontWeight: '600', color: '#0f172a' }]}>{b.strikeRate || '0.0'}</Text>
+                                </View>
+                              ))}
+                            </View>
+                          </ScrollView>
+
+                          {/* Extras & Total Summary Bar */}
+                          <View style={styles.scorecardSummaryBox}>
+                            <View style={styles.scorecardSummaryRow}>
+                              <Text style={styles.scorecardSummaryLabel}>Extras</Text>
+                              <Text style={styles.scorecardSummaryVal}>
+                                {inn.extras?.total || 0} ({inn.extras?.breakdown || 'wd 0, nb 0, b 0, lb 0'})
+                              </Text>
+                            </View>
+                            <View style={[styles.scorecardSummaryRow, { borderTopWidth: 1, borderTopColor: '#e2e8f0', paddingTop: 6, marginTop: 4 }]}>
+                              <Text style={[styles.scorecardSummaryLabel, { fontWeight: '900', color: '#0f172a' }]}>TOTAL</Text>
+                              <Text style={[styles.scorecardSummaryVal, { fontWeight: '900', color: '#b45309', fontSize: 13 }]}>
+                                {inn.totalRuns || inn.score}/{inn.wickets || 0} ({inn.overs || '0.0'} Ov, CRR: {crrVal})
+                              </Text>
+                            </View>
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={{ padding: 12, backgroundColor: '#f8fafc', borderRadius: 6 }}>
+                          <Text style={{ color: '#475569', fontSize: 12 }}>Score: {inn.score || 'Innings in preparation'}</Text>
+                        </View>
+                      )}
+
+                      {/* Overs Status & Active Bowler Banner in Home Scorecard */}
+                      <View style={styles.homeOversBar}>
+                        <View style={{ flex: 1, minWidth: 110 }}>
+                          <Text style={styles.homeOversLabel}>CURRENT OVER</Text>
+                          <Text style={styles.homeOversValue}>
+                            Over {inn.currentOverNumber || (Math.floor(parseFloat(inn.overs || '0')) + 1)} ({inn.overs || '0.0'} / {inn.totalOvers || 20} Ov)
+                          </Text>
+                        </View>
+                        <View style={{ flex: 1, minWidth: 110 }}>
+                          <Text style={styles.homeOversLabel}>OVERS REMAINING</Text>
+                          <Text style={[styles.homeOversValue, { color: '#b45309' }]}>
+                            {inn.oversRemaining ? `${inn.oversRemaining} Ov Left` : '0.0 Ov'}
+                            {inn.ballsRemaining !== undefined ? ` (${inn.ballsRemaining} balls)` : ''}
+                          </Text>
+                        </View>
+                        {inn.currentBowler && (
+                          <View style={{ flex: 1, minWidth: 110 }}>
+                            <Text style={styles.homeOversLabel}>CURRENT BOWLER</Text>
+                            <Text style={[styles.homeOversValue, { color: '#005960' }]}>
+                              {inn.currentBowler.name} (Active)
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+
+                      {/* Suspended Bowlers Warning */}
+                      {Array.isArray(inn.suspendedBowlers) && inn.suspendedBowlers.length > 0 && (
+                        <View style={[styles.homeSuspendedBanner, { flexDirection: 'row', alignItems: 'center' }]}>
+                          <Ionicons name="hand-left-outline" size={14} color="#dc2626" style={{ marginRight: 6 }} />
+                          <Text style={[styles.homeSuspendedText, { flex: 1 }]}>
+                            Umpire Suspension (2 No-Balls): {inn.suspendedBowlers.map((b: any) => b.name).join(', ')} is suspended from bowling
+                          </Text>
+                        </View>
+                      )}
+
+                      {/* Bowling Figures Table */}
+                      {inn.bowlers && inn.bowlers.length > 0 && (
+                        <View style={{ marginTop: 14 }}>
+                          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <Ionicons name="disc-outline" size={14} color="#0e184e" style={{ marginRight: 5 }} />
+                              <Text style={styles.scorecardTableSubtitle}>BOWLING FIGURES</Text>
+                            </View>
+                            {inn.currentBowler && (
+                              <View style={styles.homeActiveBowlerPill}>
+                                <Text style={styles.homeActiveBowlerPillText}>Active: {inn.currentBowler.name}</Text>
+                              </View>
+                            )}
+                          </View>
+                          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tableScrollWrapper}>
+                            <View style={styles.scoreTable}>
+                              <View style={styles.scoreTableHeader}>
+                                <Text style={[styles.scoreTh, { width: 170 }]}>Bowler</Text>
+                                <Text style={[styles.scoreTh, { width: 45, textAlign: 'center' }]}>O</Text>
+                                <Text style={[styles.scoreTh, { width: 40, textAlign: 'center' }]}>M</Text>
+                                <Text style={[styles.scoreTh, { width: 45, textAlign: 'center' }]}>R</Text>
+                                <Text style={[styles.scoreTh, { width: 45, textAlign: 'center' }]}>W</Text>
+                                <Text style={[styles.scoreTh, { width: 60, textAlign: 'right' }]}>ECON</Text>
+                              </View>
+                              {inn.bowlers.map((bw: any, bwIdx: number) => {
+                                const isCurrent = !!(
+                                  bw.isCurrentBowler ||
+                                  (inn.currentBowler && (bw.playerId === inn.currentBowler.id || bw.name === inn.currentBowler.name))
+                                );
+                                const isSuspended = !!(
+                                  bw.isSuspended ||
+                                  (inn.suspendedBowlers || []).some((s: any) => s.id === bw.playerId || s.name === bw.name)
+                                );
+
+                                const subRecord = (inn.substitutions || []).find((s: any) =>
+                                  s.oldBowlerId === bw.playerId || s.oldBowlerName === bw.name ||
+                                  s.newBowlerId === bw.playerId || s.newBowlerName === bw.name
+                                );
+
+                                let badgeText = bw.subNote || '';
+                                if (!badgeText) {
+                                  if (isSuspended) {
+                                    badgeText = 'Suspended (2 No-Balls)';
+                                  } else if (subRecord) {
+                                    if (subRecord.oldBowlerName === bw.name || subRecord.oldBowlerId === bw.playerId) {
+                                      badgeText = subRecord.situation ? `Sub: ${subRecord.situation}` : 'Mid-Over Substituted';
+                                    } else if (subRecord.isMidOver) {
+                                      badgeText = 'Shared Over (Sub In)';
+                                    }
+                                  } else if (bw.overs && !bw.overs.endsWith('.0') && !isCurrent) {
+                                    badgeText = `Mid-Over Sub (${bw.overs} ov)`;
+                                  }
+                                }
+
+                                return (
+                                  <View
+                                    key={bw.id || bwIdx}
+                                    style={[
+                                      styles.scoreTableRow,
+                                      bwIdx % 2 === 1 && styles.scoreTableRowAlt,
+                                      isCurrent && { backgroundColor: '#f0fdfa' },
+                                      isSuspended && { backgroundColor: '#fff1f2' }
+                                    ]}
+                                  >
+                                    <View style={{ width: 170, paddingRight: 6 }}>
+                                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                                        <Text style={[styles.scoreTd, { fontWeight: '700', color: isCurrent ? '#005960' : '#0f172a' }]}>
+                                          {bw.name}
+                                        </Text>
+                                        {isCurrent && (
+                                          <View style={styles.homeBowlingBadge}>
+                                            <Text style={styles.homeBowlingBadgeText}>Bowling</Text>
+                                          </View>
+                                        )}
+                                      </View>
+                                      {isSuspended ? (
+                                        <View style={styles.homeSuspendedPill}>
+                                          <Text style={styles.homeSuspendedPillText}>Suspended (2 No-Balls)</Text>
+                                        </View>
+                                      ) : (bw.isQuotaFull || parseFloat(bw.overs || '0') >= (bw.maxQuota || 4.0)) ? (
+                                        <View style={styles.homeQuotaPill}>
+                                          <Text style={styles.homeQuotaPillText}>Quota Full ({bw.overs}/{bw.maxQuota || 4}.0 Ov)</Text>
+                                        </View>
+                                      ) : badgeText ? (
+                                        <View style={styles.homeSubPill}>
+                                          <Text style={styles.homeSubPillText}>{badgeText}</Text>
+                                        </View>
+                                      ) : null}
+                                    </View>
+                                    <Text style={[styles.scoreTd, { width: 45, textAlign: 'center', color: isCurrent ? '#005960' : '#334155', fontWeight: isCurrent ? '800' : 'normal' }]}>
+                                      {bw.overs}
+                                    </Text>
+                                    <Text style={[styles.scoreTd, { width: 40, textAlign: 'center', color: '#334155' }]}>{bw.maidens || 0}</Text>
+                                    <Text style={[styles.scoreTd, { width: 45, textAlign: 'center', color: '#334155' }]}>{bw.runs}</Text>
+                                    <Text style={[styles.scoreTd, { width: 45, textAlign: 'center', fontWeight: '800', color: '#dc2626' }]}>{bw.wickets}</Text>
+                                    <Text style={[styles.scoreTd, { width: 60, textAlign: 'right', fontWeight: '600', color: '#0f172a' }]}>
+                                      {typeof bw.economy === 'number' ? bw.economy.toFixed(2) : bw.economy}
+                                    </Text>
+                                  </View>
+                                );
+                              })}
+                            </View>
+                          </ScrollView>
+                        </View>
+                      )}
+
+                      {/* Fall of Wickets */}
+                      {Array.isArray(inn.fallOfWickets) && inn.fallOfWickets.length > 0 && (
+                        <View style={{ marginTop: 14 }}>
+                          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                            <Ionicons name="flash-outline" size={14} color="#0e184e" style={{ marginRight: 5 }} />
+                            <Text style={styles.scorecardTableSubtitle}>FALL OF WICKETS</Text>
+                          </View>
+                          <View style={styles.scorecardFowWrapper}>
+                            {inn.fallOfWickets.map((f: any, fIdx: number) => (
+                              <View key={fIdx} style={styles.scorecardFowChip}>
+                                <Text style={styles.scorecardFowScore}>{f.score || '0'}/{f.wicket || (fIdx + 1)}</Text>
+                                <Text style={styles.scorecardFowBatter}>({f.batter || 'Batter'}, {f.over || '0.0'} ov)</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })
               ) : (
                 <>
                   {/* Innings 1: SSK */}
@@ -2622,87 +3864,210 @@ export default function HomeScreen() {
         onRequestClose={() => setSelectedPlayerModal(null)}
       >
         <View style={styles.modalBackdrop}>
-          <View style={styles.playerModalBox}>
+          <View style={[styles.playerModalBox, isMobile && { width: '96%', maxHeight: '92%', padding: 16 }]}>
             {selectedPlayerModal && (
-              <View>
+              <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 16 }}>
+                {/* Header with Avatar & Close Button */}
                 <View style={styles.modalHeaderRow}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <LinearGradient colors={selectedPlayerModal.avatarColor} style={styles.playerAvatar}>
-                      <Text style={styles.playerAvatarText}>
-                        {selectedPlayerModal.name
-                          .split(' ')
-                          .map(w => w[0])
-                          .join('')
-                          .slice(0, 2)}
-                      </Text>
-                    </LinearGradient>
-                    <View style={{ marginLeft: 12 }}>
-                      <Text style={styles.modalTitle}>{selectedPlayerModal.name}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 10 }}>
+                    {resolveImageUrl(selectedPlayerModal.photo || (selectedPlayerModal as any).image || (selectedPlayerModal as any).image_path) ? (
+                      <Image
+                        source={{ uri: resolveImageUrl(selectedPlayerModal.photo || (selectedPlayerModal as any).image || (selectedPlayerModal as any).image_path)! }}
+                        style={[styles.playerAvatar, { width: 50, height: 50, borderRadius: 25, resizeMode: 'cover', overflow: 'hidden' }]}
+                      />
+                    ) : (
+                      <LinearGradient
+                        colors={selectedPlayerModal.avatarColor || ['#1e3a8a', '#3b82f6']}
+                        style={[styles.playerAvatar, { width: 50, height: 50, borderRadius: 25 }]}
+                      >
+                        <Text style={[styles.playerAvatarText, { fontSize: 18 }]}>
+                          {selectedPlayerModal.name
+                            .split(' ')
+                            .map((w: string) => w[0])
+                            .join('')
+                            .slice(0, 2)}
+                        </Text>
+                      </LinearGradient>
+                    )}
+                    <View style={{ marginLeft: 12, flex: 1 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <Text style={styles.playerIdTag}>{selectedPlayerModal.id}</Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Ionicons name="checkmark-circle" size={11} color="#059669" style={{ marginRight: 3 }} />
+                          <Text style={styles.playerVerifiedTag}>Official Record</Text>
+                        </View>
+                      </View>
+                      <Text style={[styles.modalTitle, { fontSize: 17 }]}>{selectedPlayerModal.name}</Text>
                       <Text style={styles.modalSub}>
-                        {selectedPlayerModal.id} • {selectedPlayerModal.categoryLabel}
+                        {selectedPlayerModal.categoryLabel || "Senior Men's Division"}
                       </Text>
                     </View>
                   </View>
-                  <TouchableOpacity onPress={() => setSelectedPlayerModal(null)}>
-                    <Text style={styles.modalCloseBtn}>✕</Text>
+                  <TouchableOpacity
+                    style={styles.modalCloseCircleBtn}
+                    onPress={() => setSelectedPlayerModal(null)}
+                  >
+                    <Ionicons name="close" size={20} color="#0f172a" />
                   </TouchableOpacity>
                 </View>
 
-                <View style={styles.playerModalBioBox}>
-                  <Text style={styles.playerModalBio}>{selectedPlayerModal.bio}</Text>
+                {/* Featured Milestone Highlight Card in Modal */}
+                <View style={{
+                  backgroundColor: '#fffdf5',
+                  borderColor: '#fde68a',
+                  borderWidth: 1.5,
+                  borderRadius: 12,
+                  padding: 14,
+                  marginBottom: 14,
+                  marginTop: 4
+                }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Ionicons name="trophy" size={13} color="#b45309" style={{ marginRight: 5 }} />
+                      <Text style={{ color: '#b45309', fontWeight: '900', fontSize: 12.5, letterSpacing: 0.5 }}>
+                        {(selectedPlayerModal.milestoneBadge || '').replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').trim() || 'OFFICIAL DISTRICT MATCH RECORD'}
+                      </Text>
+                    </View>
+                    <View style={{ backgroundColor: '#fef3c7', borderColor: '#fde68a', borderWidth: 1, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 }}>
+                      <Text style={{ color: '#92400e', fontSize: 10.5, fontWeight: '800' }}>
+                        MILESTONE
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                    <Ionicons name="flash" size={18} color="#b45309" style={{ marginRight: 6 }} />
+                    <Text style={{ color: '#0f172a', fontWeight: '900', fontSize: 18 }}>
+                      {selectedPlayerModal.matchPerformance || `${selectedPlayerModal.stats?.hs || '0'} Runs Milestone`}
+                    </Text>
+                  </View>
+
+                  {selectedPlayerModal.matchVs && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                      <Ionicons name="location-outline" size={13} color="#64748b" style={{ marginRight: 4 }} />
+                      <Text style={{ color: '#334155', fontSize: 13, fontWeight: '600' }}>
+                        {selectedPlayerModal.matchVs}
+                      </Text>
+                    </View>
+                  )}
+
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginTop: 4, paddingTop: 8, borderTopColor: '#fef3c7', borderTopWidth: 1 }}>
+                    {selectedPlayerModal.stats?.sr && (
+                      <Text style={{ color: '#475569', fontSize: 12 }}>
+                        <Text style={{ fontWeight: '700', color: '#0f172a' }}>Strike Rate: </Text>
+                        {selectedPlayerModal.stats.sr}
+                      </Text>
+                    )}
+                    {selectedPlayerModal.stats?.econ && (
+                      <Text style={{ color: '#475569', fontSize: 12 }}>
+                        <Text style={{ fontWeight: '700', color: '#0f172a' }}>Economy: </Text>
+                        {selectedPlayerModal.stats.econ}
+                      </Text>
+                    )}
+                    {selectedPlayerModal.stats?.best && (
+                      <Text style={{ color: '#475569', fontSize: 12 }}>
+                        <Text style={{ fontWeight: '700', color: '#0f172a' }}>Best Spell: </Text>
+                        {selectedPlayerModal.stats.best}
+                      </Text>
+                    )}
+                  </View>
                 </View>
 
-                <Text style={styles.inningsTitle}>Career Statistics</Text>
-                <View style={styles.playerModalStatsRow}>
+                {/* Player Affiliation & Profile Logistics */}
+                <Text style={[styles.inningsTitle, { marginBottom: 8, fontSize: 13.5 }]}>Player & Affiliation Details</Text>
+                <View style={[styles.playerModalMetaBox, { marginBottom: 14 }]}>
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                    <View style={{ width: '48%', minWidth: 135 }}>
+                      <Text style={{ fontSize: 10.5, color: '#64748b', fontWeight: '700' }}>TEAM</Text>
+                      <Text style={{ fontSize: 13, color: '#0f172a', fontWeight: '800', marginTop: 1 }}>
+                        {selectedPlayerModal.team}
+                      </Text>
+                    </View>
+                    <View style={{ width: '48%', minWidth: 135 }}>
+                      <Text style={{ fontSize: 10.5, color: '#64748b', fontWeight: '700' }}>TALUK CENTER</Text>
+                      <Text style={{ fontSize: 13, color: '#0f172a', fontWeight: '800', marginTop: 1 }}>
+                        {selectedPlayerModal.taluk} District Center
+                      </Text>
+                    </View>
+                    <View style={{ width: '48%', minWidth: 135, marginTop: 4 }}>
+                      <Text style={{ fontSize: 10.5, color: '#64748b', fontWeight: '700' }}>BATTING STYLE</Text>
+                      <Text style={{ fontSize: 12.5, color: '#334155', fontWeight: '700', marginTop: 1 }}>
+                        {selectedPlayerModal.battingStyle || 'Right Hand Bat'}
+                      </Text>
+                    </View>
+                    <View style={{ width: '48%', minWidth: 135, marginTop: 4 }}>
+                      <Text style={{ fontSize: 10.5, color: '#64748b', fontWeight: '700' }}>BOWLING STYLE</Text>
+                      <Text style={{ fontSize: 12.5, color: '#334155', fontWeight: '700', marginTop: 1 }}>
+                        {selectedPlayerModal.bowlingStyle || 'Right Arm Medium'}
+                      </Text>
+                    </View>
+                    <View style={{ width: '48%', minWidth: 135, marginTop: 4 }}>
+                      <Text style={{ fontSize: 10.5, color: '#64748b', fontWeight: '700' }}>PLAYING ROLE</Text>
+                      <Text style={{ fontSize: 12.5, color: '#334155', fontWeight: '700', marginTop: 1 }}>
+                        {selectedPlayerModal.roleLabel || selectedPlayerModal.playingRole || 'Player'}
+                      </Text>
+                    </View>
+                    <View style={{ width: '48%', minWidth: 135, marginTop: 4 }}>
+                      <Text style={{ fontSize: 10.5, color: '#64748b', fontWeight: '700' }}>REGISTRATION</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 1 }}>
+                        <Ionicons name="checkmark-circle" size={12} color="#15803d" style={{ marginRight: 4 }} />
+                        <Text style={{ fontSize: 12.5, color: '#15803d', fontWeight: '800' }}>
+                          Verified District Panel
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+
+                {/* Season & Career Statistics */}
+                <Text style={[styles.inningsTitle, { marginBottom: 8, fontSize: 13.5 }]}>Career Statistics Overview</Text>
+                <View style={[styles.playerModalStatsRow, { marginBottom: 14 }]}>
                   <View style={styles.pmsItem}>
-                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats.mat}</Text>
+                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats?.mat || 0}</Text>
                     <Text style={styles.pmsLabel}>Matches</Text>
                   </View>
                   <View style={styles.pmsItem}>
-                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats.runs}</Text>
+                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats?.runs || 0}</Text>
                     <Text style={styles.pmsLabel}>Runs</Text>
                   </View>
                   <View style={styles.pmsItem}>
-                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats.hs}</Text>
+                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats?.hs || '-'}</Text>
                     <Text style={styles.pmsLabel}>HS</Text>
                   </View>
                   <View style={styles.pmsItem}>
-                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats.avg}</Text>
+                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats?.avg || '-'}</Text>
                     <Text style={styles.pmsLabel}>Avg</Text>
                   </View>
                   <View style={styles.pmsItem}>
-                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats.wkts}</Text>
+                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats?.wkts || 0}</Text>
                     <Text style={styles.pmsLabel}>Wickets</Text>
                   </View>
                   <View style={styles.pmsItem}>
-                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats.catches}</Text>
+                    <Text style={styles.pmsVal}>{selectedPlayerModal.stats?.catches || 0}</Text>
                     <Text style={styles.pmsLabel}>Catches</Text>
                   </View>
                 </View>
 
-                <View style={styles.playerModalMetaBox}>
-                  <Text style={styles.playerMetaText}>
-                    <Text style={{ fontWeight: '700' }}>Batting Style: </Text>
-                    {selectedPlayerModal.battingStyle}
-                  </Text>
-                  <Text style={styles.playerMetaText}>
-                    <Text style={{ fontWeight: '700' }}>Bowling Style: </Text>
-                    {selectedPlayerModal.bowlingStyle}
-                  </Text>
-                  <Text style={styles.playerMetaText}>
-                    <Text style={{ fontWeight: '700' }}>Taluk: </Text>
-                    {selectedPlayerModal.taluk} District Center
-                  </Text>
-                  <Text style={styles.playerMetaText}>
-                    <Text style={{ fontWeight: '700' }}>Team: </Text>
-                    {selectedPlayerModal.team}
-                  </Text>
-                </View>
+                {/* Player Biography */}
+                {selectedPlayerModal.bio ? (
+                  <View style={{ marginBottom: 16 }}>
+                    <Text style={[styles.inningsTitle, { marginBottom: 6, fontSize: 13.5 }]}>Performance Narrative</Text>
+                    <View style={{ backgroundColor: '#f8fafc', borderColor: '#e2e8f0', borderWidth: 1, borderRadius: 10, padding: 12 }}>
+                      <Text style={{ color: '#475569', fontSize: 12.5, lineHeight: 19 }}>
+                        {selectedPlayerModal.bio}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
 
-                <TouchableOpacity style={styles.btnGoldSm} onPress={() => setSelectedPlayerModal(null)}>
-                  <Text style={styles.btnGoldSmText}>Close Profile</Text>
+                {/* Close Profile Button */}
+                <TouchableOpacity
+                  style={[styles.btnGoldSm, { marginTop: 4, paddingVertical: 12 }]}
+                  onPress={() => setSelectedPlayerModal(null)}
+                >
+                  <Text style={[styles.btnGoldSmText, { fontSize: 14 }]}>Close Record Details</Text>
                 </TouchableOpacity>
-              </View>
+              </ScrollView>
             )}
           </View>
         </View>
@@ -2713,7 +4078,7 @@ export default function HomeScreen() {
         <View style={styles.modalBackdrop}>
           <View style={styles.lightboxBox}>
             <TouchableOpacity style={styles.lightboxCloseBtn} onPress={() => setLightboxImage(null)}>
-              <Text style={{ color: '#fff', fontSize: 20 }}>✕</Text>
+              <Ionicons name="close" size={24} color="#ffffff" />
             </TouchableOpacity>
             {lightboxImage && (
               <View style={{ alignItems: 'center' }}>
@@ -2736,7 +4101,7 @@ export default function HomeScreen() {
                 <Text style={styles.modalSub}>{activeNewsModal?.date}</Text>
               </View>
               <TouchableOpacity onPress={() => setActiveNewsModal(null)}>
-                <Text style={styles.modalCloseBtn}>✕</Text>
+                <Ionicons name="close" size={20} color="#0f172a" />
               </TouchableOpacity>
             </View>
             <Text style={styles.newsModalContent}>{activeNewsModal?.content}</Text>
@@ -2746,6 +4111,29 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Official ICC & TNCA Broadcast Umpire Signal Overlay */}
+      <UmpireSignalOverlay
+        event={activeUmpireSignal}
+        onDismiss={() => setActiveUmpireSignal(null)}
+      />
+
+      {/* Umpire Signals Showcase Gallery Modal */}
+      <UmpireSignalsGalleryModal
+        visible={showUmpireGallery}
+        onClose={() => setShowUmpireGallery(false)}
+        onSelectSignal={(sigType) => {
+          setActiveUmpireSignal({
+            type: sigType,
+            overText: 'CFVD League Live Showcase • Kamarajar Stadium'
+          });
+        }}
+      />
+
+      {/* Full-Screen Video Preloader / Intro Player */}
+      {showIntroVideo && (
+        <VideoPreloader onComplete={() => setShowIntroVideo(false)} />
+      )}
     </View>
   );
 }
@@ -2754,33 +4142,45 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   rootContainer: {
     flex: 1,
-    backgroundColor: '#020612'
+    backgroundColor: '#f6f2e9'
   },
   mainScroll: {
     flex: 1
   },
   mainScrollContent: {
-    paddingBottom: 60
+    paddingBottom: 0 // No extra space below footer
   },
   container: {
     width: '100%',
-    maxWidth: 1540,
+    maxWidth: 1320, // Bootstrap 5 container-xxl max-width
     alignSelf: 'center',
-    paddingHorizontal: Dimensions.get('window').width < 768 ? 16 : (Platform.OS === 'web' ? 32 : 16)
+    paddingHorizontal: 16
   },
 
-  // Atmospheric Background
+  // Atmospheric Background with Deep Soft Blur
   bgStadiumImage: {
-    ...StyleSheet.absoluteFill,
-    opacity: 0.12,
-    transform: [{ scale: 1.05 }]
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    opacity: 0.16,
+    transform: [{ scale: 1.12 }],
+    ...(Platform.OS === 'web'
+      ? ({
+          filter: 'blur(18px)',
+          WebkitFilter: 'blur(18px)',
+        } as any)
+      : {})
   },
   bgTopGlow: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 480
+    height: 380
   },
   bgWatermarkContainer: {
     position: 'absolute',
@@ -3034,7 +4434,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(184, 134, 11, 0.25)',
-    paddingVertical: 6,
+    paddingVertical: 2,
     zIndex: 90
   },
   liveTickerInner: {
@@ -3042,7 +4442,7 @@ const styles = StyleSheet.create({
     maxWidth: 1540,
     alignSelf: 'center',
     paddingHorizontal: Platform.OS === 'web' ? 32 : 16,
-    paddingVertical: 8,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between'
@@ -3100,7 +4500,10 @@ const styles = StyleSheet.create({
     marginLeft: 16
   },
   tickerLinkItem: {
-    paddingVertical: 2
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 2,
+    paddingHorizontal: 4
   },
   tickerLinkText: {
     color: '#334155',
@@ -3108,20 +4511,298 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
 
-  // Hero Section (Luminous Light Gold Atmosphere)
+  // Prestigious Athletic Light Hero Section
+  oasoHeroSection: {
+    position: 'relative',
+    backgroundColor: '#ffffff',
+    overflow: 'hidden',
+    paddingVertical: Platform.OS === 'web' ? 56 : 40,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  heroDecoRing1: {
+    position: 'absolute',
+    top: -120,
+    right: -80,
+    width: 600,
+    height: 600,
+    borderRadius: 300,
+    backgroundColor: 'rgba(217, 119, 6, 0.04)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(217, 119, 6, 0.08)',
+  },
+  heroDecoRing2: {
+    position: 'absolute',
+    bottom: -150,
+    left: -100,
+    width: 500,
+    height: 500,
+    borderRadius: 250,
+    backgroundColor: 'rgba(10, 37, 64, 0.03)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(10, 37, 64, 0.06)',
+  },
+  oasoHeroContainer: {
+    zIndex: 2,
+  },
+  oasoHeroRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  oasoHeroRowMobile: {
+    flexDirection: 'column',
+    alignItems: 'center',
+  },
+  oasoHeroContentCol: {
+    flex: 1.25,
+    maxWidth: Platform.OS === 'web' ? 760 : '100%',
+    paddingRight: Platform.OS === 'web' ? 24 : 0,
+    alignItems: 'flex-start',
+  },
+  oasoHeroContentColMobile: {
+    alignItems: 'center',
+    paddingRight: 0,
+    maxWidth: '100%',
+  },
+  oasoOverlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+    borderWidth: 1.2,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    marginBottom: 16,
+    gap: 6,
+  },
+  oasoPulseGoldDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#d97706',
+  },
+  oasoOverlineText: {
+    color: '#92400e',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+  },
+  oasoAffiliatedBadge: {
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 4,
+  },
+  oasoAffiliatedBadgeText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#b45309',
+    letterSpacing: 0.5,
+  },
+  oasoHeroTitle: {
+    color: '#0a2540',
+    fontSize: Platform.OS === 'web' ? 62 : 38,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    lineHeight: Platform.OS === 'web' ? 66 : 42,
+    textTransform: 'uppercase',
+    marginBottom: 12,
+    textAlign: 'left',
+  },
+  oasoHeroTitleMobile: {
+    fontSize: 32,
+    lineHeight: 36,
+    textAlign: 'center',
+  },
+  oasoHeroTagline: {
+    color: '#b45309',
+    fontSize: Platform.OS === 'web' ? 13.5 : 11,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    marginBottom: 12,
+  },
+  oasoHeroSubtitle: {
+    color: '#475569',
+    fontSize: 14.5,
+    lineHeight: 23,
+    fontWeight: '400',
+    marginBottom: 18,
+    maxWidth: 620,
+    textAlign: 'left',
+  },
+  oasoHeroSubtitleMobile: {
+    textAlign: 'center',
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  oasoHighlightsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 22,
+  },
+  oasoHighlightChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 20,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  oasoHighlightEmoji: {
+    fontSize: 12,
+    marginRight: 6,
+  },
+  oasoHighlightText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1e293b',
+  },
+  oasoBtnPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0a2540',
+    borderColor: '#f59e0b',
+    borderWidth: 1.5,
+    paddingHorizontal: 22,
+    height: 48,
+    borderRadius: 8,
+    shadowColor: '#0a2540',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  oasoBtnPrimaryText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  oasoBtnSecondary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#0a2540',
+    borderWidth: 1.5,
+    paddingHorizontal: 20,
+    height: 48,
+    borderRadius: 8,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  oasoBtnSecondaryText: {
+    color: '#0a2540',
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  oasoBtnTertiary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fffbeb',
+    borderColor: '#fde68a',
+    borderWidth: 1.2,
+    paddingHorizontal: 18,
+    height: 48,
+    borderRadius: 8,
+  },
+  oasoBtnTertiaryText: {
+    color: '#92400e',
+    fontSize: 13.5,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  oasoHeroCrestCol: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+    paddingVertical: 12,
+  },
+  oasoHeroCrestColMobile: {
+    width: '100%',
+    marginTop: 24,
+    paddingVertical: 0,
+  },
+  oasoCrestAuraRing: {
+    position: 'absolute',
+    width: 440,
+    height: 440,
+    borderRadius: 220,
+    backgroundColor: 'rgba(217, 119, 6, 0.05)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(217, 119, 6, 0.15)',
+  },
+  oasoCrestAuraRingInner: {
+    position: 'absolute',
+    width: 340,
+    height: 340,
+    borderRadius: 170,
+    backgroundColor: 'rgba(10, 37, 64, 0.03)',
+    borderWidth: 1,
+    borderColor: 'rgba(10, 37, 64, 0.08)',
+  },
+  oasoCrestImage: {
+    width: '100%',
+    maxWidth: 460,
+    height: 460,
+    maxHeight: 460,
+    ...(Platform.OS === 'web' ? ({ filter: 'drop-shadow(0 14px 28px rgba(10, 37, 64, 0.12))' } as any) : {}),
+  },
+  oasoCrestFloatingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
+    borderWidth: 1,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginTop: -20,
+    shadowColor: '#0f172a',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  oasoCrestFloatingText: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: '#334155',
+  },
+
+  // Hero Section (Prestigious Athletic Federation Atmosphere)
   heroSection: {
     position: 'relative',
-    paddingTop: 42,
-    paddingBottom: 48,
+    paddingTop: Platform.OS === 'web' ? 48 : 36,
+    paddingBottom: Platform.OS === 'web' ? 52 : 44,
+    minHeight: Platform.OS === 'web' ? 540 : undefined,
+    justifyContent: 'center',
     overflow: 'hidden'
   },
   heroWatermarkContainer: {
     position: 'absolute',
-    top: '48%',
-    right: 30,
-    transform: [{ translateY: -270 }],
-    width: 540,
-    height: 540,
+    top: 24,
+    bottom: 24,
+    right: 36,
+    width: 470,
     alignItems: 'center',
     justifyContent: 'center',
     opacity: 0.95
@@ -3164,6 +4845,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start'
   },
   heroBadgeDistrict: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(212, 175, 55, 0.18)',
     borderColor: '#b4820a',
     borderWidth: 1,
@@ -3178,6 +4861,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4
   },
   heroBadgeCouncil: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(15, 23, 42, 0.12)',
     borderColor: 'rgba(15, 23, 42, 0.25)',
     borderWidth: 1,
@@ -3192,6 +4877,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4
   },
   heroBadgeHeritage: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: 'rgba(217, 119, 6, 0.18)',
     borderColor: 'rgba(217, 119, 6, 0.35)',
     borderWidth: 1,
@@ -3227,7 +4914,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 3
   },
 
-  // 3D Folded Golden Motto Ribbon Banner
+  // Motto Badge
   ribbonWrapper: {
     position: 'relative',
     marginTop: 4,
@@ -3237,50 +4924,36 @@ const styles = StyleSheet.create({
   ribbonBody: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 18,
-    paddingVertical: 7,
-    borderRadius: 3,
+    backgroundColor: '#ffffff',
+    borderColor: '#dee2e6',
     borderWidth: 1,
-    borderColor: '#996515',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    elevation: 3
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2
   },
   ribbonTailLeft: {
-    position: 'absolute',
-    bottom: -6,
-    left: 4,
-    width: 0,
-    height: 0,
-    borderTopWidth: 6,
-    borderRightWidth: 8,
-    borderTopColor: '#582404',
-    borderRightColor: 'transparent'
+    display: 'none'
   },
   ribbonTailRight: {
-    position: 'absolute',
-    bottom: -6,
-    right: 4,
-    width: 0,
-    height: 0,
-    borderTopWidth: 6,
-    borderLeftWidth: 8,
-    borderTopColor: '#582404',
-    borderLeftColor: 'transparent'
+    display: 'none'
   },
   ribbonStar: {
-    color: '#634305',
+    color: '#b45309',
     fontSize: 12,
     marginHorizontal: 4
   },
   ribbonText: {
-    color: '#050d22',
-    fontSize: 13.5,
-    fontWeight: '800',
+    color: '#0e184e',
+    fontSize: 13,
+    fontWeight: '700',
     fontStyle: 'italic',
-    letterSpacing: 0.3,
-    marginHorizontal: 8
+    letterSpacing: 0.2,
+    marginHorizontal: 4
   },
 
   heroDescription: {
@@ -3305,13 +4978,14 @@ const styles = StyleSheet.create({
   heroBtnNavy: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f59e0b',
-    borderColor: '#d97706',
-    borderWidth: 1.5,
+    justifyContent: 'center',
+    backgroundColor: '#0e184e', // Deep Navy (TNCA / CFVD official) - NO BLUE!
+    borderColor: '#0e184e',
+    borderWidth: 1,
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    shadowColor: '#d97706',
+    height: 46,
+    borderRadius: 6,
+    shadowColor: '#0e184e',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     elevation: 3
@@ -3320,43 +4994,48 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#ef4444',
+    backgroundColor: '#dc3545', // Danger
     marginRight: 8
   },
   heroBtnNavyText: {
     color: '#ffffff',
     fontSize: 14,
-    fontWeight: '800'
+    fontWeight: '700'
   },
   heroBtnGold: {
-    backgroundColor: 'rgba(212, 175, 55, 0.32)',
-    borderColor: '#b8860b',
-    borderWidth: 1.5,
+    backgroundColor: '#ffc107', // Warning
+    borderColor: '#ffc107',
+    borderWidth: 1,
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8
+    height: 46,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 6
   },
   heroBtnGoldText: {
-    color: '#5c3800',
+    color: '#212529',
     fontSize: 14,
-    fontWeight: '800'
+    fontWeight: '700'
   },
   heroBtnWhite: {
     backgroundColor: '#ffffff',
-    borderColor: 'rgba(184, 134, 11, 0.35)',
-    borderWidth: 1,
+    borderColor: '#0e184e', // Deep Navy border - NO BLUE!
+    borderWidth: 1.5,
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-    shadowColor: 'rgba(0, 0, 0, 0.1)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    elevation: 2
+    height: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    elevation: 1
   },
   heroBtnWhiteText: {
-    color: '#07132c',
+    color: '#0e184e', // Deep Navy text - NO BLUE!
     fontSize: 14,
-    fontWeight: '800'
+    fontWeight: '700'
   },
 
   // Legacy Hero Fallbacks
@@ -3597,31 +5276,34 @@ const styles = StyleSheet.create({
 
   // Section Generic
   section: {
-    paddingVertical: 36
+    paddingVertical: 36,
+    ...(Platform.OS === 'web' ? ({ scrollMarginTop: 95 } as any) : {})
   },
   sectionHead: {
     alignItems: 'center',
     marginBottom: 26
   },
   sectionTagBadge: {
-    backgroundColor: '#fef3c7',
-    borderColor: '#f59e0b',
-    borderWidth: 1.5,
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#cbd5e1',
+    borderWidth: 1,
+    borderRadius: 50,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
     marginBottom: 10,
-    shadowColor: '#d97706',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 4,
-    elevation: 2
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1
   },
   sectionTagBadgeText: {
-    color: '#92400e',
+    color: '#0e184e', // Deep Navy - NO BLUE!
     fontSize: 11.5,
-    fontWeight: '900',
-    letterSpacing: 0.8
+    fontWeight: '700',
+    letterSpacing: 0.5
   },
   sectionTitle: {
     color: '#0f172a',
@@ -3646,36 +5328,36 @@ const styles = StyleSheet.create({
   },
   opTabBtn: {
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
+    borderColor: '#dee2e6',
     borderWidth: 1,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 8,
+    borderRadius: 4,
     marginRight: 8
   },
   opTabBtnActive: {
-    backgroundColor: '#f59e0b',
-    borderColor: '#d97706'
+    backgroundColor: '#0e184e', // Deep Navy - NO BLUE!
+    borderColor: '#0e184e'
   },
   opTabBtnText: {
-    color: '#475569',
+    color: '#334155',
     fontSize: 12.5,
-    fontWeight: '700'
+    fontWeight: '600'
   },
   opTabBtnTextActive: {
     color: '#ffffff',
-    fontWeight: '900'
+    fontWeight: '700'
   },
   cardBox: {
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
+    borderColor: '#dee2e6', // Bootstrap 5 border
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 18,
-    shadowColor: '#d97706',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
+    borderRadius: 6,        // Bootstrap 5 card radius
+    padding: 16,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
     elevation: 2
   },
   cardBoxHeader: {
@@ -3719,10 +5401,12 @@ const styles = StyleSheet.create({
   btnPrimarySm: {
     backgroundColor: '#f59e0b',
     borderColor: '#d97706',
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    borderWidth: 1.5,
+    paddingHorizontal: 12,
+    height: 32,
     borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
     shadowColor: '#d97706',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
@@ -3730,7 +5414,7 @@ const styles = StyleSheet.create({
   },
   btnPrimarySmText: {
     color: '#ffffff',
-    fontSize: 12,
+    fontSize: 11.5,
     fontWeight: '800'
   },
   subTabsRow: {
@@ -3843,49 +5527,51 @@ const styles = StyleSheet.create({
   // Forms
   formContainer: {
     marginTop: 16,
-    backgroundColor: '#fffdf5',
-    borderColor: '#fde68a',
+    backgroundColor: '#ffffff',
+    borderColor: '#dee2e6', // Bootstrap 5 border
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 14
+    borderRadius: 6,
+    padding: 16
   },
   formHeaderTitle: {
-    color: '#0f172a',
-    fontSize: 14,
-    fontWeight: '800',
+    color: '#212529',
+    fontSize: 15,
+    fontWeight: '700',
     marginBottom: 12
   },
   formField: {
-    marginBottom: 10
+    marginBottom: 12
   },
   formLabel: {
-    color: '#334155',
-    fontSize: 11.5,
-    fontWeight: '700',
+    color: '#495057',
+    fontSize: 12,
+    fontWeight: '600',
     marginBottom: 4
   },
   formInput: {
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
+    borderColor: '#ced4da', // Bootstrap 5 form-control border
     borderWidth: 1,
-    borderRadius: 6,
-    paddingHorizontal: 10,
+    borderRadius: 4,        // Bootstrap 5 0.25rem
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    color: '#0f172a',
+    color: '#212529',
     fontSize: 13
   },
   btnGold: {
-    backgroundColor: '#f59e0b',
-    paddingVertical: 10,
+    backgroundColor: '#0e184e', // Deep Navy - NO BLUE!
+    borderColor: '#0e184e',
+    borderWidth: 1,
+    paddingVertical: 9,
     paddingHorizontal: 16,
-    borderRadius: 6,
+    borderRadius: 4,
     alignItems: 'center',
     marginTop: 6
   },
   btnGoldText: {
     color: '#ffffff',
     fontSize: 13,
-    fontWeight: '800'
+    fontWeight: '700'
   },
 
   // Approval Box
@@ -4140,79 +5826,79 @@ const styles = StyleSheet.create({
     lineHeight: 18
   },
 
-  // Match Centre Filter Tabs
+  // Match Centre Filter Tabs (Bootstrap 5 Nav Pills)
   filterTabsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
     marginBottom: 20,
     justifyContent: 'center'
   },
   filterTabBtn: {
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
-    borderWidth: 1.5,
+    borderColor: '#dee2e6', // Bootstrap 5 border
+    borderWidth: 1,
     paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 24,
-    shadowColor: '#d97706',
-    shadowOffset: { width: 0, height: 2 },
+    paddingVertical: 8,
+    borderRadius: 6,        // Bootstrap 5 btn radius
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2
+    shadowRadius: 2,
+    elevation: 1
   },
   filterTabBtnActive: {
-    backgroundColor: '#f59e0b',
-    borderColor: '#d97706',
-    shadowColor: '#d97706',
+    backgroundColor: '#0e184e', // Deep Navy - NO BLUE!
+    borderColor: '#0e184e',
+    shadowColor: '#0e184e',
     shadowOpacity: 0.25
   },
   filterTabBtnText: {
-    color: '#475569',
+    color: '#334155',
     fontSize: 12.5,
-    fontWeight: '700'
+    fontWeight: '600'
   },
   filterTabBtnTextActive: {
     color: '#ffffff',
-    fontWeight: '900'
+    fontWeight: '700'
   },
 
-  // Match Cards (Clean Crisp White Theme with Rich Color Accents)
+  // Match Cards (Bootstrap 5 Card Architecture)
   matchCard: {
     flex: 1,
     minWidth: 290,
     maxWidth: 620,
     backgroundColor: '#ffffff',
-    borderColor: '#e2e8f0',
+    borderColor: '#dee2e6',
     borderWidth: 1,
     borderTopWidth: 4,
-    borderTopColor: '#94a3b8',
-    borderRadius: 16,
+    borderTopColor: '#6c757d',
+    borderRadius: 6,
     padding: 16,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
     justifyContent: 'space-between',
     marginBottom: 8
   },
   matchCardLive: {
-    borderTopColor: '#ef4444',
-    borderColor: '#fca5a5',
-    shadowColor: '#ef4444',
+    borderTopColor: '#dc3545', // Danger
+    borderColor: '#f1aeb5',
+    shadowColor: '#dc3545',
     shadowOpacity: 0.12
   },
   matchCardUpcoming: {
-    borderTopColor: '#3b82f6',
-    borderColor: '#bfdbfe',
-    shadowColor: '#3b82f6',
+    borderTopColor: '#0e184e', // Deep Navy - NO BLUE!
+    borderColor: '#cbd5e1',
+    shadowColor: '#0e184e',
     shadowOpacity: 0.1
   },
   matchCardResult: {
-    borderTopColor: '#10b981',
-    borderColor: '#a7f3d0',
-    shadowColor: '#10b981',
+    borderTopColor: '#198754', // Bootstrap 5 success
+    borderColor: '#a3cfbb',
+    shadowColor: '#198754',
     shadowOpacity: 0.1
   },
   matchCardTop: {
@@ -4223,17 +5909,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9'
+    borderBottomColor: '#dee2e6'
   },
   liveIndicatorPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fee2e2',
-    borderColor: '#fca5a5',
+    backgroundColor: '#f8d7da', // Bootstrap 5 danger-subtle
+    borderColor: '#f1aeb5',
     borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 8,
-    paddingVertical: 3
+    borderRadius: 50,           // Bootstrap 5 rounded-pill
+    paddingHorizontal: 9,
+    paddingVertical: 3.5
   },
   pulseRedDot: {
     width: 7,
@@ -4253,12 +5939,12 @@ const styles = StyleSheet.create({
     borderColor: '#bfdbfe',
     borderWidth: 1,
     borderRadius: 20,
-    paddingHorizontal: 8,
-    paddingVertical: 3
+    paddingHorizontal: 9,
+    paddingVertical: 3.5
   },
   upcomingIndicatorText: {
     color: '#1d4ed8',
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '800'
   },
   resultIndicatorPill: {
@@ -4266,12 +5952,12 @@ const styles = StyleSheet.create({
     borderColor: '#a7f3d0',
     borderWidth: 1,
     borderRadius: 20,
-    paddingHorizontal: 8,
-    paddingVertical: 3
+    paddingHorizontal: 9,
+    paddingVertical: 3.5
   },
   resultIndicatorText: {
     color: '#059669',
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '800'
   },
   matchTournament: {
@@ -4326,6 +6012,185 @@ const styles = StyleSheet.create({
     fontWeight: '800'
   },
 
+  cardHeaderLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1
+  },
+  cardHeaderRightGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6
+  },
+  topRightRainPill: {
+    backgroundColor: '#e0f2fe',
+    borderColor: '#38bdf8',
+    borderWidth: 1.5,
+    borderRadius: 20,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    shadowColor: '#0284c7',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2
+  },
+  topRightRainPillText: {
+    color: '#0284c7',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.4
+  },
+  topRightBreakPill: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#f59e0b',
+    borderWidth: 1.5,
+    borderRadius: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 3
+  },
+  topRightBreakPillText: {
+    color: '#b45309',
+    fontSize: 10,
+    fontWeight: '900'
+  },
+  matchTeamsSingleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    marginVertical: 8,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 1
+  },
+  teamColLeft: {
+    flex: 1,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    minWidth: 110
+  },
+  teamColRight: {
+    flex: 1,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    minWidth: 110
+  },
+  teamCrestNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+    maxWidth: '100%'
+  },
+  teamNameTextSingleRow: {
+    color: '#0f172a',
+    fontSize: 13,
+    fontWeight: '800',
+    flexShrink: 1
+  },
+  teamScoreSingleRow: {
+    fontSize: 16.5,
+    fontWeight: '900',
+    color: '#0f172a',
+    letterSpacing: 0.3
+  },
+  teamYetToBatSingleRow: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#64748b',
+    fontStyle: 'italic'
+  },
+  iplVsCenterBox: {
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  iplVsCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#0f172a',
+    borderWidth: 1.5,
+    borderColor: '#d97706',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#d97706',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 3,
+    elevation: 3
+  },
+  iplVsCircleText: {
+    fontSize: 10.5,
+    fontWeight: '900',
+    color: '#fbbf24',
+    fontStyle: 'italic',
+    letterSpacing: 1.2
+  },
+  cardLogisticsBottomBar: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginTop: 8,
+    marginBottom: 10
+  },
+  logisticsChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 5,
+    flexWrap: 'wrap'
+  },
+  logisticsChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  logisticsEmoji: {
+    fontSize: 12
+  },
+  logisticsValueText: {
+    color: '#334155',
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  logisticsVenueChip: {
+    cursor: Platform.OS === 'web' ? ('pointer' as any) : undefined,
+  },
+  venueTextLink: {
+    color: '#0284c7',
+    textDecorationLine: 'underline',
+    fontWeight: '700'
+  },
+  venueMapIcon: {
+    color: '#0284c7',
+    fontSize: 10,
+    fontWeight: '800',
+    marginLeft: 1
+  },
+  logisticsOfficialsBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4
+  },
+  logisticsOfficialsCleanText: {
+    color: '#64748b',
+    fontSize: 10.5,
+    fontWeight: '600'
+  },
+
   // Logistics Box: Spaced out, clean white/slate card
   logisticsBox: {
     backgroundColor: '#f8fafc',
@@ -4371,7 +6236,254 @@ const styles = StyleSheet.create({
   // Teams Box
   matchTeamsBox: {
     marginBottom: 10,
+    gap: 4
+  },
+  iplVsDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginVertical: 2,
+    position: 'relative'
+  },
+  iplVsLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#cbd5e1'
+  },
+  iplVsBadge: {
+    backgroundColor: '#0f172a',
+    paddingHorizontal: 11,
+    paddingVertical: 2.5,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#d97706',
+    marginHorizontal: 8,
+    shadowColor: '#d97706',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    elevation: 3
+  },
+  iplVsText: {
+    fontSize: 10.5,
+    fontWeight: '900',
+    color: '#fbbf24',
+    letterSpacing: 1.5,
+    fontStyle: 'italic'
+  },
+  liveBreakIndicatorPill: {
+    backgroundColor: '#d97706',
+    borderColor: '#b45309'
+  },
+  cardBreakBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    borderColor: '#fde68a',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    marginTop: 6,
+    marginBottom: 2
+  },
+  cardBreakEmoji: {
+    fontSize: 13,
+    marginRight: 6
+  },
+  cardBreakText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#92400e',
+    flexShrink: 1
+  },
+  cardBreakSubText: {
+    fontSize: 10,
+    color: '#78350f',
+    marginTop: 1
+  },
+  cardRainBanner: {
+    backgroundColor: '#e0f2fe',
+    borderColor: '#7dd3fc',
+    borderWidth: 1.5
+  },
+  cardRainText: {
+    color: '#0369a1',
+    fontWeight: '800'
+  },
+  liveRainIndicatorPill: {
+    backgroundColor: '#0284c7'
+  },
+  scorecardSummaryBox: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    padding: 10,
+    marginTop: 8
+  },
+  scorecardSummaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center'
+  },
+  scorecardSummaryLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569'
+  },
+  scorecardSummaryVal: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155'
+  },
+  scorecardTableSubtitle: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#0f2452',
+    letterSpacing: 0.5,
+    marginBottom: 6
+  },
+  scorecardFowWrapper: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 6
+  },
+  scorecardFowChip: {
+    backgroundColor: '#f1f5f9',
+    borderColor: '#cbd5e1',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4
+  },
+  scorecardFowScore: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#b45309'
+  },
+  scorecardFowBatter: {
+    fontSize: 9,
+    color: '#64748b',
+    marginTop: 1
+  },
+  openFullScorecardCta: {
+    backgroundColor: '#005960',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  openFullScorecardCtaText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '800'
+  },
+  homeOversBar: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 8,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'space-between'
+  },
+  homeOversLabel: {
+    fontSize: 9.5,
+    fontWeight: '800',
+    color: '#64748b',
+    letterSpacing: 0.5,
+    marginBottom: 2
+  },
+  homeOversValue: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0f172a'
+  },
+  homeSuspendedBanner: {
+    backgroundColor: '#fff1f2',
+    borderColor: '#fecdd3',
+    borderWidth: 1,
+    borderRadius: 6,
+    padding: 8,
+    marginTop: 8
+  },
+  homeSuspendedText: {
+    color: '#9f1239',
+    fontSize: 10.5,
+    fontWeight: '700'
+  },
+  homeActiveBowlerPill: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#86efac',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 7,
+    paddingVertical: 2
+  },
+  homeActiveBowlerPillText: {
+    color: '#15803d',
+    fontSize: 10,
+    fontWeight: '800'
+  },
+  homeBowlingBadge: {
+    backgroundColor: '#dcfce7',
+    borderColor: '#86efac',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 1
+  },
+  homeBowlingBadgeText: {
+    color: '#15803d',
+    fontSize: 9,
+    fontWeight: '800'
+  },
+  homeSuspendedPill: {
+    backgroundColor: '#fee2e2',
+    borderColor: '#fca5a5',
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    marginTop: 2
+  },
+  homeSuspendedPillText: {
+    color: '#b91c1c',
+    fontSize: 9,
+    fontWeight: '800'
+  },
+  homeSubPill: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#fde68a',
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    marginTop: 2
+  },
+  homeSubPillText: {
+    color: '#b45309',
+    fontSize: 9,
+    fontWeight: '700'
+  },
+  homeQuotaPill: {
+    backgroundColor: '#fef3c7',
+    borderColor: '#f59e0b',
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    marginTop: 2
+  },
+  homeQuotaPillText: {
+    color: '#b45309',
+    fontSize: 9,
+    fontWeight: '800'
   },
   matchTeamRow: {
     flexDirection: 'row',
@@ -4579,22 +6691,107 @@ const styles = StyleSheet.create({
     fontWeight: '800'
   },
 
-  // Tournaments Section
+  // Official Match Centre Button (Deep Navy - NO BLUE!)
+  tncaMatchCentreCardBtn: {
+    backgroundColor: '#0e184e', // Deep Navy
+    borderColor: '#0e184e',
+    borderWidth: 1,
+    borderRadius: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 8,
+    shadowColor: '#0e184e',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  tncaMatchCentreCardBtnText: {
+    color: '#ffffff',
+    fontSize: 12.5,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+
+  // TNCA Media Sub-Nav Row (Image 1 Style: [ News ] [ Photos ] ── See More >)
+  tncaMediaSubNavRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+    marginBottom: 6,
+  },
+  tncaMediaPillGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  tncaPillYellowActive: {
+    backgroundColor: '#f5c43d',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+    shadowColor: '#d97706',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  tncaPillYellowText: {
+    color: '#0e184e',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 0.3,
+  },
+  tncaPillWhiteInactive: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+  },
+  tncaPillWhiteText: {
+    color: '#475569',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  tncaSeeMoreLink: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  tncaSeeMoreText: {
+    color: '#0e184e',
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  tncaMediaGoldDivider: {
+    width: '100%',
+    height: 2,
+    backgroundColor: '#f5c43d',
+    marginBottom: 16,
+    borderRadius: 1,
+  },
+
+  // Tournaments Section (Bootstrap 5 Cards & Badges)
   tournamentCard: {
     flex: 1,
     minWidth: 280,
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
+    borderColor: '#dee2e6', // Bootstrap 5 border
     borderWidth: 1,
     borderTopWidth: 4,
-    borderTopColor: '#f59e0b',
-    borderRadius: 16,
+    borderTopColor: '#0e184e', // Deep Navy - NO BLUE!
+    borderRadius: 6,
     padding: 16,
-    shadowColor: '#d97706',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2
   },
   tBadgeWrap: {
     flexDirection: 'row',
@@ -4602,48 +6799,48 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   badgeGoldPill: {
-    backgroundColor: '#fef3c7',
-    borderColor: '#fde68a',
+    backgroundColor: '#fff3cd', // Bootstrap 5 warning subtle
+    borderColor: '#ffe69c',
     borderWidth: 1,
-    color: '#b45309',
+    color: '#664d03',
     fontSize: 10.5,
-    fontWeight: '800',
+    fontWeight: '700',
     paddingHorizontal: 8,
     paddingVertical: 2.5,
-    borderRadius: 10
+    borderRadius: 50 // rounded-pill
   },
   badgeBluePill: {
-    backgroundColor: '#fef9c3',
-    borderColor: '#fef08a',
+    backgroundColor: '#cfe2ff', // Bootstrap 5 primary subtle
+    borderColor: '#9ec5fe',
     borderWidth: 1,
-    color: '#854d0e',
+    color: '#0a58ca',
     fontSize: 10.5,
-    fontWeight: '800',
+    fontWeight: '700',
     paddingHorizontal: 8,
     paddingVertical: 2.5,
-    borderRadius: 10
+    borderRadius: 50
   },
   badgeRedPill: {
-    backgroundColor: '#fee2e2',
-    borderColor: '#fca5a5',
+    backgroundColor: '#f8d7da', // Bootstrap 5 danger subtle
+    borderColor: '#f1aeb5',
     borderWidth: 1,
-    color: '#b91c1c',
+    color: '#842029',
     fontSize: 10.5,
-    fontWeight: '800',
+    fontWeight: '700',
     paddingHorizontal: 8,
     paddingVertical: 2.5,
-    borderRadius: 10
+    borderRadius: 50
   },
   badgeGreenPill: {
-    backgroundColor: '#dcfce7',
-    borderColor: '#86efac',
+    backgroundColor: '#d1e7dd', // Bootstrap 5 success subtle
+    borderColor: '#a3cfbb',
     borderWidth: 1,
-    color: '#15803d',
+    color: '#0f5132',
     fontSize: 10.5,
-    fontWeight: '800',
+    fontWeight: '700',
     paddingHorizontal: 8,
     paddingVertical: 2.5,
-    borderRadius: 10
+    borderRadius: 50
   },
   tourneyIcon: {
     fontSize: 28,
@@ -4683,16 +6880,20 @@ const styles = StyleSheet.create({
   tourneyFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     gap: 8,
-    marginTop: 'auto'
+    marginTop: 'auto',
+    paddingTop: 10
   },
   btnOutlineGoldSm: {
     backgroundColor: '#ffffff',
     borderColor: '#f59e0b',
     borderWidth: 1.5,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6
+    height: 32,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   btnOutlineGoldSmText: {
     color: '#b45309',
@@ -4700,69 +6901,74 @@ const styles = StyleSheet.create({
     fontWeight: '800'
   },
 
-  // Points & Performance Tables
+  // Points & Performance Tables (Bootstrap 5 Tables)
   subTabsScroll: {
     marginBottom: 12
   },
   switchTabBtn: {
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
+    borderColor: '#dee2e6', // Bootstrap 5 border
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 4,        // Bootstrap 5 0.25rem
     marginRight: 8
   },
   switchTabBtnActive: {
-    backgroundColor: '#f59e0b',
-    borderColor: '#d97706'
+    backgroundColor: '#0e184e', // Deep Navy - NO BLUE!
+    borderColor: '#0e184e'
   },
   switchTabBtnText: {
-    color: '#475569',
+    color: '#495057',           // Bootstrap 5 gray-700
     fontSize: 12,
-    fontWeight: '700'
+    fontWeight: '600'
   },
   switchTabBtnTextActive: {
     color: '#ffffff',
-    fontWeight: '900'
+    fontWeight: '700'
   },
   tableBox: {
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
+    borderColor: '#dee2e6',     // Bootstrap 5 table border
     borderWidth: 1,
-    borderRadius: 14,
-    padding: 8,
-    shadowColor: '#d97706',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    elevation: 2
+    borderRadius: 6,
+    padding: 0,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 1
   },
   tableHeaderRow: {
     flexDirection: 'row',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#fde68a',
-    backgroundColor: '#fffdf5'
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderBottomWidth: 2,
+    borderBottomColor: '#dee2e6',
+    backgroundColor: '#f8f9fa'   // Bootstrap 5 table header background
   },
   tableTh: {
-    color: '#b45309',
+    color: '#495057',            // Bootstrap 5 gray-700
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '700',
+    textTransform: 'uppercase',
     paddingHorizontal: 4
   },
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 7,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#f1f5f9'
+    borderBottomColor: '#dee2e6',
+    backgroundColor: '#ffffff'
   },
   tableRowQualified: {
-    backgroundColor: '#fefce8'
+    backgroundColor: '#f8f9fa'   // Bootstrap 5 table hover
   },
   tableTd: {
-    color: '#0f172a',
+    color: '#212529',            // Bootstrap 5 bodyColor
     fontSize: 11.5,
     paddingHorizontal: 4
   },
@@ -4823,7 +7029,7 @@ const styles = StyleSheet.create({
     fontWeight: '900'
   },
 
-  // Performance Records
+  // Performance Records (Bootstrap 5 Tabs)
   perfTabsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -4832,24 +7038,69 @@ const styles = StyleSheet.create({
   },
   perfTabBtn: {
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
+    borderColor: '#dee2e6', // Bootstrap 5 border
     borderWidth: 1,
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 6
+    borderRadius: 4         // Bootstrap 5 0.25rem
   },
   perfTabBtnActive: {
-    backgroundColor: '#f59e0b',
-    borderColor: '#d97706'
+    backgroundColor: '#0e184e', // Deep Navy - NO BLUE!
+    borderColor: '#0e184e'
   },
   perfTabBtnText: {
-    color: '#475569',
+    color: '#495057',           // Bootstrap 5 gray-700
     fontSize: 12,
-    fontWeight: '700'
+    fontWeight: '600'
   },
   perfTabBtnTextActive: {
     color: '#ffffff',
-    fontWeight: '900'
+    fontWeight: '700'
+  },
+
+  // Ratings Leaderboard Sub-Filters
+  ratingSubFilterBtn: {
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6
+  },
+  ratingSubFilterBtnActive: {
+    backgroundColor: '#0e184e',
+    borderColor: '#d4af37',
+    borderWidth: 1.5
+  },
+  ratingSubFilterText: {
+    color: '#64748b',
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  ratingSubFilterTextActive: {
+    color: '#fde047',
+    fontWeight: '800'
+  },
+  ratingFormatBtn: {
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
+    borderColor: '#cbd5e1',
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4
+  },
+  ratingFormatBtnActive: {
+    backgroundColor: '#1e3a8a',
+    borderColor: '#3b82f6'
+  },
+  ratingFormatText: {
+    color: '#475569',
+    fontSize: 10.5,
+    fontWeight: '600'
+  },
+  ratingFormatTextActive: {
+    color: '#ffffff',
+    fontWeight: '800'
   },
 
   // District Players
@@ -4857,45 +7108,239 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
-    borderWidth: 1.5,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    marginBottom: 12,
-    shadowColor: '#d97706',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2
+    borderColor: '#cbd5e1',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: Platform.OS === 'web' ? 10 : 8,
+    marginBottom: 14,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1
   },
   playerSearchInput: {
     flex: 1,
     color: '#0f172a',
-    fontSize: 13,
-    paddingHorizontal: 8
+    fontSize: 13.5,
+    paddingHorizontal: 8,
+    outlineStyle: 'none' as any
   },
   playerPillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#ffffff',
-    borderColor: '#e2e8f0',
+    borderColor: '#dee2e6',
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginRight: 8
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
+    marginRight: 8,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+    elevation: 1
   },
   playerPillBtnActive: {
-    backgroundColor: '#f59e0b',
-    borderColor: '#d97706'
+    backgroundColor: '#0e184e', // Deep Navy - NO BLUE!
+    borderColor: '#0e184e'
   },
   playerPillBtnText: {
-    color: '#475569',
-    fontSize: 11.5,
-    fontWeight: '700'
+    color: '#495057',
+    fontSize: 12,
+    fontWeight: '600'
   },
   playerPillBtnTextActive: {
     color: '#ffffff',
-    fontWeight: '900'
+    fontWeight: '700'
+  },
+  specialRecordCard: {
+    flex: 1,
+    minWidth: 280,
+    backgroundColor: '#ffffff',
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    borderTopWidth: 3,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#0f172a',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+    marginBottom: 14
+  },
+  recordBadgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    borderWidth: 1,
+    marginBottom: 12
+  },
+  recordBadgeLabel: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.3
+  },
+  recordOfficialBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#bbf7d0',
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4
+  },
+  recordOfficialCheck: {
+    color: '#15803d',
+    fontSize: 10.5,
+    fontWeight: '700'
+  },
+  recordProfileRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  recordAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2
+  },
+  recordAvatarText: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0.5
+  },
+  recordPlayerName: {
+    color: '#0e184e',
+    fontSize: 15.5,
+    fontWeight: '800',
+    letterSpacing: 0.2
+  },
+  recordTeamText: {
+    color: '#334155',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 2
+  },
+  recordRoleBadgePill: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#f1f5f9',
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1.5,
+    marginTop: 4
+  },
+  recordRoleBadgeText: {
+    color: '#475569',
+    fontSize: 10.5,
+    fontWeight: '700'
+  },
+  recordRoleBadge: {
+    color: '#b45309',
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2
+  },
+  recordTagPill: {
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2
+  },
+  recordTagPillText: {
+    color: '#ffffff',
+    fontSize: 9.5,
+    fontWeight: '800'
+  },
+  recordPerfBox: {
+    backgroundColor: '#f8fafc',
+    borderColor: '#e2e8f0',
+    borderWidth: 1,
+    borderLeftWidth: 3,
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12
+  },
+  recordPerfMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4
+  },
+  recordPerfScore: {
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0.3
+  },
+  recordPerfBalls: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: '#64748b',
+    marginLeft: 4
+  },
+  recordSubMetricPill: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 4
+  },
+  recordSubMetricText: {
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  recordPerfMain: {
+    fontSize: 15,
+    fontWeight: '900',
+    flex: 1,
+    marginRight: 6
+  },
+  recordPerfSub: {
+    color: '#64748b',
+    fontSize: 11.5,
+    fontWeight: '700'
+  },
+  recordMatchVsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2
+  },
+  recordMatchVs: {
+    color: '#475569',
+    fontSize: 11.5,
+    fontWeight: '500',
+    flex: 1
+  },
+  recordCardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingTop: 8,
+    borderTopColor: '#f1f5f9',
+    borderTopWidth: 1
+  },
+  recordCardFooterText: {
+    color: '#0e184e',
+    fontSize: 11.5,
+    fontWeight: '700'
+  },
+  recordCardFooterArrow: {
+    fontSize: 12,
+    fontWeight: '800'
   },
   playerCard: {
     flex: 1,
@@ -5065,6 +7510,8 @@ const styles = StyleSheet.create({
     marginVertical: 4
   },
   aboutCrestBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fef3c7',
     borderColor: '#fde68a',
     borderWidth: 1,
@@ -5138,22 +7585,22 @@ const styles = StyleSheet.create({
     textAlign: 'center'
   },
 
-  // Grounds & Facilities
+  // Grounds & Facilities (Bootstrap 5 Cards)
   groundCard: {
     flex: 1,
     minWidth: 260,
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
+    borderColor: '#dee2e6', // Bootstrap 5 border
     borderWidth: 1,
     borderTopWidth: 4,
-    borderTopColor: '#f59e0b',
-    borderRadius: 14,
+    borderTopColor: '#0e184e', // Deep Navy - NO BLUE!
+    borderRadius: 6,
     overflow: 'hidden',
-    shadowColor: '#d97706',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2
   },
   groundImg: {
     width: '100%',
@@ -5163,7 +7610,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     right: 10,
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#15803d', // Cricket Emerald Turf Green - NO BLUE!
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 4
@@ -5340,39 +7787,39 @@ const styles = StyleSheet.create({
     fontWeight: '800'
   },
 
-  // Contact
+  // Contact (Bootstrap 5 Cards)
   contactInfoCard: {
     flex: 1,
     minWidth: 280,
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
-    borderWidth: 1.5,
-    borderRadius: 14,
+    borderColor: '#dee2e6', // Bootstrap 5 border
+    borderWidth: 1,
+    borderRadius: 6,
     padding: 16,
-    shadowColor: '#d97706',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2
   },
   contactFormCard: {
     flex: 1,
     minWidth: 280,
     backgroundColor: '#ffffff',
-    borderColor: '#fde68a',
-    borderWidth: 1.5,
-    borderRadius: 14,
+    borderColor: '#dee2e6', // Bootstrap 5 border
+    borderWidth: 1,
+    borderRadius: 6,
     padding: 16,
-    shadowColor: '#d97706',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2
   },
   contactCardTitle: {
-    color: '#b45309',
-    fontSize: 15,
-    fontWeight: '800',
+    color: '#0e184e',       // Deep Navy - NO BLUE!
+    fontSize: 16,
+    fontWeight: '700',
     marginBottom: 12
   },
   contactLine: {
@@ -5387,100 +7834,107 @@ const styles = StyleSheet.create({
     backgroundColor: '#01040d',
     borderTopWidth: 1,
     borderTopColor: 'rgba(212, 175, 55, 0.3)',
-    paddingTop: 36,
-    paddingBottom: 24
+    paddingTop: 40,
+    paddingBottom: 28
   },
   footerGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 20,
-    marginBottom: 24
+    gap: 24,
+    marginBottom: 28
   },
   footerColBrand: {
     flex: 1.5,
-    minWidth: 260
+    minWidth: 280
   },
   footerBrandRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10
+    marginBottom: 12
   },
   footerLogo: {
-    width: 44,
-    height: 44
+    width: 52,
+    height: 52
   },
   footerBrandTitle: {
     color: '#ffffff',
-    fontSize: 13,
-    fontWeight: '800'
+    fontSize: 17,
+    fontWeight: '800',
+    letterSpacing: 0.3
   },
   footerMotto: {
     color: '#f5c43d',
-    fontSize: 11,
-    fontStyle: 'italic'
+    fontSize: 13.5,
+    fontStyle: 'italic',
+    marginTop: 2
   },
   footerDesc: {
     color: '#9bb0cf',
-    fontSize: 11.5,
-    lineHeight: 18,
-    marginBottom: 10
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 14
   },
   footerAffilBadge: {
     backgroundColor: 'rgba(212, 175, 55, 0.1)',
     borderColor: 'rgba(212, 175, 55, 0.3)',
     borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
-    alignSelf: 'flex-start'
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center'
   },
   footerAffilText: {
     color: '#fed966',
-    fontSize: 10,
+    fontSize: 12.5,
     fontWeight: '700'
   },
   footerCol: {
     flex: 1,
-    minWidth: 150
+    minWidth: 160
   },
   footerColHeading: {
     color: '#ffffff',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '800',
-    marginBottom: 10,
+    letterSpacing: 0.4,
+    marginBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(212, 175, 55, 0.3)',
-    paddingBottom: 4
+    paddingBottom: 6
   },
   footerLink: {
     color: '#9bb0cf',
-    fontSize: 12,
-    marginVertical: 4
+    fontSize: 14.5,
+    marginVertical: 5,
+    fontWeight: '500'
   },
   footerBottom: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.08)',
-    paddingTop: 16,
+    paddingTop: 20,
     alignItems: 'center'
   },
   copyrightText: {
     color: '#62799c',
-    fontSize: 11,
+    fontSize: 13,
     textAlign: 'center',
-    marginBottom: 6
+    marginBottom: 8
   },
   legalLinksRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
+    gap: 10
   },
   legalLink: {
     color: '#9bb0cf',
-    fontSize: 11
+    fontSize: 13,
+    fontWeight: '500'
   },
   legalDot: {
     color: '#62799c',
-    fontSize: 11
+    fontSize: 13
   },
 
   // Modals Generic

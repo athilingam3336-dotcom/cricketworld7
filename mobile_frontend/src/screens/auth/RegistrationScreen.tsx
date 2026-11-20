@@ -14,9 +14,20 @@ import {
   Modal,
   useWindowDimensions,
 } from 'react-native';
-import { validateEmail, validatePassword } from '../../utils/validation';
+import {
+  validateEmail,
+  validatePassword,
+  validatePhone,
+  formatPhone,
+  validateAadhaar,
+  formatAadhaar,
+  validateName,
+  validateTeamName,
+  validateExperience,
+} from '../../utils/validation';
+import { FontAwesome } from '@expo/vector-icons';
 import { useAppNavigation } from '../../navigation/AppNavigator';
-import { ScorerApi } from '../../services/api';
+import { ScorerApi, fetchMasterSettings } from '../../services/api';
 import { showSuccess, showError, showWarning, showInfo } from '../../utils/sweetalert';
 
 export type RegistrationRole = 'PLAYER' | 'TEAM' | 'SCORER' | 'UMPIRE';
@@ -38,7 +49,7 @@ const COMMON_ROLES = [
   'All-Rounder'
 ];
 
-const PLAYER_ROLES = ['Batsman', 'Bowler', 'All-Rounder', 'Wicket Keeper'];
+const PLAYER_ROLES = ['Batsman', 'Bowler', 'All-Rounder', 'Wicket Keeper', 'Captain', 'Vice Captain'];
 const AGE_CATEGORIES = ['Senior Men', "Women's Senior", 'Under-23', 'Under-19', 'Under-16', 'Under-14', 'Under-12'];
 const BATTING_STYLES = ['Right-Handed Batsman', 'Left-Handed Batsman'];
 const BOWLING_ARMS = ['Right-arm', 'Left-arm'];
@@ -63,7 +74,18 @@ const WICKET_KEEPER_SPECIALIZATIONS = [
 ];
 
 const BOWLING_STYLES = ['Right-Arm Fast', 'Right-Arm Fast-Medium', 'Right-Arm Medium Pace', 'Right-Arm Medium-Fast', 'Off Spinner (Off Break)', 'Leg Spinner (Leg Break)', 'Left-Arm Fast', 'Left-Arm Orthodox (Finger Spin)', 'Left-Arm Chinaman (Wrist Spin)'];
-const TALUKS = ['Virudhunagar', 'Sivakasi', 'Rajapalayam', 'Srivilliputhur', 'Aruppukottai', 'Sattur', 'Watrap'];
+const TALUKS = [
+  'Virudhunagar',
+  'Sivakasi',
+  'Rajapalayam',
+  'Srivilliputhur',
+  'Aruppukottai',
+  'Sattur',
+  'Watrap',
+  'Kariapatti',
+  'Tiruchuli',
+  'Vembakottai'
+];
 const TALUK_OPTIONS = [...TALUKS, 'Other'];
 const SCORER_LEVELS = ['District Certified', 'State Panel', 'Club Scorer', 'Trainee Scorer'];
 
@@ -96,28 +118,43 @@ const DISTRICT_OPTIONS = [
   'Tirunelveli',
   'Other'
 ];
-const STATE_OPTIONS = ['Tamil Nadu', 'Kerala', 'Karnataka', 'Andhra Pradesh', 'Other'];
+const STATE_OPTIONS = [
+  'Tamil Nadu',
+  'Kerala',
+  'Karnataka',
+  'Andhra Pradesh',
+  'Telangana',
+  'Pondicherry',
+  'Other'
+];
+
+const getInitialCategoryOptions = (categoryKey: string, defaultList: string[], ensureOther = false): string[] => {
+  let list = [...defaultList];
+  if (ensureOther && !list.includes('Other')) {
+    list.push('Other');
+  }
+  return Array.from(new Set(list));
+};
 
 const SAMPLE_15_SQUAD: Array<{ name: string; email: string; role: string }> = [
-  { name: 'R. Saravanan', email: 'saravanan.r@strikerscc.org', role: 'Captain' },
-  { name: 'S. Karthik', email: 'karthik.s@strikerscc.org', role: 'Vice Captain' },
-  { name: 'K. Murugan', email: 'murugan.k@strikerscc.org', role: 'Wicket Keeper' },
-  { name: 'V. Vignesh', email: 'vignesh.v@strikerscc.org', role: 'Bowler' },
-  { name: 'M. Ashwin Kumar', email: 'ashwin.k@strikerscc.org', role: 'All-Rounder' },
-  { name: 'P. Vijay Anand', email: 'vijay.a@strikerscc.org', role: 'Batter' },
-  { name: 'B. Dinesh Babu', email: 'dinesh.b@strikerscc.org', role: 'Batter' },
-  { name: 'T. Praveen Raj', email: 'praveen.r@strikerscc.org', role: 'Bowler' },
-  { name: 'A. Suresh Kumar', email: 'suresh.k@strikerscc.org', role: 'Bowler' },
-  { name: 'N. Bala Murugan', email: 'bala.m@strikerscc.org', role: 'Bowler' },
-  { name: 'G. Arun Pandian', email: 'arun.p@strikerscc.org', role: 'Batter' },
-  { name: 'C. Manikandan', email: 'manikandan.c@strikerscc.org', role: 'All-Rounder' },
-  { name: 'E. Gokul Nath', email: 'gokul.n@strikerscc.org', role: 'Bowler' },
-  { name: 'L. Selva Ganesh', email: 'selva.g@strikerscc.org', role: 'Batter' },
-  { name: 'D. Rajesh', email: 'rajesh.d@strikerscc.org', role: 'Wicket Keeper' }
+  { name: 'R Saravanan', email: 'saravanan.r@strikerscc.org', role: 'Captain' },
+  { name: 'S Karthik', email: 'karthik.s@strikerscc.org', role: 'Vice Captain' },
+  { name: 'K Murugan', email: 'murugan.k@strikerscc.org', role: 'Wicket Keeper' },
+  { name: 'V Vignesh', email: 'vignesh.v@strikerscc.org', role: 'Bowler' },
+  { name: 'M Ashwin Kumar', email: 'ashwin.k@strikerscc.org', role: 'All-Rounder' },
+  { name: 'P Vijay Anand', email: 'vijay.a@strikerscc.org', role: 'Batter' },
+  { name: 'B Dinesh Babu', email: 'dinesh.b@strikerscc.org', role: 'Batter' },
+  { name: 'T Praveen Raj', email: 'praveen.r@strikerscc.org', role: 'Bowler' },
+  { name: 'A Suresh Kumar', email: 'suresh.k@strikerscc.org', role: 'Bowler' },
+  { name: 'N Bala Murugan', email: 'bala.m@strikerscc.org', role: 'Bowler' },
+  { name: 'G Arun Pandian', email: 'arun.p@strikerscc.org', role: 'Batter' },
+  { name: 'C Manikandan', email: 'manikandan.c@strikerscc.org', role: 'All-Rounder' },
+  { name: 'E Gokul Nath', email: 'gokul.n@strikerscc.org', role: 'Bowler' },
+  { name: 'L Selva Ganesh', email: 'selva.g@strikerscc.org', role: 'Batter' },
+  { name: 'D Rajesh', email: 'rajesh.d@strikerscc.org', role: 'Wicket Keeper' }
 ];
 
 export const REGISTRATION_ROLES: { key: RegistrationRole; label: string; icon: string; desc: string }[] = [
-  { key: 'PLAYER', label: 'Player', icon: '🏏', desc: 'District player profile & trial enrollment' },
   { key: 'TEAM', label: 'Team & Coach', icon: '🛡️', desc: 'Club & institution team squad registration' },
   { key: 'SCORER', label: 'Scorer', icon: '📋', desc: 'Certified match scorer accreditation' },
   { key: 'UMPIRE', label: 'Umpire', icon: '⚖️', desc: 'Official umpire panel accreditation' }
@@ -170,15 +207,15 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
 
   const getInitialRole = (): RegistrationRole => {
     const r = (params?.initialRole as string)?.toUpperCase();
-    if (r === 'PLAYER') return 'PLAYER';
     if (r === 'TEAM' || r === 'COACH') return 'TEAM';
     if (r === 'SCORER') return 'SCORER';
     if (r === 'UMPIRE') return 'UMPIRE';
-    return 'PLAYER';
+    return 'TEAM';
   };
 
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const isDesktop = windowWidth >= 768;
+  const isMobile = windowWidth < 640;
 
   const [activeRole, setActiveRole] = useState<RegistrationRole>(getInitialRole());
   const activeRoleObj = REGISTRATION_ROLES.find((r) => r.key === activeRole) || REGISTRATION_ROLES[0];
@@ -238,10 +275,146 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
     };
   }, [resendCooldown]);
 
+  // Dynamic Master Settings Options (Taluk, Roles, Batting, Age, Certs, State)
+  const [dynamicTaluks, setDynamicTaluks] = useState<string[]>(() =>
+    getInitialCategoryOptions('taluk_jurisdiction', TALUK_OPTIONS, true)
+  );
+  const [dynamicPlayerRoles, setDynamicPlayerRoles] = useState<string[]>(() =>
+    getInitialCategoryOptions('playing_role', PLAYER_ROLES)
+  );
+  const [dynamicBattingStyles, setDynamicBattingStyles] = useState<string[]>(() =>
+    getInitialCategoryOptions('batting_style', BATTING_STYLES)
+  );
+  const [dynamicAgeCategories, setDynamicAgeCategories] = useState<string[]>(() =>
+    getInitialCategoryOptions('age_category', AGE_CATEGORIES)
+  );
+  const [dynamicScorerLevels, setDynamicScorerLevels] = useState<string[]>(() =>
+    getInitialCategoryOptions('certification_level', SCORER_LEVELS)
+  );
+  const [dynamicUmpireQualifications, setDynamicUmpireQualifications] = useState<string[]>(() =>
+    getInitialCategoryOptions('umpire_certification', UMPIRE_QUALIFICATIONS)
+  );
+  const [dynamicStates, setDynamicStates] = useState<string[]>(() =>
+    getInitialCategoryOptions('state', STATE_OPTIONS, true)
+  );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const resolveCategory = (key: string, backendItems: any[] | undefined, defaultList: string[], ensureOther = false) => {
+      // Clean up legacy localStorage if any
+      if (typeof window !== 'undefined') {
+        try {
+          localStorage.removeItem(`mset_added_${key}`);
+          localStorage.removeItem(`mset_del_${key}`);
+        } catch (e) {}
+      }
+
+      let dbNames: string[] = [];
+      if (backendItems && Array.isArray(backendItems) && backendItems.length > 0) {
+        dbNames = backendItems
+          .filter((i: any) => i && i.is_active !== false)
+          .map((i: any) => (typeof i === 'string' ? i : i.name))
+          .map((s: string) => String(s || '').trim())
+          .filter(Boolean);
+      }
+
+      // If database returned items, use database list directly (truly dynamic from MongoDB)
+      let list = dbNames.length > 0 ? dbNames : [...defaultList];
+      if (ensureOther && !list.includes('Other')) {
+        list.push('Other');
+      }
+      return Array.from(new Set(list));
+    };
+
+    const loadDynamicMasterOptions = async () => {
+      try {
+        const res = await fetchMasterSettings();
+        if (isMounted) {
+          const flatList: any[] = Array.isArray(res)
+            ? res
+            : Array.isArray(res?.data)
+            ? res.data
+            : [];
+          const g = res && res.grouped ? res.grouped : {};
+
+          const extractItemsForCategory = (catKey: string): any[] => {
+            if (g[catKey]?.items?.length) return g[catKey].items;
+            const clean = catKey.toLowerCase().replace(/[-\s]/g, '_');
+            const fromFlat = flatList.filter(
+              (i: any) => (i.category || '').toLowerCase().replace(/[-\s]/g, '_') === clean
+            );
+            return fromFlat;
+          };
+
+          const taluks = resolveCategory('taluk_jurisdiction', extractItemsForCategory('taluk_jurisdiction'), TALUK_OPTIONS, true);
+          const roles = resolveCategory('playing_role', extractItemsForCategory('playing_role'), PLAYER_ROLES);
+          const batting = resolveCategory('batting_style', extractItemsForCategory('batting_style'), BATTING_STYLES);
+          const ages = resolveCategory('age_category', extractItemsForCategory('age_category'), AGE_CATEGORIES);
+          const scorerLevels = resolveCategory('certification_level', extractItemsForCategory('certification_level'), SCORER_LEVELS);
+          const umpireQuals = resolveCategory('umpire_certification', extractItemsForCategory('umpire_certification'), UMPIRE_QUALIFICATIONS);
+          const states = resolveCategory('state', extractItemsForCategory('state'), STATE_OPTIONS, true);
+
+          setDynamicTaluks(taluks);
+          setDynamicPlayerRoles(roles);
+          setDynamicBattingStyles(batting);
+          setDynamicAgeCategories(ages);
+          setDynamicScorerLevels(scorerLevels);
+          setDynamicUmpireQualifications(umpireQuals);
+          setDynamicStates(states);
+
+          // Auto-align selections with live database options
+          setPRole(c => (roles.includes(c) ? c : roles[0] || c));
+          setPTaluk(c => (taluks.includes(c) ? c : taluks[0] || c));
+          setPBattingStyle(c => (batting.includes(c) ? c : batting[0] || c));
+          setPCategory(c => (ages.includes(c) ? c : ages[0] || c));
+          setTeamTaluk(c => (taluks.includes(c) ? c : taluks[0] || c));
+          setSquadPlayerRole(c => (roles.includes(c) ? c : roles[0] || c));
+          setSLevel(c => (scorerLevels.includes(c) ? c : scorerLevels[0] || c));
+          setSTaluk(c => (taluks.includes(c) ? c : taluks[0] || c));
+          setUQualification(c => (umpireQuals.includes(c) ? c : umpireQuals[0] || c));
+          setUDistrict(c => (taluks.includes(c) ? c : taluks[0] || c));
+          setUState(c => (states.includes(c) ? c : states[0] || c));
+        }
+      } catch (err) {
+        if (isMounted) {
+          setDynamicTaluks(getInitialCategoryOptions('taluk_jurisdiction', TALUK_OPTIONS, true));
+          setDynamicPlayerRoles(getInitialCategoryOptions('playing_role', PLAYER_ROLES));
+          setDynamicBattingStyles(getInitialCategoryOptions('batting_style', BATTING_STYLES));
+          setDynamicAgeCategories(getInitialCategoryOptions('age_category', AGE_CATEGORIES));
+          setDynamicScorerLevels(getInitialCategoryOptions('certification_level', SCORER_LEVELS));
+          setDynamicUmpireQualifications(getInitialCategoryOptions('umpire_certification', UMPIRE_QUALIFICATIONS));
+          setDynamicStates(getInitialCategoryOptions('state', STATE_OPTIONS, true));
+        }
+      }
+    };
+
+    loadDynamicMasterOptions();
+
+    // Listen to window focus or storage/custom events to automatically pick up admin updates
+    let syncHandler: any = null;
+    if (typeof window !== 'undefined') {
+      syncHandler = () => loadDynamicMasterOptions();
+      window.addEventListener('focus', syncHandler);
+      window.addEventListener('storage', syncHandler);
+      window.addEventListener('master_settings_updated', syncHandler);
+    }
+
+    return () => {
+      isMounted = false;
+      if (typeof window !== 'undefined' && syncHandler) {
+        window.removeEventListener('focus', syncHandler);
+        window.removeEventListener('storage', syncHandler);
+        window.removeEventListener('master_settings_updated', syncHandler);
+      }
+    };
+  }, []);
+
   // 1. PLAYER REGISTRATION STATE
   const [pName, setPName] = useState<string>('');
   const [pEmail, setPEmail] = useState<string>('');
   const [pMobile, setPMobile] = useState<string>('');
+  const [pAadhaar, setPAadhaar] = useState<string>('');
   const [pRole, setPRole] = useState<string>('Batsman');
   const [pCategory, setPCategory] = useState<string>('Senior Men');
   const [pTaluk, setPTaluk] = useState<string>('Virudhunagar');
@@ -358,11 +531,9 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | undefined>>({});
 
   const validateEmailValue = (val: string, label: string = 'Email address'): string | null => {
-    const clean = (val || '').trim();
-    if (!clean) return `${label} is required.`;
-    const res = validateEmail(clean, `${label} is required.`);
+    const res = validateEmail(val, `${label} is required.`);
     if (!res.isValid) {
-      return res.error || 'Please enter a valid email address format with "@" and domain (e.g. name@domain.com).';
+      return res.error || `${label} is invalid.`;
     }
     return null;
   };
@@ -370,15 +541,32 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
   const validatePasswordValue = (val: string): string | null => {
     const res = validatePassword(val);
     if (!res.isValid) {
-      return res.error || 'Password must be at least 8 characters, with 1 uppercase letter and 2 special characters.';
+      return res.error || 'Password must be at least 8 characters, with 1 uppercase letter, 1 special character, and 2 numbers.';
     }
     return null;
   };
 
   const validateNameValue = (val: string, label: string = 'Name'): string | null => {
-    const clean = (val || '').trim();
-    if (!clean) return `${label} is required.`;
-    if (clean.length < 3) return `${label} must be at least 3 letters.`;
+    const res = validateName(val, label);
+    if (!res.isValid) {
+      return res.error || `${label} is invalid.`;
+    }
+    return null;
+  };
+
+  const validateTeamNameValue = (val: string, label: string = 'Team Name'): string | null => {
+    const res = validateTeamName(val, label);
+    if (!res.isValid) {
+      return res.error || `${label} is invalid.`;
+    }
+    return null;
+  };
+
+  const validateExperienceValue = (val: string, label: string = 'Umpire Experience'): string | null => {
+    const res = validateExperience(val, label);
+    if (!res.isValid) {
+      return res.error || `${label} is invalid.`;
+    }
     return null;
   };
 
@@ -439,9 +627,10 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
     setOtpCode('1234');
 
     if (activeRole === 'PLAYER') {
-      setPName('R. Saravanan');
+      setPName('Saravanan');
       setPEmail('saravanan.r@strikerscc.org');
       setPMobile('9876543210');
+      setPAadhaar('5432 9876 1234');
       setPRole('Batsman');
       setPCategory('Senior Men');
       setPTaluk('Virudhunagar');
@@ -452,7 +641,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
       setStatusType('success');
     } else if (activeRole === 'TEAM') {
       setTeamName('Virudhunagar Super Strikers CC');
-      setCoachName('Coach S. Murugan');
+      setCoachName('Coach Murugan');
       setCoachEmail('coach.murugan@strikerscc.org');
       setTeamTaluk('Virudhunagar');
       const squad: SquadPlayer[] = SAMPLE_15_SQUAD.map((item, idx) => ({
@@ -466,7 +655,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
       setStatusMessage('⚡ Demo Team & 15 Squad Players filled! Scroll down to inspect or click Submit.');
       setStatusType('success');
     } else if (activeRole === 'SCORER') {
-      setSName('K. Ramesh Kumar');
+      setSName('Ramesh Kumar');
       setSEmail('ramesh.scorer@cfvd.org');
       setSMobile('9876543211');
       setSTaluk('Virudhunagar');
@@ -475,12 +664,12 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
       setStatusMessage('⚡ Demo Official Scorer filled! Scroll down to inspect or click Submit.');
       setStatusType('success');
     } else if (activeRole === 'UMPIRE') {
-      setUName('Thiru. K. Sundaram');
+      setUName('Sundaram');
       setUEmail('sundaram.umpire@cfvd.org');
       setUMobile('9876543212');
       setUDob('1985-05-15');
       setUGender('Male');
-      setUExperience('10 years officiating senior district & TNCA league tournaments');
+      setUExperience('10');
       setUYearsOfExperience('10');
       setUQualification('District Certified Umpire');
       setUDistrict('Virudhunagar');
@@ -502,6 +691,16 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
     const email = (customEmail || popupEmail || getTargetEmail()).trim().toLowerCase();
     const name = (customName || getTargetName()).trim();
 
+    // If Team Registration, validate Team Name
+    if (activeRole === 'TEAM') {
+      const teamNameErr = validateTeamNameValue(teamName, 'Team Name');
+      if (teamNameErr) {
+        setFieldErrors((prev) => ({ ...prev, teamName: teamNameErr }));
+        showWarning('Validation Error', teamNameErr);
+        return;
+      }
+    }
+
     const nameErr = validateNameValue(name, activeRole === 'TEAM' ? 'Coach Name' : 'Full Name');
     const emailErr = validateEmailValue(email, activeRole === 'TEAM' ? 'Coach Official Email Address' : 'Email Address');
 
@@ -519,15 +718,49 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
       return;
     }
 
+    // Check duplicate existence across ALL roles before requesting OTP
+    setIsSendingOtp(true);
+    try {
+      const checkRes = await ScorerApi.checkRegistrationExists({
+        role: activeRole,
+        email,
+        name,
+        teamName: activeRole === 'TEAM' ? teamName.trim() : undefined
+      });
+      if (checkRes?.exists) {
+        setIsSendingOtp(false);
+        setIsOtpModalVisible(false);
+        const existMsg = checkRes.message || `${activeRole === 'TEAM' ? 'Team or Coach' : activeRole} with email "${email}" is already registered. Please login directly.`;
+        setStatusMessage(existMsg);
+        setStatusType('error');
+        setOtpModalError(existMsg);
+        await showError('Already Registered', existMsg);
+        return;
+      }
+    } catch (err: any) {
+      setIsSendingOtp(false);
+      setIsOtpModalVisible(false);
+      const existMsg = err?.message || `${activeRole === 'TEAM' ? 'Team or Coach' : activeRole} with email "${email}" is already registered. Please login directly.`;
+      setStatusMessage(existMsg);
+      setStatusType('error');
+      setOtpModalError(existMsg);
+      await showError(
+        err?.status === 409 || err?.message?.toLowerCase().includes('already') || err?.message?.toLowerCase().includes('registered')
+          ? 'Already Registered'
+          : 'Registration Check Failed',
+        existMsg
+      );
+      return;
+    }
+
     setTargetEmail(email);
     setPopupEmail(email);
 
-    setIsSendingOtp(true);
     setStatusMessage(`Sending verification code to ${email}...`);
     setStatusType('info');
 
     try {
-      await ScorerApi.sendRegistrationOtp(email, name, activeRole);
+      await ScorerApi.sendRegistrationOtp(email, name, activeRole, activeRole === 'TEAM' ? teamName.trim() : undefined);
       setOtpSent(true);
       setResendCooldown(30);
       const okMsg = `✓ Verification code sent to ${email}! Enter the 6-digit code below.`;
@@ -539,7 +772,8 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
       setStatusMessage(errMsg);
       setStatusType('error');
       setOtpModalError(errMsg);
-      showError('OTP Request Failed', errMsg);
+      setIsOtpModalVisible(false);
+      showError('Already Registered', errMsg);
     } finally {
       setIsSendingOtp(false);
     }
@@ -547,8 +781,23 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
 
   // Open Cricket OTP Popup Modal
   const openOtpModal = async (triggerSend: boolean = true) => {
+    setStatusMessage(null);
+    setStatusType(null);
+    setOtpModalError(null);
+    setOtpModalSuccess(null);
+
     const email = getTargetEmail();
     const name = getTargetName();
+
+    // If Team Registration, validate Team Name
+    if (activeRole === 'TEAM') {
+      const teamNameErr = validateTeamNameValue(teamName, 'Team Name');
+      if (teamNameErr) {
+        setFieldErrors((prev) => ({ ...prev, teamName: teamNameErr }));
+        showWarning('Validation Error', teamNameErr);
+        return;
+      }
+    }
 
     const nameErr = validateNameValue(name, activeRole === 'TEAM' ? 'Coach Name' : 'Full Name');
     const emailErr = validateEmailValue(email, activeRole === 'TEAM' ? 'Coach Official Email Address' : 'Email Address');
@@ -562,6 +811,42 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
       const firstErr = nameErr || emailErr || 'Please correct errors before verifying email.';
       showWarning('Validation Error', firstErr);
       return;
+    }
+
+    // Check if already registered across ALL roles before opening popup modal or sending OTP
+    setIsSendingOtp(true);
+    try {
+      const checkRes = await ScorerApi.checkRegistrationExists({
+        role: activeRole,
+        email,
+        name,
+        teamName: activeRole === 'TEAM' ? teamName.trim() : undefined
+      });
+
+      if (checkRes?.exists) {
+        setIsSendingOtp(false);
+        setIsOtpModalVisible(false);
+        const existMsg = checkRes.message || `${activeRole === 'TEAM' ? 'Team or Coach' : activeRole} with email "${email}" is already registered. Please login directly.`;
+        setStatusMessage(existMsg);
+        setStatusType('error');
+        await showError('Already Registered', existMsg);
+        return;
+      }
+    } catch (err: any) {
+      setIsSendingOtp(false);
+      setIsOtpModalVisible(false);
+      const existMsg = err?.message || `${activeRole === 'TEAM' ? 'Team or Coach' : activeRole} with email "${email}" is already registered. Please login directly.`;
+      setStatusMessage(existMsg);
+      setStatusType('error');
+      await showError(
+        err?.status === 409 || err?.message?.toLowerCase().includes('already') || err?.message?.toLowerCase().includes('registered')
+          ? 'Already Registered'
+          : 'Registration Check Failed',
+        existMsg
+      );
+      return;
+    } finally {
+      setIsSendingOtp(false);
     }
 
     setPopupEmail(email);
@@ -621,11 +906,16 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
     const name = pName.trim();
     const email = pEmail.trim().toLowerCase();
     const mobile = pMobile.trim();
+    const cleanPhone = mobile.replace(/\D/g, '');
+    const cleanAadhaar = pAadhaar.trim().replace(/\D/g, '');
     const targetTaluk = pTaluk === 'Other' ? pCustomTaluk.trim() : pTaluk;
 
     const nameErr = validateNameValue(name, 'Player Full Name');
     const emailErr = validateEmailValue(email, 'Player Email Address');
-    const mobileErr = validateMobileValue(mobile);
+    const phoneRes = validatePhone(mobile, 'Player Phone Number');
+    const mobileErr = phoneRes.isValid ? null : phoneRes.error;
+    const aadhaarRes = validateAadhaar(pAadhaar);
+    const aadhaarErr = aadhaarRes.isValid ? null : aadhaarRes.error;
     let talukErr: string | null = null;
     if (pTaluk === 'Other' && !targetTaluk) talukErr = 'Please enter your Taluk name.';
 
@@ -633,6 +923,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
     if (nameErr) errs.name = nameErr;
     if (emailErr) errs.email = emailErr;
     if (mobileErr) errs.mobile = mobileErr;
+    if (aadhaarErr) errs.aadhaar = aadhaarErr;
     if (talukErr) errs.taluk = talukErr;
 
     if (Object.keys(errs).length > 0) {
@@ -640,6 +931,30 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
       const firstErr = Object.values(errs)[0];
       showWarning('Validation Error', firstErr || 'Please correct the highlighted validation errors.');
       return;
+    }
+
+    // Check if player email or user is already registered before OTP or submit
+    try {
+      const checkRes = await ScorerApi.checkRegistrationExists({
+        role: 'PLAYER',
+        email,
+        name
+      });
+      if (checkRes?.exists) {
+        const existMsg = checkRes.message || `Player with email "${email}" is already registered. Please login directly.`;
+        setStatusMessage(existMsg);
+        setStatusType('error');
+        await showError('Already Registered', existMsg);
+        return;
+      }
+    } catch (err: any) {
+      if (err?.status === 409 || err?.message?.toLowerCase().includes('already') || err?.message?.toLowerCase().includes('registered')) {
+        const existMsg = err?.message || `Player with email "${email}" is already registered. Please login directly.`;
+        setStatusMessage(existMsg);
+        setStatusType('error');
+        await showError('Already Registered', existMsg);
+        return;
+      }
     }
 
     if (!isEmailVerified) {
@@ -674,12 +989,13 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
       const isBowler = pRole === 'Bowler';
       const isAllRounder = pRole === 'All-Rounder';
       const isWicketKeeper = pRole === 'Wicket Keeper';
+      const isOtherOrBatsman = !isBowler && !isAllRounder && !isWicketKeeper;
 
       let computedBowlingStyle = 'N/A';
       if (isBowler || isAllRounder) {
         computedBowlingStyle = pBowlingAction || `${pBowlingArm} ${pBowlingCategory}`;
-      } else if (isBatsman) {
-        computedBowlingStyle = 'N/A (Batsman)';
+      } else if (isBatsman || isOtherOrBatsman) {
+        computedBowlingStyle = `N/A (${pRole})`;
       } else if (isWicketKeeper) {
         computedBowlingStyle = `N/A (${pKeeperSpec})`;
       }
@@ -688,7 +1004,10 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
         name,
         email,
         password,
-        mobile,
+        mobile: cleanPhone,
+        phone: cleanPhone,
+        aadhaar: cleanAadhaar,
+        aadhaarNumber: cleanAadhaar,
         role: pRole,
         category: pCategory,
         taluk: targetTaluk,
@@ -818,7 +1137,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
 
     const targetTaluk = teamTaluk === 'Other' ? teamCustomTaluk.trim() : teamTaluk;
 
-    const teamNameErr = validateNameValue(teamName, 'Team Name');
+    const teamNameErr = validateTeamNameValue(teamName, 'Team Name');
     const coachNameErr = validateNameValue(coachName, 'Coach Name');
     const coachEmailErr = validateEmailValue(coachEmail, 'Coach Official Email Address');
     let talukErr: string | null = null;
@@ -835,6 +1154,26 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
       const firstErr = Object.values(errs)[0];
       showWarning('Validation Error', firstErr || 'Please correct the highlighted validation errors.');
       return;
+    }
+
+    // Check if team name or coach email is already registered before proceeding with OTP
+    try {
+      const checkRes = await ScorerApi.checkTeamExists(teamName.trim(), coachEmail.trim());
+      if (checkRes?.exists) {
+        const existMsg = checkRes.message || `Team "${teamName.trim()}" is already registered. Please login directly.`;
+        setStatusMessage(existMsg);
+        setStatusType('error');
+        await showError('Team Already Registered', existMsg);
+        return;
+      }
+    } catch (err: any) {
+      if (err?.status === 409 || err?.message?.toLowerCase().includes('already') || err?.message?.toLowerCase().includes('registered')) {
+        const existMsg = err?.message || `Team "${teamName.trim()}" is already registered. Please login directly.`;
+        setStatusMessage(existMsg);
+        setStatusType('error');
+        await showError('Team Already Registered', existMsg);
+        return;
+      }
     }
 
     if (!isEmailVerified) {
@@ -938,6 +1277,30 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
       return;
     }
 
+    // Check if scorer is already registered before OTP or submit
+    try {
+      const checkRes = await ScorerApi.checkRegistrationExists({
+        role: 'SCORER',
+        email,
+        name
+      });
+      if (checkRes?.exists) {
+        const existMsg = checkRes.message || `Official Scorer with email "${email}" is already registered. Please login directly.`;
+        setStatusMessage(existMsg);
+        setStatusType('error');
+        await showError('Already Registered', existMsg);
+        return;
+      }
+    } catch (err: any) {
+      if (err?.status === 409 || err?.message?.toLowerCase().includes('already') || err?.message?.toLowerCase().includes('registered')) {
+        const existMsg = err?.message || `Official Scorer with email "${email}" is already registered. Please login directly.`;
+        setStatusMessage(existMsg);
+        setStatusType('error');
+        await showError('Already Registered', existMsg);
+        return;
+      }
+    }
+
     if (!isEmailVerified) {
       showWarning('Email Verification Required', 'Please verify your official email with OTP before submitting registration.');
       openOtpModal(true);
@@ -1008,8 +1371,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
     const nameErr = validateNameValue(name, 'Umpire Full Name');
     const emailErr = validateEmailValue(email, 'Official Umpire Email');
     const mobileErr = validateMobileValue(uMobile);
-    let expErr: string | null = null;
-    if (!uExperience.trim()) expErr = 'Please enter Umpire Experience.';
+    const expErr = validateExperienceValue(uExperience, 'Umpire Experience');
     let distErr: string | null = null;
     if (uDistrict === 'Other' && !targetDistrict) distErr = 'Please specify your District name.';
 
@@ -1025,6 +1387,30 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
       const firstErr = Object.values(errs)[0];
       showWarning('Validation Error', firstErr || 'Please correct the highlighted validation errors.');
       return;
+    }
+
+    // Check if umpire is already registered before OTP or submit
+    try {
+      const checkRes = await ScorerApi.checkRegistrationExists({
+        role: 'UMPIRE',
+        email,
+        name
+      });
+      if (checkRes?.exists) {
+        const existMsg = checkRes.message || `Official Umpire with email "${email}" is already registered. Please login directly.`;
+        setStatusMessage(existMsg);
+        setStatusType('error');
+        await showError('Already Registered', existMsg);
+        return;
+      }
+    } catch (err: any) {
+      if (err?.status === 409 || err?.message?.toLowerCase().includes('already') || err?.message?.toLowerCase().includes('registered')) {
+        const existMsg = err?.message || `Official Umpire with email "${email}" is already registered. Please login directly.`;
+        setStatusMessage(existMsg);
+        setStatusType('error');
+        await showError('Already Registered', existMsg);
+        return;
+      }
     }
 
     if (!isEmailVerified) {
@@ -1181,7 +1567,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                       }));
                     }}
                     secureTextEntry={!showPassword}
-                    placeholder="Enter password (e.g. User@2026#)"
+                    placeholder="Enter password (e.g. User12@26)"
                     placeholderTextColor="#94a3b8"
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
@@ -1216,7 +1602,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
             </View>
 
             {/* Password Validation Requirements Pill Box */}
-            {/* <View style={{ marginTop: 8, padding: 8, backgroundColor: '#f8fafc', borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' }}>
+            <View style={{ marginTop: 8, padding: 8, backgroundColor: '#f8fafc', borderRadius: 6, borderWidth: 1, borderColor: '#e2e8f0' }}>
               <Text style={{ fontSize: 11, fontWeight: '700', color: '#334155', marginBottom: 4 }}>
                 🔒 Password Rules (Required for Login & Register):
               </Text>
@@ -1231,13 +1617,25 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     {/[A-Z]/.test(password) ? '✓' : '○'} 1 Uppercase (A-Z)
                   </Text>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 2) ? '#dcfce7' : '#ffffff', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 2) ? '#86efac' : '#cbd5e1' }}>
-                  <Text style={{ fontSize: 10.5, fontWeight: '700', color: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 2) ? '#15803d' : '#64748b' }}>
-                    {((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 2) ? '✓' : '○'} 2 Special Chars (e.g. !@#$)
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 1) ? '#dcfce7' : '#ffffff', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 1) ? '#86efac' : '#cbd5e1' }}>
+                  <Text style={{ fontSize: 10.5, fontWeight: '700', color: ((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 1) ? '#15803d' : '#64748b' }}>
+                    {((password.match(/[^A-Za-z0-9\s]/g) || []).length >= 1) ? '✓' : '○'} 1 Special Char (e.g. !@#$)
                   </Text>
                 </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: ((password.match(/[0-9]/g) || []).length >= 2) ? '#dcfce7' : '#ffffff', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: ((password.match(/[0-9]/g) || []).length >= 2) ? '#86efac' : '#cbd5e1' }}>
+                  <Text style={{ fontSize: 10.5, fontWeight: '700', color: ((password.match(/[0-9]/g) || []).length >= 2) ? '#15803d' : '#64748b' }}>
+                    {((password.match(/[0-9]/g) || []).length >= 2) ? '✓' : '○'} 2 Numbers (0-9)
+                  </Text>
+                </View>
+                {confirmPassword ? (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: (password && password === confirmPassword) ? '#dcfce7' : '#fef2f2', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, borderWidth: 1, borderColor: (password && password === confirmPassword) ? '#86efac' : '#fca5a5' }}>
+                    <Text style={{ fontSize: 10.5, fontWeight: '700', color: (password && password === confirmPassword) ? '#15803d' : '#dc2626' }}>
+                      {(password && password === confirmPassword) ? '✓' : '✗'} Passwords Match
+                    </Text>
+                  </View>
+                ) : null}
               </View>
-            </View> */}
+            </View>
           </View>
         )}
       </View>
@@ -1248,6 +1646,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
   const isBowler = pRole === 'Bowler';
   const isAllRounder = pRole === 'All-Rounder';
   const isWicketKeeper = pRole === 'Wicket Keeper';
+  const isOtherOrBatsman = !isBowler && !isAllRounder && !isWicketKeeper;
 
   return (
     <PickerContext.Provider value={openPicker}>
@@ -1357,13 +1756,13 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                   </View>
 
                   <View style={styles.headerRightActions}>
-                    <TouchableOpacity
+                    {/* <TouchableOpacity
                       style={styles.demoFillBtn}
                       activeOpacity={0.8}
                       onPress={handleDemoFill}
                     >
                       <Text style={styles.demoFillBtnText}>⚡ Demo Fill</Text>
-                    </TouchableOpacity>
+                    </TouchableOpacity> */}
 
                     {/* Dropdown Box for Selecting Role */}
                     <View style={styles.roleDropdownWrapper}>
@@ -1435,19 +1834,20 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     </View>
                   </View>
 
-                  {/* Row 1: Player Full Name (left) & Mobile Number (right) */}
-                  <View style={styles.formRow}>
+                  {/* Row 1: Player Full Name (left) & Player Email Address (right) */}
+                  <View style={[styles.formRow, isMobile && { flexDirection: 'column' }]}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.label}>Player Full Name *</Text>
                       <TextInput
                         style={[styles.input, fieldErrors.name && styles.inputError]}
                         value={pName}
                         onChangeText={(val) => {
-                          setPName(val);
-                          const err = validateNameValue(val, 'Player Name');
+                          const sanitized = val.replace(/[^a-zA-Z\s]/g, '');
+                          setPName(sanitized);
+                          const err = validateNameValue(sanitized, 'Player Name');
                           setFieldErrors((prev) => ({ ...prev, name: err || undefined }));
                         }}
-                        placeholder="e.g. R. Saravanan"
+                        placeholder="e.g. Saravanan"
                         placeholderTextColor="#94a3b8"
                         autoCapitalize="words"
                       />
@@ -1456,40 +1856,18 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                       )}
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Mobile Number (10 Digits) *</Text>
-                      <TextInput
-                        style={[styles.input, fieldErrors.mobile && styles.inputError]}
-                        value={pMobile}
-                        onChangeText={(val) => {
-                          setPMobile(val);
-                          const err = validateMobileValue(val);
-                          setFieldErrors((prev) => ({ ...prev, mobile: err || undefined }));
-                        }}
-                        placeholder="e.g. 9876543210"
-                        keyboardType="phone-pad"
-                        placeholderTextColor="#94a3b8"
-                        maxLength={10}
-                      />
-                      {fieldErrors.mobile && (
-                        <Text style={styles.fieldErrorText}>⚠️ {fieldErrors.mobile}</Text>
-                      )}
-                    </View>
-                  </View>
-
-                  {/* Row 2: Player Email Address */}
-                  <View style={styles.formRow}>
-                    <View style={{ flex: 1 }}>
                       <Text style={styles.label}>Player Email Address *</Text>
                       <TextInput
                         style={[styles.input, fieldErrors.email && styles.inputError]}
                         value={pEmail}
                         onChangeText={(val) => {
-                          setPEmail(val);
+                          const sanitized = val.replace(/[^a-zA-Z0-9_.@]/g, '');
+                          setPEmail(sanitized);
                           if (isEmailVerified) {
                             setIsEmailVerified(false);
                             setOtpSent(false);
                           }
-                          const err = validateEmailValue(val, 'Player Email Address');
+                          const err = validateEmailValue(sanitized, 'Player Email Address');
                           setFieldErrors((prev) => ({ ...prev, email: err || undefined }));
                         }}
                         placeholder="e.g. saravanan@example.com"
@@ -1503,18 +1881,128 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     </View>
                   </View>
 
+                  {/* Row 2: Phone Number (10 Digits) & Aadhaar Number (12 Digits) */}
+                  <View style={[styles.formRow, isMobile && { flexDirection: 'column' }]}>
+                    {/* Phone Number Input */}
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <FontAwesome name="phone" size={13} color="#0284c7" />
+                          <Text style={styles.label}>Phone Number (10 Digits) *</Text>
+                        </View>
+                        <Text style={{ fontSize: 10, color: pMobile.replace(/\D/g, '').length === 10 ? '#16a34a' : '#64748b', fontWeight: '700' }}>
+                          {pMobile.replace(/\D/g, '').length === 10 ? '✓ 10/10 Digits' : `(${pMobile.replace(/\D/g, '').length}/10)`}
+                        </Text>
+                      </View>
+                      <View style={[styles.dynamicInputWrap, fieldErrors.mobile ? styles.inputError : (pMobile.replace(/\D/g, '').length === 10 ? styles.dynamicInputSuccess : null)]}>
+                        <View style={styles.phonePrefixBox}>
+                          <Text style={styles.phonePrefixText}>🇮🇳 +91</Text>
+                        </View>
+                        <TextInput
+                          style={styles.dynamicInputCore}
+                          value={pMobile}
+                          onChangeText={(val) => {
+                            const cleaned = formatPhone(val);
+                            setPMobile(cleaned);
+                            if (cleaned.length === 10) {
+                              const res = validatePhone(cleaned, 'Player Phone Number');
+                              setFieldErrors((prev) => ({ ...prev, mobile: res.isValid ? undefined : res.error }));
+                            } else {
+                              setFieldErrors((prev) => ({ ...prev, mobile: undefined }));
+                            }
+                          }}
+                          onBlur={() => {
+                            if (pMobile.trim()) {
+                              const res = validatePhone(pMobile, 'Player Phone Number');
+                              setFieldErrors((prev) => ({ ...prev, mobile: res.isValid ? undefined : res.error }));
+                            }
+                          }}
+                          placeholder="9876543210"
+                          keyboardType="phone-pad"
+                          placeholderTextColor="#94a3b8"
+                          maxLength={10}
+                        />
+                        {pMobile.replace(/\D/g, '').length === 10 && (
+                          <View style={styles.validCheckBadge}>
+                            <Text style={styles.validCheckText}>✓</Text>
+                          </View>
+                        )}
+                      </View>
+                      {fieldErrors.mobile ? (
+                        <Text style={styles.fieldErrorText}>⚠️ {fieldErrors.mobile}</Text>
+                      ) : (
+                        <Text style={styles.helperText}>Used for official match alerts & communication</Text>
+                      )}
+                    </View>
+
+                    {/* Aadhaar Number Input */}
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          <FontAwesome name="id-card" size={13} color="#b91c1c" />
+                          <Text style={styles.label}>Aadhaar Number (12 Digits) *</Text>
+                        </View>
+                        <Text style={{ fontSize: 10, color: pAadhaar.replace(/\D/g, '').length === 12 ? '#16a34a' : '#64748b', fontWeight: '700' }}>
+                          {pAadhaar.replace(/\D/g, '').length === 12 ? '✓ 12/12 Digits' : `(${pAadhaar.replace(/\D/g, '').length}/12)`}
+                        </Text>
+                      </View>
+                      <View style={[styles.dynamicInputWrap, fieldErrors.aadhaar ? styles.inputError : (pAadhaar.replace(/\D/g, '').length === 12 ? styles.dynamicInputSuccess : null)]}>
+                        <View style={styles.aadhaarIconBox}>
+                          <Text style={{ fontSize: 11, fontWeight: '800', color: '#b91c1c' }}>UIDAI</Text>
+                        </View>
+                        <TextInput
+                          style={styles.dynamicInputCore}
+                          value={pAadhaar}
+                          onChangeText={(val) => {
+                            const formatted = formatAadhaar(val);
+                            setPAadhaar(formatted);
+                            const rawDigits = formatted.replace(/\D/g, '');
+                            if (rawDigits.length === 12) {
+                              const res = validateAadhaar(rawDigits);
+                              setFieldErrors((prev) => ({ ...prev, aadhaar: res.isValid ? undefined : res.error }));
+                            } else if (rawDigits.length > 0 && (rawDigits[0] === '0' || rawDigits[0] === '1')) {
+                              setFieldErrors((prev) => ({ ...prev, aadhaar: 'Aadhaar number cannot start with 0 or 1.' }));
+                            } else {
+                              setFieldErrors((prev) => ({ ...prev, aadhaar: undefined }));
+                            }
+                          }}
+                          onBlur={() => {
+                            if (pAadhaar.trim()) {
+                              const res = validateAadhaar(pAadhaar);
+                              setFieldErrors((prev) => ({ ...prev, aadhaar: res.isValid ? undefined : res.error }));
+                            }
+                          }}
+                          placeholder="5432 9876 1234"
+                          keyboardType="number-pad"
+                          placeholderTextColor="#94a3b8"
+                          maxLength={14}
+                        />
+                        {pAadhaar.replace(/\D/g, '').length === 12 && (
+                          <View style={[styles.validCheckBadge, { backgroundColor: '#16a34a' }]}>
+                            <Text style={styles.validCheckText}>✓</Text>
+                          </View>
+                        )}
+                      </View>
+                      {fieldErrors.aadhaar ? (
+                        <Text style={styles.fieldErrorText}>⚠️ {fieldErrors.aadhaar}</Text>
+                      ) : (
+                        <Text style={styles.helperText}>Indian 12-digit National Identification Number</Text>
+                      )}
+                    </View>
+                  </View>
+
                   {/* Row 3: Playing Role (left) & Taluk Jurisdiction (right) Dropdowns */}
                   <View style={styles.formRow}>
                     <DropdownField
                       label="Playing Role"
                       value={pRole}
-                      options={PLAYER_ROLES}
+                      options={dynamicPlayerRoles}
                       onSelect={handleRoleChange}
                     />
                     <DropdownField
                       label="Taluk Jurisdiction"
                       value={pTaluk}
-                      options={TALUK_OPTIONS}
+                      options={dynamicTaluks}
                       onSelect={(val) => {
                         setPTaluk(val);
                         if (val !== 'Other') setPCustomTaluk('');
@@ -1546,26 +2034,24 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     </View>
                   )}
 
-                  {/* Dynamic Role Specialization Columns */}
-                  {/* Case 1: Batsman */}
-                  {isBatsman && (
-                    <View style={styles.formRow}>
-                      <DropdownField
-                        label="Batting Style"
-                        value={pBattingStyle}
-                        options={BATTING_STYLES}
-                        onSelect={setPBattingStyle}
-                      />
-                      <DropdownField
-                        label="Age Category"
-                        value={pCategory}
-                        options={AGE_CATEGORIES}
-                        onSelect={setPCategory}
-                      />
-                    </View>
-                  )}
+                  {/* Common Cricketing Attributes: Batting Style & Age Category */}
+                  <View style={styles.formRow}>
+                    <DropdownField
+                      label="Batting Style"
+                      value={pBattingStyle}
+                      options={dynamicBattingStyles}
+                      onSelect={setPBattingStyle}
+                    />
+                    <DropdownField
+                      label="Age Category"
+                      value={pCategory}
+                      options={dynamicAgeCategories}
+                      onSelect={setPCategory}
+                    />
+                  </View>
 
-                  {/* Case 2: Bowler */}
+                  {/* Dynamic Role Specialization Columns */}
+                  {/* Case 1: Bowler Additional Fields */}
                   {isBowler && (
                     <>
                       <View style={styles.formRow}>
@@ -1589,40 +2075,28 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                           options={getBowlingActionOptions(pBowlingArm, pBowlingCategory)}
                           onSelect={setPBowlingAction}
                         />
-                        <DropdownField
-                          label="Batting Hand"
-                          value={pBattingStyle}
-                          options={BATTING_STYLES}
-                          onSelect={setPBattingStyle}
-                        />
                       </View>
                     </>
                   )}
 
-                  {/* Case 3: All-Rounder */}
+                  {/* Case 2: All-Rounder Additional Fields */}
                   {isAllRounder && (
                     <>
                       <View style={styles.formRow}>
-                        <DropdownField
-                          label="Batting Hand / Style"
-                          value={pBattingStyle}
-                          options={BATTING_STYLES}
-                          onSelect={setPBattingStyle}
-                        />
                         <DropdownField
                           label="Bowling Arm"
                           value={pBowlingArm}
                           options={BOWLING_ARMS}
                           onSelect={handleBowlingArmChange}
                         />
-                      </View>
-                      <View style={styles.formRow}>
                         <DropdownField
                           label="Bowling Type"
                           value={pBowlingCategory}
                           options={BOWLING_CATEGORIES}
                           onSelect={handleBowlingCategoryChange}
                         />
+                      </View>
+                      <View style={styles.formRow}>
                         <DropdownField
                           label="Bowling Action / Sub-Type"
                           value={pBowlingAction}
@@ -1633,15 +2107,9 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     </>
                   )}
 
-                  {/* Case 4: Wicket Keeper */}
+                  {/* Case 3: Wicket Keeper Additional Fields */}
                   {isWicketKeeper && (
                     <View style={styles.formRow}>
-                      <DropdownField
-                        label="Batting Hand / Style"
-                        value={pBattingStyle}
-                        options={BATTING_STYLES}
-                        onSelect={setPBattingStyle}
-                      />
                       <DropdownField
                         label="Keeper Specialization"
                         value={pKeeperSpec}
@@ -1655,7 +2123,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                   <View style={styles.cricketSummaryBadge}>
                     <Text style={styles.cricketSummaryText}>
                       🏏 <Text style={{ fontWeight: '800', color: '#b45309' }}>Role Specification:</Text>{' '}
-                      {isBatsman && `${pBattingStyle} • ${pCategory}`}
+                      {(isBatsman || isOtherOrBatsman) && `${pBattingStyle} • ${pCategory}`}
                       {isBowler && `${pBowlingAction} (${pBowlingArm} ${pBowlingCategory}) • Bat: ${pBattingStyle}`}
                       {isAllRounder && `Bat: ${pBattingStyle} • Bowl: ${pBowlingAction}`}
                       {isWicketKeeper && `${pBattingStyle} • ${pKeeperSpec}`}
@@ -1700,6 +2168,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                   </TouchableOpacity>
                 </>
               )}
+              {/* PLAYER REGISTRATION - COMMENTED OUT */}
 
               {/* ========================================================= */}
               {/* 2. TEAM & COACH FORM */}
@@ -1723,11 +2192,12 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                         style={[styles.input, fieldErrors.teamName && styles.inputError]}
                         value={teamName}
                         onChangeText={(val) => {
-                          setTeamName(val);
-                          const err = validateNameValue(val, 'Team Name');
+                          const sanitized = val.replace(/[^a-zA-Z0-9_\s]/g, '');
+                          setTeamName(sanitized);
+                          const err = validateTeamNameValue(sanitized, 'Team Name');
                           setFieldErrors((prev) => ({ ...prev, teamName: err || undefined }));
                         }}
-                        placeholder="e.g. Sivakasi Super Strikers"
+                        placeholder="e.g. Sivakasi Super_Strikers"
                         placeholderTextColor="#94a3b8"
                       />
                       {fieldErrors.teamName && (
@@ -1740,11 +2210,12 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                         style={[styles.input, fieldErrors.name && styles.inputError]}
                         value={coachName}
                         onChangeText={(val) => {
-                          setCoachName(val);
-                          const err = validateNameValue(val, 'Coach Name');
+                          const sanitized = val.replace(/[^a-zA-Z\s]/g, '');
+                          setCoachName(sanitized);
+                          const err = validateNameValue(sanitized, 'Coach Name');
                           setFieldErrors((prev) => ({ ...prev, name: err || undefined }));
                         }}
-                        placeholder="e.g. Coach S. Murugan"
+                        placeholder="e.g. Murugan"
                         placeholderTextColor="#94a3b8"
                       />
                       {fieldErrors.name && (
@@ -1761,12 +2232,13 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                         style={[styles.input, fieldErrors.email && styles.inputError]}
                         value={coachEmail}
                         onChangeText={(val) => {
-                          setCoachEmail(val);
+                          const sanitized = val.replace(/[^a-zA-Z0-9_.@]/g, '');
+                          setCoachEmail(sanitized);
                           if (isEmailVerified) {
                             setIsEmailVerified(false);
                             setOtpSent(false);
                           }
-                          const err = validateEmailValue(val, 'Coach Official Email Address');
+                          const err = validateEmailValue(sanitized, 'Coach Official Email Address');
                           setFieldErrors((prev) => ({ ...prev, email: err || undefined }));
                         }}
                         placeholder="e.g. coach@strikerscc.org"
@@ -1781,7 +2253,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     <DropdownField
                       label="Team Taluk Jurisdiction"
                       value={teamTaluk}
-                      options={TALUK_OPTIONS}
+                      options={dynamicTaluks}
                       onSelect={(val) => {
                         setTeamTaluk(val);
                         if (val !== 'Other') setTeamCustomTaluk('');
@@ -1838,8 +2310,9 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                           style={[styles.input, { marginBottom: 0 }, fieldErrors.squadPlayerName && styles.inputError]}
                           value={squadPlayerName}
                           onChangeText={(val) => {
-                            setSquadPlayerName(val);
-                            const err = validateNameValue(val, 'Squad Player Name');
+                            const sanitized = val.replace(/[^a-zA-Z\s]/g, '');
+                            setSquadPlayerName(sanitized);
+                            const err = validateNameValue(sanitized, 'Squad Player Name');
                             setFieldErrors((prev) => ({ ...prev, squadPlayerName: err || undefined }));
                           }}
                           placeholder="Player Full Name"
@@ -1854,8 +2327,9 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                           style={[styles.input, { marginBottom: 0 }, fieldErrors.squadPlayerEmail && styles.inputError]}
                           value={squadPlayerEmail}
                           onChangeText={(val) => {
-                            setSquadPlayerEmail(val);
-                            const err = validateEmailValue(val, 'Squad Player Email');
+                            const sanitized = val.replace(/[^a-zA-Z0-9_.@]/g, '');
+                            setSquadPlayerEmail(sanitized);
+                            const err = validateEmailValue(sanitized, 'Squad Player Email');
                             setFieldErrors((prev) => ({ ...prev, squadPlayerEmail: err || undefined }));
                           }}
                           placeholder="Player Email Address"
@@ -1872,7 +2346,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                       <DropdownField
                         label="Squad Role"
                         value={squadPlayerRole}
-                        options={COMMON_ROLES}
+                        options={dynamicPlayerRoles}
                         onSelect={setSquadPlayerRole}
                       />
                       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
@@ -1974,11 +2448,12 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                         style={[styles.input, fieldErrors.name && styles.inputError]}
                         value={sName}
                         onChangeText={(val) => {
-                          setSName(val);
-                          const err = validateNameValue(val, 'Scorer Name');
+                          const sanitized = val.replace(/[^a-zA-Z\s]/g, '');
+                          setSName(sanitized);
+                          const err = validateNameValue(sanitized, 'Scorer Name');
                           setFieldErrors((prev) => ({ ...prev, name: err || undefined }));
                         }}
-                        placeholder="e.g. S. Ramesh"
+                        placeholder="e.g. Ramesh"
                         placeholderTextColor="#94a3b8"
                         autoCapitalize="words"
                       />
@@ -2015,12 +2490,13 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                         style={[styles.input, fieldErrors.email && styles.inputError]}
                         value={sEmail}
                         onChangeText={(val) => {
-                          setSEmail(val);
+                          const sanitized = val.replace(/[^a-zA-Z0-9_.@]/g, '');
+                          setSEmail(sanitized);
                           if (isEmailVerified) {
                             setIsEmailVerified(false);
                             setOtpSent(false);
                           }
-                          const err = validateEmailValue(val, 'Official Scorer Email');
+                          const err = validateEmailValue(sanitized, 'Official Scorer Email');
                           setFieldErrors((prev) => ({ ...prev, email: err || undefined }));
                         }}
                         placeholder="e.g. ramesh.scorer@cfvd.org"
@@ -2039,13 +2515,13 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     <DropdownField
                       label="Certification Level"
                       value={sLevel}
-                      options={SCORER_LEVELS}
+                      options={dynamicScorerLevels}
                       onSelect={setSLevel}
                     />
                     <DropdownField
                       label="Taluk Jurisdiction"
                       value={sTaluk}
-                      options={TALUK_OPTIONS}
+                      options={dynamicTaluks}
                       onSelect={(val) => {
                         setSTaluk(val);
                         if (val !== 'Other') setSCustomTaluk('');
@@ -2138,11 +2614,12 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                         style={[styles.input, fieldErrors.name && styles.inputError]}
                         value={uName}
                         onChangeText={(val) => {
-                          setUName(val);
-                          const err = validateNameValue(val, 'Umpire Name');
+                          const sanitized = val.replace(/[^a-zA-Z\s]/g, '');
+                          setUName(sanitized);
+                          const err = validateNameValue(sanitized, 'Umpire Name');
                           setFieldErrors((prev) => ({ ...prev, name: err || undefined }));
                         }}
-                        placeholder="e.g. K. Sundararajan"
+                        placeholder="e.g. Sundararajan"
                         placeholderTextColor="#94a3b8"
                         autoCapitalize="words"
                       />
@@ -2179,12 +2656,13 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                         style={[styles.input, fieldErrors.email && styles.inputError]}
                         value={uEmail}
                         onChangeText={(val) => {
-                          setUEmail(val);
+                          const sanitized = val.replace(/[^a-zA-Z0-9_.@]/g, '');
+                          setUEmail(sanitized);
                           if (isEmailVerified) {
                             setIsEmailVerified(false);
                             setOtpSent(false);
                           }
-                          const err = validateEmailValue(val, 'Official Umpire Email');
+                          const err = validateEmailValue(sanitized, 'Official Umpire Email');
                           setFieldErrors((prev) => ({ ...prev, email: err || undefined }));
                         }}
                         placeholder="e.g. sundararajan.umpire@cfvd.org"
@@ -2203,20 +2681,24 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     <DropdownField
                       label="Umpire Certification / Qualification *"
                       value={uQualification}
-                      options={UMPIRE_QUALIFICATIONS}
+                      options={dynamicUmpireQualifications}
                       onSelect={setUQualification}
                     />
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.label}>Umpire Experience *</Text>
+                      <Text style={styles.label}>Umpire Experience (Years) *</Text>
                       <TextInput
                         style={[styles.input, fieldErrors.experience && styles.inputError]}
                         value={uExperience}
                         onChangeText={(val) => {
-                          setUExperience(val);
-                          setFieldErrors((prev) => ({ ...prev, experience: val.trim() ? undefined : 'Please enter Umpire Experience.' }));
+                          const numeric = val.replace(/\D/g, '');
+                          setUExperience(numeric);
+                          const err = validateExperienceValue(numeric, 'Umpire Experience');
+                          setFieldErrors((prev) => ({ ...prev, experience: err || undefined }));
                         }}
-                        placeholder="e.g. 6 Years / Senior Panel"
+                        placeholder="e.g. 6"
+                        keyboardType="numeric"
                         placeholderTextColor="#94a3b8"
+                        maxLength={2}
                       />
                       {fieldErrors.experience && (
                         <Text style={styles.fieldErrorText}>⚠️ {fieldErrors.experience}</Text>
@@ -2227,9 +2709,9 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                   {/* Row 4: District & State */}
                   <View style={styles.formRow}>
                     <DropdownField
-                      label="District *"
+                      label="District / Taluk *"
                       value={uDistrict}
-                      options={DISTRICT_OPTIONS}
+                      options={dynamicTaluks}
                       onSelect={(val) => {
                         setUDistrict(val);
                         if (val !== 'Other') setUCustomDistrict('');
@@ -2239,7 +2721,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     <DropdownField
                       label="State *"
                       value={uState}
-                      options={STATE_OPTIONS}
+                      options={dynamicStates}
                       onSelect={setUState}
                     />
                   </View>
@@ -2297,7 +2779,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                           <TextInput
                             style={styles.input}
                             value={uYearsOfExperience}
-                            onChangeText={setUYearsOfExperience}
+                            onChangeText={(val) => setUYearsOfExperience(val.replace(/\D/g, ''))}
                             placeholder="e.g. 6"
                             keyboardType="number-pad"
                             placeholderTextColor="#94a3b8"
@@ -2507,8 +2989,9 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                           style={styles.popupEmailInput}
                           value={popupEmail}
                           onChangeText={(val) => {
-                            setPopupEmail(val);
-                            setTargetEmail(val);
+                            const sanitized = val.replace(/[^a-zA-Z0-9_.@]/g, '');
+                            setPopupEmail(sanitized);
+                            setTargetEmail(sanitized);
                           }}
                           placeholder="your.email@example.com"
                           placeholderTextColor="#94a3b8"
@@ -2635,8 +3118,9 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                           style={styles.popupEmailInput}
                           value={popupEmail}
                           onChangeText={(val) => {
-                            setPopupEmail(val);
-                            setTargetEmail(val);
+                            const sanitized = val.replace(/[^a-zA-Z0-9_.@]/g, '');
+                            setPopupEmail(sanitized);
+                            setTargetEmail(sanitized);
                           }}
                           placeholder="your.email@example.com"
                           placeholderTextColor="#94a3b8"
@@ -2749,10 +3233,10 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
               {isDesktop ? (
                 /* Desktop 2-Column Side-by-Side Layout */
                 <View style={styles.approvalDesktopContainer}>
-                  {/* Left Column: Full Virat Kohli HD Celebration Image */}
+                  {/* Left Column: Full Authentic Cricket Hero Artwork (No Celebrity) */}
                   <View style={styles.approvalHeroImageContainer}>
                     <Image
-                      source={require('../../../assets/virat_kohli_otp.png')}
+                      source={require('../../../assets/cricket_verification_hero.png')}
                       style={styles.approvalHeroFullImage}
                       resizeMode="cover"
                     />
@@ -2772,7 +3256,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     {/* Bottom Overlay Info */}
                     <View style={styles.approvalHeroBottomOverlay}>
                       <View style={styles.approvalBadgePill}>
-                        <Text style={styles.approvalBadgePillText}>🏏 OFFICIAL VERIFICATION</Text>
+                        <Text style={styles.approvalBadgePillText}>🏏 OFFICIAL CRICKET VERIFICATION</Text>
                       </View>
                       <Text style={styles.approvalHeroTitle}>CRICKET FEDERATION OF</Text>
                       <Text style={styles.approvalHeroSubTitle}>VIRUDHUNAGAR DISTRICT</Text>
@@ -2788,7 +3272,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                       {/* Top Bar with Pending Pill & Close X */}
                       <View style={styles.approvalTopBarRow}>
                         <View style={styles.approvalStatusPill}>
-                          <Text style={styles.approvalStatusPillText}>⏳ PENDING ADMIN VERIFICATION</Text>
+                          <Text style={styles.approvalStatusPillText}>⏳ WAITING FOR ADMIN APPROVAL</Text>
                         </View>
                         <TouchableOpacity
                           style={styles.approvalCloseCircle}
@@ -2805,20 +3289,20 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                       {/* Header Row */}
                       <View style={styles.approvalHeaderRow}>
                         <View style={styles.approvalIconCircle}>
-                          <Text style={styles.approvalIconText}>🛡️</Text>
+                          <Text style={styles.approvalIconText}>🏏</Text>
                         </View>
                         <View style={{ flex: 1, marginLeft: 12 }}>
                           <Text style={styles.approvalMainHeading}>Registration Submitted Successfully!</Text>
-                          <Text style={styles.approvalSubHeading}>District Administrator Verification Required</Text>
+                          <Text style={styles.approvalSubHeading}>District Admin Verification in Progress</Text>
                         </View>
                       </View>
 
-                      {/* 4-Step Verification Workflow Diagram */}
+                      {/* 4-Step Verification Workflow Normal Diagram */}
                       <View style={styles.flowDiagramCard}>
                         <View style={styles.flowDiagramHeader}>
-                          <Text style={styles.flowDiagramTitle}>VERIFICATION & ACCESS WORKFLOW</Text>
+                          <Text style={styles.flowDiagramTitle}>HOW VERIFICATION WORKS (4 SIMPLE STEPS)</Text>
                           <Text style={styles.flowDiagramSubtitle}>
-                            Follow the progress of your {pendingApprovalData?.role ? pendingApprovalData.role.toLowerCase() : 'official'} credentials
+                            Track the progress of your {pendingApprovalData?.role ? pendingApprovalData.role.toLowerCase() : 'official'} account
                           </Text>
                         </View>
 
@@ -2826,20 +3310,11 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                           {/* Step 1 */}
                           <View style={styles.flowStepItem}>
                             <View style={[styles.flowStepIconCircle, styles.flowStepCompleted]}>
-                              <Text style={styles.flowStepIcon}>📝</Text>
-                              <View style={styles.flowStepCheckBadge}>
-                                <Text style={styles.flowStepCheckText}>✓</Text>
-                              </View>
+                              <Text style={styles.flowStepIcon}>✓</Text>
                             </View>
                             <Text style={styles.flowStepNum}>STEP 1</Text>
-                            <Text style={styles.flowStepLabel}>
-                              {pendingApprovalData?.role?.includes('Umpire')
-                                ? 'Umpire Registration'
-                                : pendingApprovalData?.role?.includes('Team')
-                                ? 'Team Registration'
-                                : 'Scorer Registration'}
-                            </Text>
-                            <Text style={styles.flowStepStatusGreen}>Submitted</Text>
+                            <Text style={styles.flowStepLabel}>Form Sent</Text>
+                            <Text style={styles.flowStepStatusGreen}>Done</Text>
                           </View>
 
                           <View style={styles.flowArrowContainer}>
@@ -2849,14 +3324,11 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                           {/* Step 2 */}
                           <View style={styles.flowStepItem}>
                             <View style={[styles.flowStepIconCircle, styles.flowStepActive]}>
-                              <Text style={styles.flowStepIcon}>🛡️</Text>
-                              <View style={styles.flowStepWaitBadge}>
-                                <Text style={styles.flowStepWaitText}>⏳</Text>
-                              </View>
+                              <Text style={styles.flowStepIcon}>⏳</Text>
                             </View>
                             <Text style={styles.flowStepNum}>STEP 2</Text>
-                            <Text style={styles.flowStepLabel}>Admin Approval</Text>
-                            <Text style={styles.flowStepStatusAmber}>In Review</Text>
+                            <Text style={styles.flowStepLabel}>Admin Review</Text>
+                            <Text style={styles.flowStepStatusAmber}>Checking Now</Text>
                           </View>
 
                           <View style={styles.flowArrowContainer}>
@@ -2869,8 +3341,8 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                               <Text style={styles.flowStepIcon}>✉️</Text>
                             </View>
                             <Text style={styles.flowStepNum}>STEP 3</Text>
-                            <Text style={styles.flowStepLabel}>Email Confirmation</Text>
-                            <Text style={styles.flowStepStatusMuted}>Sent to Inbox</Text>
+                            <Text style={styles.flowStepLabel}>Email Notice</Text>
+                            <Text style={styles.flowStepStatusMuted}>Next</Text>
                           </View>
 
                           <View style={styles.flowArrowContainer}>
@@ -2883,14 +3355,8 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                               <Text style={styles.flowStepIcon}>🔑</Text>
                             </View>
                             <Text style={styles.flowStepNum}>STEP 4</Text>
-                            <Text style={styles.flowStepLabel}>Portal Login</Text>
-                            <Text style={styles.flowStepStatusMuted}>
-                              {pendingApprovalData?.role?.includes('Umpire')
-                                ? 'Access Umpire'
-                                : pendingApprovalData?.role?.includes('Team')
-                                ? 'Access Team'
-                                : 'Access Scorer'}
-                            </Text>
+                            <Text style={styles.flowStepLabel}>Login & Play</Text>
+                            <Text style={styles.flowStepStatusMuted}>Ready 🏏</Text>
                           </View>
                         </View>
                       </View>
@@ -2903,13 +3369,13 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                             <Text style={styles.approvalDetailVal}>{pendingApprovalData.name}</Text>
                           </View>
                           <View style={styles.approvalDetailRow}>
-                            <Text style={styles.approvalDetailLabel}>Role / Category:</Text>
+                            <Text style={styles.approvalDetailLabel}>Applied Role:</Text>
                             <Text style={styles.approvalDetailVal}>{pendingApprovalData.role}</Text>
                           </View>
                           {pendingApprovalData.certificationLevel && (
                             <View style={styles.approvalDetailRow}>
                               <Text style={styles.approvalDetailLabel}>Certification Level:</Text>
-                              <Text style={[styles.approvalDetailVal, { color: '#f59e0b', fontWeight: '800' }]}>
+                              <Text style={[styles.approvalDetailVal, { color: '#d97706', fontWeight: '800' }]}>
                                 🏅 {pendingApprovalData.certificationLevel}
                               </Text>
                             </View>
@@ -2927,17 +3393,20 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                         </View>
                       )}
 
-                      {/* Official English Notice Box */}
+                      {/* Official Simple English Notice Box */}
                       <View style={styles.approvalNoticeBox}>
                         <View style={styles.approvalNoticeHeaderRow}>
                           <Text style={styles.approvalNoticeHeaderIcon}>📢</Text>
-                          <Text style={styles.approvalNoticeHeading}>District Administrator Verification Notice</Text>
+                          <Text style={styles.approvalNoticeHeading}>What Happens Next?</Text>
                         </View>
                         <Text style={styles.approvalNoticeEnglish}>
-                          Your registration application and certification documents have been submitted to the District Cricket Administrator (CFVD) for official verification.
+                          1. Your registration application has been submitted to the Cricket Federation of Virudhunagar District (CFVD).
                         </Text>
-                        <Text style={[styles.approvalNoticeEnglish, { marginTop: 6, color: '#fde047' }]}>
-                          Once the Administrator approves your profile, an official confirmation email will be dispatched to <Text style={{ fontWeight: '800' }}>{pendingApprovalData?.email || 'your email'}</Text>. Your account status will be set to ACTIVE, enabling immediate access to the Portal.
+                        <Text style={[styles.approvalNoticeEnglish, { marginTop: 4 }]}>
+                          2. District Administrators will verify your profile and credentials (usually within 24 hours).
+                        </Text>
+                        <Text style={[styles.approvalNoticeEnglish, { marginTop: 4, color: '#92400e', fontWeight: '700' }]}>
+                          3. When approved, a confirmation email will arrive at {pendingApprovalData?.email || 'your registered email'}. You can then log in immediately.
                         </Text>
                       </View>
 
@@ -2952,9 +3421,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                           activeOpacity={0.85}
                         >
                           <Text style={styles.approvalPrimaryBtnText}>
-                            {pendingApprovalData?.role?.includes('Umpire')
-                              ? 'Proceed to Umpire Login Portal →'
-                              : 'Proceed to Scorer Login Portal →'}
+                            Proceed to Login Portal →
                           </Text>
                         </TouchableOpacity>
                       </View>
@@ -2967,10 +3434,10 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                   showsVerticalScrollIndicator={true}
                   contentContainerStyle={{ flexGrow: 1 }}
                 >
-                  {/* Top Mobile Hero Banner with Full Image */}
+                  {/* Top Mobile Hero Banner with Cricket Visual (No Celebrity) */}
                   <View style={styles.approvalMobileHeroWrap}>
                     <Image
-                      source={require('../../../assets/virat_kohli_otp.png')}
+                      source={require('../../../assets/cricket_verification_hero.png')}
                       style={styles.approvalMobileHeroImage}
                       resizeMode="cover"
                     />
@@ -2997,7 +3464,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                     </View>
                     <View style={styles.approvalMobileBottomOverlay}>
                       <View style={styles.approvalBadgePill}>
-                        <Text style={styles.approvalBadgePillText}>⏳ PENDING ADMIN VERIFICATION</Text>
+                        <Text style={styles.approvalBadgePillText}>⏳ WAITING FOR ADMIN APPROVAL</Text>
                       </View>
                       <Text style={styles.approvalHeroTitleMobile}>CRICKET FEDERATION OF VIRUDHUNAGAR DISTRICT</Text>
                     </View>
@@ -3007,20 +3474,20 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                   <View style={styles.approvalBody}>
                     <View style={styles.approvalHeaderRow}>
                       <View style={styles.approvalIconCircle}>
-                        <Text style={styles.approvalIconText}>🛡️</Text>
+                        <Text style={styles.approvalIconText}>🏏</Text>
                       </View>
                       <View style={{ flex: 1, marginLeft: 12 }}>
                         <Text style={styles.approvalMainHeading}>Registration Submitted Successfully!</Text>
-                        <Text style={styles.approvalSubHeading}>District Administrator Verification Required</Text>
+                        <Text style={styles.approvalSubHeading}>District Admin Verification in Progress</Text>
                       </View>
                     </View>
 
-                    {/* 4-Step Verification Workflow Diagram */}
+                    {/* 4-Step Verification Workflow Normal Diagram */}
                     <View style={styles.flowDiagramCard}>
                       <View style={styles.flowDiagramHeader}>
-                        <Text style={styles.flowDiagramTitle}>VERIFICATION & ACCESS WORKFLOW</Text>
+                        <Text style={styles.flowDiagramTitle}>HOW VERIFICATION WORKS (4 SIMPLE STEPS)</Text>
                         <Text style={styles.flowDiagramSubtitle}>
-                          Follow the progress of your {pendingApprovalData?.role ? pendingApprovalData.role.toLowerCase() : 'official'} credentials
+                          Track the progress of your {pendingApprovalData?.role ? pendingApprovalData.role.toLowerCase() : 'official'} account
                         </Text>
                       </View>
 
@@ -3028,20 +3495,11 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                         {/* Step 1 */}
                         <View style={styles.flowStepItem}>
                           <View style={[styles.flowStepIconCircle, styles.flowStepCompleted]}>
-                            <Text style={styles.flowStepIcon}>📝</Text>
-                            <View style={styles.flowStepCheckBadge}>
-                              <Text style={styles.flowStepCheckText}>✓</Text>
-                            </View>
+                            <Text style={styles.flowStepIcon}>✓</Text>
                           </View>
                           <Text style={styles.flowStepNum}>STEP 1</Text>
-                          <Text style={styles.flowStepLabel}>
-                            {pendingApprovalData?.role?.includes('Umpire')
-                              ? 'Umpire Registration'
-                              : pendingApprovalData?.role?.includes('Team')
-                              ? 'Team Registration'
-                              : 'Scorer Registration'}
-                          </Text>
-                          <Text style={styles.flowStepStatusGreen}>Submitted</Text>
+                          <Text style={styles.flowStepLabel}>Form Sent</Text>
+                          <Text style={styles.flowStepStatusGreen}>Done</Text>
                         </View>
 
                         <View style={styles.flowArrowContainer}>
@@ -3051,14 +3509,11 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                         {/* Step 2 */}
                         <View style={styles.flowStepItem}>
                           <View style={[styles.flowStepIconCircle, styles.flowStepActive]}>
-                            <Text style={styles.flowStepIcon}>🛡️</Text>
-                            <View style={styles.flowStepWaitBadge}>
-                              <Text style={styles.flowStepWaitText}>⏳</Text>
-                            </View>
+                            <Text style={styles.flowStepIcon}>⏳</Text>
                           </View>
                           <Text style={styles.flowStepNum}>STEP 2</Text>
-                          <Text style={styles.flowStepLabel}>Admin Approval</Text>
-                          <Text style={styles.flowStepStatusAmber}>In Review</Text>
+                          <Text style={styles.flowStepLabel}>Admin Review</Text>
+                          <Text style={styles.flowStepStatusAmber}>Checking Now</Text>
                         </View>
 
                         <View style={styles.flowArrowContainer}>
@@ -3071,8 +3526,8 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                             <Text style={styles.flowStepIcon}>✉️</Text>
                           </View>
                           <Text style={styles.flowStepNum}>STEP 3</Text>
-                          <Text style={styles.flowStepLabel}>Email Confirmation</Text>
-                          <Text style={styles.flowStepStatusMuted}>Sent to Inbox</Text>
+                          <Text style={styles.flowStepLabel}>Email Notice</Text>
+                          <Text style={styles.flowStepStatusMuted}>Next</Text>
                         </View>
 
                         <View style={styles.flowArrowContainer}>
@@ -3085,14 +3540,8 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                             <Text style={styles.flowStepIcon}>🔑</Text>
                           </View>
                           <Text style={styles.flowStepNum}>STEP 4</Text>
-                          <Text style={styles.flowStepLabel}>Portal Login</Text>
-                          <Text style={styles.flowStepStatusMuted}>
-                            {pendingApprovalData?.role?.includes('Umpire')
-                              ? 'Access Umpire'
-                              : pendingApprovalData?.role?.includes('Team')
-                              ? 'Access Team'
-                              : 'Access Scorer'}
-                          </Text>
+                          <Text style={styles.flowStepLabel}>Login & Play</Text>
+                          <Text style={styles.flowStepStatusMuted}>Ready 🏏</Text>
                         </View>
                       </View>
                     </View>
@@ -3105,13 +3554,13 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                           <Text style={styles.approvalDetailVal}>{pendingApprovalData.name}</Text>
                         </View>
                         <View style={styles.approvalDetailRow}>
-                          <Text style={styles.approvalDetailLabel}>Role / Category:</Text>
+                          <Text style={styles.approvalDetailLabel}>Applied Role:</Text>
                           <Text style={styles.approvalDetailVal}>{pendingApprovalData.role}</Text>
                         </View>
                         {pendingApprovalData.certificationLevel && (
                           <View style={styles.approvalDetailRow}>
                             <Text style={styles.approvalDetailLabel}>Certification Level:</Text>
-                            <Text style={[styles.approvalDetailVal, { color: '#f59e0b', fontWeight: '800' }]}>
+                            <Text style={[styles.approvalDetailVal, { color: '#d97706', fontWeight: '800' }]}>
                               🏅 {pendingApprovalData.certificationLevel}
                             </Text>
                           </View>
@@ -3129,17 +3578,20 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                       </View>
                     )}
 
-                    {/* Official English Notice Box */}
+                    {/* Official Simple English Notice Box */}
                     <View style={styles.approvalNoticeBox}>
                       <View style={styles.approvalNoticeHeaderRow}>
                         <Text style={styles.approvalNoticeHeaderIcon}>📢</Text>
-                        <Text style={styles.approvalNoticeHeading}>District Administrator Verification Notice</Text>
+                        <Text style={styles.approvalNoticeHeading}>What Happens Next?</Text>
                       </View>
                       <Text style={styles.approvalNoticeEnglish}>
-                        Your registration application and certification documents have been submitted to the District Cricket Administrator (CFVD) for official verification.
+                        1. Your registration application has been submitted to the Cricket Federation of Virudhunagar District (CFVD).
                       </Text>
-                      <Text style={[styles.approvalNoticeEnglish, { marginTop: 6, color: '#fde047' }]}>
-                        Once the Administrator approves your profile, an official confirmation email will be dispatched to <Text style={{ fontWeight: '800' }}>{pendingApprovalData?.email || 'your email'}</Text>. Your account status will be set to ACTIVE, enabling immediate access to the Portal.
+                      <Text style={[styles.approvalNoticeEnglish, { marginTop: 4 }]}>
+                        2. District Administrators will verify your profile and credentials (usually within 24 hours).
+                      </Text>
+                      <Text style={[styles.approvalNoticeEnglish, { marginTop: 4, color: '#92400e', fontWeight: '700' }]}>
+                        3. When approved, a confirmation email will arrive at {pendingApprovalData?.email || 'your registered email'}. You can then log in immediately.
                       </Text>
                     </View>
 
@@ -3154,9 +3606,7 @@ export default function RegistrationScreen({ onExit }: RegistrationScreenProps =
                         activeOpacity={0.85}
                       >
                         <Text style={styles.approvalPrimaryBtnText}>
-                          {pendingApprovalData?.role?.includes('Umpire')
-                            ? 'Proceed to Umpire Login Portal →'
-                            : 'Proceed to Scorer Login Portal →'}
+                          Proceed to Login Portal →
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -3564,6 +4014,71 @@ const styles = StyleSheet.create({
   inputError: {
     borderColor: '#ef4444',
     backgroundColor: '#fef2f2'
+  },
+  dynamicInputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 6,
+    height: 35,
+    overflow: 'hidden'
+  },
+  dynamicInputSuccess: {
+    borderColor: '#16a34a',
+    backgroundColor: '#f0fdf4'
+  },
+  phonePrefixBox: {
+    paddingHorizontal: 8,
+    height: '100%',
+    backgroundColor: '#e2e8f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#cbd5e1'
+  },
+  phonePrefixText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155'
+  },
+  aadhaarIconBox: {
+    paddingHorizontal: 8,
+    height: '100%',
+    backgroundColor: '#fee2e2',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRightWidth: 1,
+    borderRightColor: '#fca5a5'
+  },
+  dynamicInputCore: {
+    flex: 1,
+    height: '100%',
+    paddingHorizontal: 8,
+    paddingVertical: 0,
+    fontSize: 12.5,
+    color: '#1e293b',
+    fontWeight: '600'
+  },
+  validCheckBadge: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#16a34a',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 6
+  },
+  validCheckText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '900'
+  },
+  helperText: {
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 2
   },
   fieldErrorText: {
     color: '#dc2626',
@@ -4291,20 +4806,20 @@ const styles = StyleSheet.create({
   // Official Admin Approval Pending Modal Styles
   approvalModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(5, 10, 20, 0.88)',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16
   },
   approvalModalCard: {
-    backgroundColor: '#0f172a',
+    backgroundColor: '#ffffff',
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 2,
-    borderColor: '#eab308',
-    shadowColor: '#eab308',
+    borderColor: '#f59e0b',
+    shadowColor: '#d97706',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
+    shadowOpacity: 0.25,
     shadowRadius: 20,
     elevation: 15
   },
@@ -4330,7 +4845,7 @@ const styles = StyleSheet.create({
     height: '100%',
     position: 'relative',
     overflow: 'hidden',
-    backgroundColor: '#0a0f1d'
+    backgroundColor: '#0a192f'
   },
   approvalHeroFullImage: {
     width: '100%',
@@ -4345,7 +4860,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     padding: 14,
-    backgroundColor: 'rgba(5, 12, 30, 0.65)'
+    backgroundColor: 'rgba(15, 23, 42, 0.7)'
   },
   approvalHeroBottomOverlay: {
     position: 'absolute',
@@ -4353,7 +4868,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     padding: 14,
-    backgroundColor: 'rgba(5, 12, 30, 0.82)'
+    backgroundColor: 'rgba(15, 23, 42, 0.85)'
   },
   approvalHeroTitle: {
     color: '#ffffff',
@@ -4379,7 +4894,7 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '58%',
     height: '100%',
-    backgroundColor: '#0f172a'
+    backgroundColor: '#ffffff'
   },
   approvalRightScrollContent: {
     padding: 18
@@ -4391,13 +4906,15 @@ const styles = StyleSheet.create({
     marginBottom: 12
   },
   approvalStatusPill: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 6
   },
   approvalStatusPillText: {
-    color: '#000000',
+    color: '#b45309',
     fontSize: 10,
     fontWeight: '900',
     letterSpacing: 0.6
@@ -4406,20 +4923,20 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#f1f5f9',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(234, 179, 8, 0.3)'
+    borderColor: '#cbd5e1'
   },
   approvalCloseX: {
-    color: '#e2e8f0',
+    color: '#475569',
     fontSize: 13,
     fontWeight: 'bold'
   },
   approvalMobileHeroWrap: {
     width: '100%',
-    height: 195,
+    height: 200,
     position: 'relative'
   },
   approvalMobileHeroImage: {
@@ -4433,11 +4950,11 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: 'rgba(0,0,0,0.65)',
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#eab308',
+    borderColor: '#f59e0b',
     zIndex: 10
   },
   approvalMobileTopOverlay: {
@@ -4447,7 +4964,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: 'rgba(5, 12, 30, 0.6)',
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6
@@ -4473,7 +4990,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8
   },
   approvalFederationSub: {
-    color: '#cbd5e1',
+    color: '#e2e8f0',
     fontSize: 8.5,
     fontWeight: '700',
     letterSpacing: 0.5
@@ -4493,7 +5010,7 @@ const styles = StyleSheet.create({
   },
   approvalBody: {
     padding: 16,
-    backgroundColor: '#0f172a'
+    backgroundColor: '#ffffff'
   },
   approvalHeaderRow: {
     flexDirection: 'row',
@@ -4504,7 +5021,7 @@ const styles = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: '#1e293b',
+    backgroundColor: '#fef3c7',
     borderWidth: 1.5,
     borderColor: '#f59e0b',
     alignItems: 'center',
@@ -4514,25 +5031,25 @@ const styles = StyleSheet.create({
     fontSize: 20
   },
   approvalMainHeading: {
-    color: '#ffffff',
-    fontSize: 15,
+    color: '#0f172a',
+    fontSize: 16,
     fontWeight: '800'
   },
   approvalSubHeading: {
-    color: '#f59e0b',
-    fontSize: 11.5,
+    color: '#b45309',
+    fontSize: 12,
     fontWeight: '600',
     marginTop: 2
   },
 
-  // 4-Step Flow Diagram Styles
+  // 4-Step Flow Diagram Styles (Daylight Normal Diagram)
   flowDiagramCard: {
-    backgroundColor: '#131d31',
+    backgroundColor: '#f8fafc',
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 10,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#e2e8f0',
     marginBottom: 14
   },
   flowDiagramHeader: {
@@ -4540,13 +5057,13 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   flowDiagramTitle: {
-    color: '#38bdf8',
+    color: '#0f172a',
     fontSize: 11,
     fontWeight: '900',
     letterSpacing: 0.8
   },
   flowDiagramSubtitle: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 10,
     fontWeight: '500',
     marginTop: 1
@@ -4571,22 +5088,24 @@ const styles = StyleSheet.create({
     marginBottom: 4
   },
   flowStepCompleted: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    backgroundColor: '#d1fae5',
     borderWidth: 1.5,
     borderColor: '#10b981'
   },
   flowStepActive: {
-    backgroundColor: 'rgba(245, 158, 11, 0.25)',
+    backgroundColor: '#fef3c7',
     borderWidth: 2,
     borderColor: '#f59e0b'
   },
   flowStepUpcoming: {
-    backgroundColor: 'rgba(51, 65, 85, 0.45)',
+    backgroundColor: '#f1f5f9',
     borderWidth: 1,
-    borderColor: '#475569'
+    borderColor: '#cbd5e1'
   },
   flowStepIcon: {
-    fontSize: 16
+    fontSize: 15,
+    fontWeight: '900',
+    color: '#0f172a'
   },
   flowStepCheckBadge: {
     position: 'absolute',
@@ -4619,32 +5138,32 @@ const styles = StyleSheet.create({
     fontSize: 8
   },
   flowStepNum: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 8,
     fontWeight: '800',
     letterSpacing: 0.5
   },
   flowStepLabel: {
-    color: '#f8fafc',
+    color: '#0f172a',
     fontSize: 9.5,
     fontWeight: '700',
     textAlign: 'center',
     marginTop: 2
   },
   flowStepStatusGreen: {
-    color: '#34d399',
+    color: '#059669',
     fontSize: 8.5,
     fontWeight: '800',
     marginTop: 2
   },
   flowStepStatusAmber: {
-    color: '#fbbf24',
+    color: '#d97706',
     fontSize: 8.5,
     fontWeight: '800',
     marginTop: 2
   },
   flowStepStatusMuted: {
-    color: '#64748b',
+    color: '#94a3b8',
     fontSize: 8.5,
     fontWeight: '600',
     marginTop: 2
@@ -4654,18 +5173,18 @@ const styles = StyleSheet.create({
     marginBottom: 16
   },
   flowArrowText: {
-    color: '#64748b',
+    color: '#cbd5e1',
     fontSize: 12,
     fontWeight: '900'
   },
 
-  // Applicant Summary Card
+  // Applicant Summary Card (Daylight)
   approvalDetailsCard: {
-    backgroundColor: '#1e293b',
+    backgroundColor: '#f8fafc',
     borderRadius: 10,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#e2e8f0',
     marginBottom: 14,
     gap: 6
   },
@@ -4675,22 +5194,22 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   approvalDetailLabel: {
-    color: '#94a3b8',
+    color: '#64748b',
     fontSize: 12,
     fontWeight: '600'
   },
   approvalDetailVal: {
-    color: '#f8fafc',
+    color: '#0f172a',
     fontSize: 12,
     fontWeight: '700'
   },
 
-  // Official English Notice Box
+  // Official English Notice Box (Daylight Amber/Yellow)
   approvalNoticeBox: {
-    backgroundColor: 'rgba(234, 179, 8, 0.10)',
+    backgroundColor: '#fffbeb',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(234, 179, 8, 0.35)',
+    borderColor: '#fde047',
     padding: 12,
     marginBottom: 16
   },
@@ -4704,12 +5223,12 @@ const styles = StyleSheet.create({
     fontSize: 14
   },
   approvalNoticeHeading: {
-    color: '#fde047',
+    color: '#92400e',
     fontSize: 12,
     fontWeight: '800'
   },
   approvalNoticeEnglish: {
-    color: '#cbd5e1',
+    color: '#475569',
     fontSize: 11,
     lineHeight: 16
   },

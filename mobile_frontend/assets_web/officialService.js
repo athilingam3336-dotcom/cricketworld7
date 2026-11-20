@@ -113,13 +113,10 @@ function handleOfficialSubmit(e) {
       OfficialService.add(data);
       if (type && type.toLowerCase().includes('scorer')) {
         const API_BASE = (function () {
-          if (typeof window !== 'undefined' && window.location) {
-            if (window.location.protocol === 'https:' || (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
-              return 'https://cricket-backend-dqdm.onrender.com/api';
-            }
+          if (typeof window !== 'undefined' && window.location && window.location.hostname) {
             return `http://${window.location.hostname}:5000/api`;
           }
-          return 'https://cricket-backend-dqdm.onrender.com/api';
+          return 'http://localhost:5000/api';
         })();
         fetch(`${API_BASE}/auth/register-scorer`, {
           method: 'POST',

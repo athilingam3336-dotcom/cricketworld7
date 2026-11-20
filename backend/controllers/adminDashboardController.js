@@ -8,6 +8,7 @@
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
+const { validateScheduleDateTime } = require('../utils/dateTimeValidation');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'cricket_super_secret_jwt_2026';
 
@@ -252,10 +253,13 @@ class AdminDashboardController {
         tournament: m.tournament_id === 'TOUR-2026' ? 'VPL 2026' : (m.tournament_id || 'District League'),
         teamA: teamMap[m.team_a_id] || m.team_a_id || 'Team A',
         teamB: teamMap[m.team_b_id] || m.team_b_id || 'Team B',
-        venue: m.venue_name || 'District Ground',
-        date: m.scheduled_date || 'TBD',
-        time: m.scheduled_time || '10:00 AM',
+        venue: m.venue_name || m.venue || 'District Ground',
+        date: m.match_date || m.scheduled_date || 'TBD',
+        time: m.match_time || m.scheduled_time || '10:00 AM',
         status: m.status,
+        schedule_confirmation_status: m.schedule_confirmation_status || 'PENDING',
+        team_a_allocation_status: m.team_a_allocation_status || 'PENDING',
+        team_b_allocation_status: m.team_b_allocation_status || 'PENDING',
         result: m.result_text || (m.status === 'LIVE' ? 'In Progress' : 'Scheduled')
       }));
 
@@ -398,6 +402,9 @@ class AdminDashboardController {
           jersey: p.jersey_number || '-',
           battingStyle: p.batting_style || 'RIGHT_HAND',
           bowlingStyle: p.bowling_style || 'NONE',
+          photo: p.photo || p.image_path || null,
+          image: p.photo || p.image_path || null,
+          image_path: p.image_path || p.photo || null,
           status: p.status || 'ACTIVE'
         });
       });
@@ -414,6 +421,9 @@ class AdminDashboardController {
           jersey: '-',
           battingStyle: 'RIGHT_HAND',
           bowlingStyle: 'RIGHT_ARM_MEDIUM',
+          photo: tp.photo || tp.image_path || null,
+          image: tp.photo || tp.image_path || null,
+          image_path: tp.image_path || tp.photo || null,
           status: 'ACTIVE'
         });
       });
@@ -513,6 +523,9 @@ class AdminDashboardController {
         city: t.city || 'Virudhunagar',
         coachName: t.coach_name || 'Staff Coach',
         coachEmail: t.coach_email || 'contact@cfvd.org',
+        logo: t.logo || t.photo || t.image_path || null,
+        photo: t.photo || t.logo || t.image_path || null,
+        image_path: t.image_path || t.photo || t.logo || null,
         status: (t.status || 'ACTIVE').toUpperCase(),
         playerCount: playerCounts[t.id] || (playerCounts[t.team_id] || 15)
       }));
@@ -571,6 +584,9 @@ class AdminDashboardController {
           coachName: team.coach_name,
           coachEmail: team.coach_email,
           status: team.status,
+          logo: team.logo || team.photo || team.image_path || null,
+          photo: team.photo || team.logo || team.image_path || null,
+          image_path: team.image_path || team.photo || team.logo || null,
           squad
         }
       });
@@ -709,11 +725,16 @@ class AdminDashboardController {
         return res.status(400).json({ success: false, message: 'Both participating teams are required.' });
       }
 
+      const dtValidation = validateScheduleDateTime(date, time || '10:00 AM');
+      if (!dtValidation.isValid) {
+        return res.status(400).json({ success: false, error: dtValidation.error, message: dtValidation.error });
+      }
+
       const matchId = 'M-' + Date.now();
       await db.query(
         `INSERT INTO matches (id, tournament_id, venue_name, team_a_id, team_b_id, scheduled_date, scheduled_time, overs, status, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SCHEDULED', NOW(), NOW())`,
-        [matchId, tournamentId || 'TOUR-2026', venueName || 'Kamarajar Stadium, Virudhunagar', teamAId, teamBId, date, time || '10:00 AM', overs || 20]
+        [matchId, tournamentId || 'TOUR-2026', venueName || 'Kamarajar Stadium, Virudhunagar', teamAId, teamBId, dtValidation.cleanDate, dtValidation.parsedTime.formatted12, overs || 20]
       );
 
       return res.status(201).json({ success: true, message: 'Match scheduled successfully.' });
@@ -729,6 +750,14 @@ class AdminDashboardController {
     try {
       const { id } = req.params;
       const { status, resultText, venueName, scheduledDate, scheduledTime } = req.body;
+
+      if (scheduledDate !== undefined || scheduledTime !== undefined) {
+        const dtValidation = validateScheduleDateTime(scheduledDate, scheduledTime);
+        if (!dtValidation.isValid) {
+          return res.status(400).json({ success: false, error: dtValidation.error, message: dtValidation.error });
+        }
+      }
+
       await db.query(
         `UPDATE matches SET status = COALESCE(?, status), result_text = COALESCE(?, result_text),
          venue_name = COALESCE(?, venue_name), scheduled_date = COALESCE(?, scheduled_date), scheduled_time = COALESCE(?, scheduled_time), updated_at = NOW()
@@ -741,6 +770,51 @@ class AdminDashboardController {
     }
   }
 
+  async postponeMatch(req, res) {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+      const adminEmail = req.adminUser?.email || 'admin@cfvd.org';
+      const match = await adminService.postponeMatch(id, { reason }, adminEmail);
+      return res.status(200).json({ success: true, message: 'Match postponed successfully.', match });
+    } catch (err) {
+      return res.status(400).json({ success: false, message: err.message, error: err.message });
+    }
+  }
+
+  async rescheduleMatch(req, res) {
+    try {
+      const { id } = req.params;
+      const { newDate, newTime, reason } = req.body;
+      const adminEmail = req.adminUser?.email || 'admin@cfvd.org';
+      const match = await adminService.rescheduleMatch(id, { newDate, newTime, reason }, adminEmail);
+      return res.status(200).json({ success: true, message: 'Match rescheduled successfully.', match });
+    } catch (err) {
+      return res.status(400).json({ success: false, message: err.message, error: err.message });
+    }
+  }
+
+  async getPostponementRequests(req, res) {
+    try {
+      const requests = await adminService.getPostponementRequests();
+      return res.status(200).json({ success: true, requests });
+    } catch (err) {
+      return res.status(500).json({ success: false, message: err.message, error: err.message });
+    }
+  }
+
+  async reviewPostponementRequest(req, res) {
+    try {
+      const { id } = req.params;
+      const { decision, reviewNotes } = req.body;
+      const adminEmail = req.adminUser?.email || 'admin@cfvd.org';
+      const match = await adminService.reviewUmpirePostponement(id, { decision, reviewNotes }, adminEmail);
+      return res.status(200).json({ success: true, message: `Postponement request ${decision}D.`, match });
+    } catch (err) {
+      return res.status(400).json({ success: false, message: err.message, error: err.message });
+    }
+  }
+
   /**
    * GET /api/admin/approvals
    */
@@ -748,6 +822,40 @@ class AdminDashboardController {
     try {
       await db.initDb();
       const items = [];
+
+      // 0. Match Postponement Requests (from Match model)
+      try {
+        const postpReqs = await db.models.Match.find({
+          'umpire_postponement_request.status': 'PENDING'
+        }).sort({ 'umpire_postponement_request.requested_at': -1 }).lean();
+
+        postpReqs.forEach(m => {
+          items.push({
+            id: m.id,
+            matchId: m.id,
+            applicantName: m.umpire_postponement_request?.umpire_name || 'Assigned Field Umpire',
+            type: 'POSTPONEMENT',
+            contact: m.umpire_postponement_request?.umpire_id || 'Umpire',
+            phone: m.venue || 'Stadium',
+            association: `Match Postponement • ${m.team_a_name || 'Team A'} vs ${m.team_b_name || 'Team B'}`,
+            date: m.umpire_postponement_request?.requested_at || m.created_at,
+            status: 'PENDING',
+            details: {
+              matchId: m.id,
+              teamA: m.team_a_name,
+              teamB: m.team_b_name,
+              matchDate: m.match_date,
+              matchTime: m.match_time,
+              venue: m.venue,
+              reason: m.umpire_postponement_request?.reason,
+              umpireName: m.umpire_postponement_request?.umpire_name
+            },
+            rejectionReason: null
+          });
+        });
+      } catch (e) {
+        console.warn('Postponements fetch error in getApprovals:', e.message);
+      }
 
       // 1. Scorers (from User and Scorer models)
       try {
@@ -874,7 +982,15 @@ class AdminDashboardController {
 
       let applicantName = id;
 
-      if (cleanType === 'SCORER') {
+      if (cleanType === 'POSTPONEMENT' || cleanType === 'MATCH_POSTPONE') {
+        const decision = isApprove ? 'APPROVE' : 'REJECT';
+        const match = await adminService.reviewUmpirePostponement(id, { decision, reviewNotes: reason }, req.adminUser ? req.adminUser.email : 'admin@cfvd.org');
+        return res.status(200).json({
+          success: true,
+          message: `Match postponement request ${decision}D.`,
+          match
+        });
+      } else if (cleanType === 'SCORER') {
         const u = await db.models.User.findOneAndUpdate(
           queryId,
           { $set: { status: isApprove ? 'ACTIVE' : 'REJECTED', updated_at: new Date() } },
@@ -996,20 +1112,20 @@ class AdminDashboardController {
         };
 
         const activeBatters = (batters || []).slice(0, 2).map(b => ({
-          name: playerMap[b.player_id] || 'Suresh Kumar',
-          runs: b.runs,
-          balls: b.balls,
-          fours: b.fours,
-          sixes: b.sixes,
-          isStriker: b.is_striker
+          name: (b?.player_id && playerMap[b.player_id]) || 'Suresh Kumar',
+          runs: b?.runs || 0,
+          balls: b?.balls || 0,
+          fours: b?.fours || 0,
+          sixes: b?.sixes || 0,
+          isStriker: b?.is_striker || false
         }));
 
         const activeBowler = (bowlers && bowlers[0]) ? {
-          name: playerMap[bowlers[0].player_id] || 'Karthik N',
-          overs: bowlers[0].overs,
-          maidens: bowlers[0].maidens,
-          runs: bowlers[0].runs_conceded,
-          wickets: bowlers[0].wickets
+          name: (bowlers[0]?.player_id && playerMap[bowlers[0].player_id]) || 'Karthik N',
+          overs: bowlers[0]?.overs || 0,
+          maidens: bowlers[0]?.maidens || 0,
+          runs: bowlers[0]?.runs_conceded || 0,
+          wickets: bowlers[0]?.wickets || 0
         } : { name: 'Karthik N', overs: 3.2, maidens: 0, runs: 28, wickets: 2 };
 
         return {

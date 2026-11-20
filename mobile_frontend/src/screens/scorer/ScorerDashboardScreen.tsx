@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Image, use
 import { useScorerNavigation } from '../../navigation/ScorerNavigationContext';
 import MatchCard from '../../components/scorer/MatchCard';
 import SharedFooter from '../../components/scorer/SharedFooter';
-import { ScorerApi, getCurrentUser } from '../../services/api';
+import { ScorerApi, getCurrentUser, logoutAndClearAllSessions } from '../../services/api';
 import { showInfo, showConfirm } from '../../utils/sweetalert';
 
 export default function ScorerDashboardScreen() {
@@ -15,7 +15,22 @@ export default function ScorerDashboardScreen() {
   const [matches, setMatches] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [profile, setProfile] = useState<any>(params?.user || getCurrentUser() || { name: 'Official Scorer', id: 'SCORER', association: 'Virudhunagar District' });
-  const [selectedFilter, setSelectedFilter] = useState<string | null>(null);
+  const [selectedFilter, setSelectedFilter] = useState<string | null>(() => {
+    if (typeof window !== 'undefined' && window.location) {
+      try {
+        const url = new URL(window.location.href);
+        const f = url.searchParams.get('tab') || url.searchParams.get('filter');
+        if (f) {
+          const lower = f.toLowerCase();
+          if (lower === 'upcoming') return 'Upcoming';
+          if (lower === 'assigned') return 'Assigned';
+          if (lower === 'completed') return 'Completed';
+          if (lower === 'live') return 'Live';
+        }
+      } catch (_e) {}
+    }
+    return null;
+  });
 
   useEffect(() => {
     loadDashboardData();
@@ -56,10 +71,10 @@ export default function ScorerDashboardScreen() {
 
     let assignedMatches = loadedMatches;
     if (loadedMatches.length > 0) {
-      const hasAssignmentData = loadedMatches.some((m: any) => m.scorer_id || m.scorerId || m.assigned_scorer || m.assignedScorerId);
+      const hasAssignmentData = loadedMatches.some((m: any) => m.assigned_scorer_id || m.scorer_id || m.scorerId || m.assigned_scorer || m.assignedScorerId);
       if (hasAssignmentData && myId) {
-        assignedMatches = loadedMatches.filter((m: any) => {
-          const mScorerId = (m.scorer_id || m.scorerId || m.assignedScorerId || '').toString().toLowerCase();
+        const filtered = loadedMatches.filter((m: any) => {
+          const mScorerId = (m.assigned_scorer_id || m.scorer_id || m.scorerId || m.assignedScorerId || '').toString().toLowerCase();
           const mScorerEmail = (m.scorer_email || m.scorerEmail || m.assigned_scorer_email || '').toString().toLowerCase();
           const mScorerName = (m.assigned_scorer || m.scorerName || '').toString().toLowerCase();
           const myName = (params?.user?.name || currentUser?.name || '').toString().toLowerCase();
@@ -69,12 +84,33 @@ export default function ScorerDashboardScreen() {
             (myName && mScorerName.includes(myName.split(' ')[0]))
           );
         });
-        // If filtering returns 0, show all (no assignments yet for this scorer)
-        if (assignedMatches.length === 0) {
-          assignedMatches = loadedMatches;
+        if (filtered.length > 0) {
+          assignedMatches = filtered;
         }
       }
     }
+
+    // Ensure only matches confirmed by Admin in match schedules are visible to scorers
+    const allUpcoming = loadedMatches.filter((m: any) => {
+      const s = (m.status || '').toUpperCase();
+      const conf = m.schedule_confirmation_status || m.scheduleConfirmationStatus;
+      return (s === 'UPCOMING' || s === 'SCHEDULED') && conf === 'CONFIRMED';
+    });
+    for (const upMatch of allUpcoming) {
+      if (!assignedMatches.some((m: any) => m.id === upMatch.id)) {
+        assignedMatches.push(upMatch);
+      }
+    }
+
+    // Filter out any scheduled matches that are not yet confirmed by Admin
+    assignedMatches = assignedMatches.filter((m: any) => {
+      const s = (m.status || '').toUpperCase();
+      if (s === 'SCHEDULED' || s === 'UPCOMING') {
+        const conf = m.schedule_confirmation_status || m.scheduleConfirmationStatus;
+        return conf === 'CONFIRMED';
+      }
+      return true;
+    });
 
     setMatches(assignedMatches);
     setIsLoading(false);
@@ -95,54 +131,94 @@ export default function ScorerDashboardScreen() {
 
   const handleLogout = async () => {
     const confirmed = await showConfirm(
-      'Exit Scorer Console',
-      'Are you sure you want to exit the scorer console?',
-      'Yes, Exit',
+      'Log Out Official Scorer',
+      'Are you sure you want to log out and return to the main CFVD website?',
+      'Yes, Log Out',
       'Cancel'
     );
-    if (confirmed) onExit();
-  };
-
-  // Security rule: Scorer only sees upcoming match on Match Day, starting 2 hours before scheduled time
-  const isMatchUnlockedForScorer = (m: any) => {
-    const s = (m.status || '').toLowerCase();
-    if (s === 'live' || s === 'completed') return true;
-
-    const matchDateStr = m.date || m.match_date;
-    const matchTimeStr = m.time || m.match_time || '09:30 AM';
-    if (!matchDateStr) return true;
-
-    try {
-      const todayStr = new Date().toISOString().split('T')[0];
-      if (matchDateStr > todayStr) return false;
-      if (matchDateStr === todayStr) {
-        const [timePart, modifier] = matchTimeStr.trim().split(' ');
-        let [hours, minutes] = timePart.split(':').map(Number);
-        if (modifier && modifier.toUpperCase() === 'PM' && hours < 12) hours += 12;
-        if (modifier && modifier.toUpperCase() === 'AM' && hours === 12) hours = 0;
-
-        const matchDateTime = new Date();
-        matchDateTime.setHours(hours, minutes || 0, 0, 0);
-
-        const now = new Date();
-        const twoHoursBefore = new Date(matchDateTime.getTime() - (2 * 60 * 60 * 1000));
-        return now >= twoHoursBefore;
+    if (confirmed) {
+      await logoutAndClearAllSessions();
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.location.href = '/';
+        return;
       }
-      return true;
-    } catch (_e) {
-      return true;
+      onExit('Home');
     }
   };
 
-  const upcomingMatches = matches.filter(m => (m.status === 'Upcoming' || m.status === 'SCHEDULED' || m.status === 'Scheduled') && isMatchUnlockedForScorer(m));
-  const lockedUpcomingMatches = matches.filter(m => (m.status === 'Upcoming' || m.status === 'SCHEDULED' || m.status === 'Scheduled') && !isMatchUnlockedForScorer(m));
-  const liveMatches = matches.filter(m => m.status === 'Live' || m.status === 'LIVE');
-  const completedMatches = matches.filter(m => m.status === 'Completed' || m.status === 'COMPLETED');
+  // Helper to parse date & time into a numeric timestamp for accurate sorting
+  const parseMatchTimestamp = (m: any): number => {
+    try {
+      const datePart = (m.match_date || m.date || '').toString().trim().split(' ')[0]; // e.g. "2026-10-30"
+      const timePart = (m.match_time || m.time || '09:30 AM').toString().trim();
+      if (!datePart) return 0;
+
+      let year = 2026, month = 10, day = 1;
+      if (datePart.includes('-')) {
+        const parts = datePart.split('-');
+        year = parseInt(parts[0], 10) || 2026;
+        month = parseInt(parts[1], 10) || 10;
+        day = parseInt(parts[2], 10) || 1;
+      } else if (datePart.includes('/')) {
+        const parts = datePart.split('/');
+        day = parseInt(parts[0], 10) || 1;
+        month = parseInt(parts[1], 10) || 10;
+        year = parseInt(parts[2], 10) || 2026;
+      }
+
+      let hours = 9, minutes = 30;
+      const cleanTime = timePart.replace('.', ':');
+      const timeMatch = cleanTime.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+      if (timeMatch) {
+        hours = parseInt(timeMatch[1], 10);
+        minutes = parseInt(timeMatch[2], 10);
+        const mod = (timeMatch[3] || '').toUpperCase();
+        if (mod === 'PM' && hours < 12) hours += 12;
+        if (mod === 'AM' && hours === 12) hours = 0;
+      }
+
+      return new Date(year, month - 1, day, hours, minutes).getTime();
+    } catch {
+      return 0;
+    }
+  };
+
+  // Categorized matches sorted by Date & Time:
+  // 1. Live matches: currently active, sorted by most recent
+  const liveMatches = matches
+    .filter(m => {
+      const s = (m.status || '').toLowerCase();
+      return s === 'live' || s === 'innings_break';
+    })
+    .sort((a, b) => parseMatchTimestamp(b) - parseMatchTimestamp(a));
+
+  // 2. Upcoming matches: sorted ascending by date and time (nearest upcoming match first!)
+  const upcomingMatches = matches
+    .filter(m => {
+      const s = (m.status || '').toLowerCase();
+      return s === 'upcoming' || s === 'scheduled';
+    })
+    .sort((a, b) => parseMatchTimestamp(a) - parseMatchTimestamp(b));
+
+  // 3. Completed matches: sorted descending by date and time (most recently finished match first!)
+  const completedMatches = matches
+    .filter(m => (m.status || '').toLowerCase() === 'completed')
+    .sort((a, b) => parseMatchTimestamp(b) - parseMatchTimestamp(a));
+
+  // 4. Postponed matches:
+  const postponedMatches = matches
+    .filter(m => {
+      const s = (m.status || '').toLowerCase();
+      return s === 'postponed' || !!m.postponement?.is_postponed || !!m.isPostponed;
+    })
+    .sort((a, b) => parseMatchTimestamp(b) - parseMatchTimestamp(a));
+
   const totalAssigned = matches.length;
 
   const chartSegments = [
     { id: 'Live', label: 'Live Matches', count: liveMatches.length, color: '#ef4444', desc: 'Currently scoring' },
     { id: 'Upcoming', label: 'Upcoming', count: upcomingMatches.length, color: '#3b82f6', desc: 'Next scheduled' },
+    { id: 'Postponed', label: 'Postponed', count: postponedMatches.length, color: '#f59e0b', desc: 'Awaiting reschedule' },
     { id: 'Completed', label: 'Completed', count: completedMatches.length, color: '#10b981', desc: 'Recently finished' }
   ];
 
@@ -215,13 +291,18 @@ export default function ScorerDashboardScreen() {
           <View style={styles.chartDiagramCol}>
             {Platform.OS === 'web' ? (
               // @ts-ignore
-              <div style={{
-                width: 220, height: 220, borderRadius: '50%',
-                background: getConicGradient(),
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 4px 15px rgba(0,0,0,0.08)',
-                transition: 'background 0.3s ease'
-              }}>
+              <div 
+                onClick={() => setSelectedFilter(selectedFilter === 'Assigned' ? null : 'Assigned')}
+                style={{
+                  width: 220, height: 220, borderRadius: '50%',
+                  background: getConicGradient(),
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 4px 15px rgba(0,0,0,0.08)',
+                  transition: 'background 0.3s ease',
+                  cursor: 'pointer'
+                }}
+                title="Click to view All Assigned Matches"
+              >
                 <div style={{
                   width: 150, height: 150, borderRadius: '50%',
                   backgroundColor: 'rgba(255, 255, 255, 0.95)',
@@ -232,10 +313,10 @@ export default function ScorerDashboardScreen() {
                 </div>
               </div>
             ) : (
-              <View style={styles.fallbackCircle}>
+              <TouchableOpacity activeOpacity={0.8} onPress={() => setSelectedFilter(selectedFilter === 'Assigned' ? null : 'Assigned')} style={styles.fallbackCircle}>
                 <Text style={styles.fallbackCircleNum}>{totalAssigned}</Text>
                 <Text style={styles.fallbackCircleText}>Assigned</Text>
-              </View>
+              </TouchableOpacity>
             )}
           </View>
         </View>
@@ -255,31 +336,83 @@ export default function ScorerDashboardScreen() {
                   showInfo('Scoring', 'No live or upcoming matches scheduled at the moment.');
                 }
               }}
+              activeOpacity={0.8}
             >
               <Text style={styles.primaryActionText}>
                 {liveMatches.length > 0 ? 'CONTINUE LIVE SCORING' : (upcomingMatches.length > 0 ? 'START UPCOMING MATCH' : 'SCORING CONSOLE')}
               </Text>
             </TouchableOpacity>
             
-            <TouchableOpacity style={styles.secondaryActionBtn} onPress={() => {
-              const nextM = upcomingMatches[0] || liveMatches[0];
-              const msg = `You have ${totalAssigned} matches in the system.\n\nNext Match: ${nextM ? `${nextM.teamA} vs ${nextM.teamB} (${nextM.tournament || 'Association Tournament'})` : 'No upcoming match scheduled'}`;
-              showInfo('Assigned Matches', msg);
-            }}>
-              <Text style={styles.secondaryActionText}>ASSIGNED MATCHES</Text>
+            <TouchableOpacity 
+              style={[
+                styles.secondaryActionBtn, 
+                selectedFilter === 'Assigned' && styles.activeFilterBtn
+              ]} 
+              onPress={() => {
+                setSelectedFilter(selectedFilter === 'Assigned' ? null : 'Assigned');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[
+                styles.secondaryActionText,
+                selectedFilter === 'Assigned' && styles.activeFilterText
+              ]}>
+                📋 ASSIGNED MATCHES ({totalAssigned})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[
+                styles.secondaryActionBtn,
+                selectedFilter === 'Upcoming' && styles.activeFilterBtn
+              ]} 
+              onPress={() => {
+                setSelectedFilter(selectedFilter === 'Upcoming' ? null : 'Upcoming');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[
+                styles.secondaryActionText,
+                selectedFilter === 'Upcoming' && styles.activeFilterText
+              ]}>
+                📅 UPCOMING MATCHES ({upcomingMatches.length})
+              </Text>
             </TouchableOpacity>
             
             <TouchableOpacity 
-              style={styles.secondaryActionBtn} 
+              style={[
+                styles.secondaryActionBtn,
+                selectedFilter === 'Completed' && styles.activeFilterBtn
+              ]} 
               onPress={() => {
-                if (completedMatches.length > 0) {
-                  navigate('Scorecard', { matchId: completedMatches[0].id });
-                } else {
-                  showInfo('Scorecards', 'No completed matches recorded yet.');
-                }
+                setSelectedFilter(selectedFilter === 'Completed' ? null : 'Completed');
               }}
+              activeOpacity={0.8}
             >
-              <Text style={styles.secondaryActionText}>RECENT SCORECARDS</Text>
+              <Text style={[
+                styles.secondaryActionText,
+                selectedFilter === 'Completed' && styles.activeFilterText
+              ]}>
+                📊 RECENT SCORECARDS ({completedMatches.length})
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[
+                styles.secondaryActionBtn,
+                selectedFilter === 'Postponed' && styles.activeFilterBtn
+              ]} 
+              onPress={() => {
+                setSelectedFilter(selectedFilter === 'Postponed' ? null : 'Postponed');
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={[
+                styles.secondaryActionText,
+                selectedFilter === 'Postponed' && styles.activeFilterText
+              ]}>
+                ⏸️ POSTPONED MATCHES ({postponedMatches.length})
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -291,65 +424,211 @@ export default function ScorerDashboardScreen() {
               Loading Assigned Matches from Association Server...
             </Text>
           </View>
+        ) : selectedFilter === 'Assigned' ? (
+          /* VIEW 1: ALL ASSIGNED MATCHES SORTED BY DATE & TIME */
+          <View style={{ width: '100%' }}>
+            <View style={styles.filterHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.filterHeaderTitle}>📋 ALL ASSIGNED MATCHES ({totalAssigned})</Text>
+                <Text style={styles.filterHeaderSub}>
+                  Sorted chronologically by Scheduled Date & Time • Select a match to start scoring or view scorecard
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelectedFilter(null)} style={styles.clearFilterBtn} activeOpacity={0.7}>
+                <Text style={styles.clearFilterText}>✕ Show Standard View</Text>
+              </TouchableOpacity>
+            </View>
+
+            {liveMatches.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionHeader}>🔴 LIVE MATCHES ({liveMatches.length})</Text>
+                {liveMatches.map(match => (
+                  <MatchCard key={match.id} match={match} variant="live" />
+                ))}
+              </View>
+            )}
+
+            {upcomingMatches.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionHeader}>🔵 UPCOMING MATCHES ({upcomingMatches.length}) - Earliest Date/Time First</Text>
+                {upcomingMatches.map(match => (
+                  <MatchCard key={match.id} match={match} variant="upcoming" />
+                ))}
+              </View>
+            )}
+
+            {completedMatches.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionHeader}>🟢 COMPLETED MATCHES ({completedMatches.length}) - Most Recent First</Text>
+                {completedMatches.map(match => (
+                  <MatchCard key={match.id} match={match} variant="completed" />
+                ))}
+              </View>
+            )}
+
+            {totalAssigned === 0 && (
+              <Text style={styles.emptyText}>No matches assigned yet.</Text>
+            )}
+          </View>
+        ) : selectedFilter === 'Completed' ? (
+          /* VIEW 2: RECENT MATCHES & SCORECARDS */
+          <View style={{ width: '100%' }}>
+            <View style={styles.filterHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.filterHeaderTitle}>📊 RECENT MATCHES & SCORECARDS ({completedMatches.length})</Text>
+                <Text style={styles.filterHeaderSub}>
+                  Click any match below to view its official scorecard and statistics
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelectedFilter(null)} style={styles.clearFilterBtn} activeOpacity={0.7}>
+                <Text style={styles.clearFilterText}>✕ Show Standard View</Text>
+              </TouchableOpacity>
+            </View>
+
+            {completedMatches.length > 0 ? (
+              completedMatches.map(match => (
+                <MatchCard key={match.id} match={match} variant="completed" />
+              ))
+            ) : (
+              <Text style={styles.emptyText}>No recently completed matches found.</Text>
+            )}
+          </View>
+        ) : selectedFilter === 'Upcoming' ? (
+          /* VIEW 3: UPCOMING MATCHES */
+          <View style={{ width: '100%' }}>
+            <View style={styles.filterHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.filterHeaderTitle}>🔵 UPCOMING MATCHES ({upcomingMatches.length})</Text>
+                <Text style={styles.filterHeaderSub}>
+                  Sorted by Date & Time (earliest match first) • Tap to setup and begin match
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelectedFilter(null)} style={styles.clearFilterBtn} activeOpacity={0.7}>
+                <Text style={styles.clearFilterText}>✕ Show Standard View</Text>
+              </TouchableOpacity>
+            </View>
+
+            {upcomingMatches.length > 0 ? (
+              upcomingMatches.map(match => (
+                <MatchCard key={match.id} match={match} variant="upcoming" />
+              ))
+            ) : (
+              <Text style={styles.emptyText}>No upcoming matches scheduled.</Text>
+            )}
+          </View>
+        ) : selectedFilter === 'Live' ? (
+          /* VIEW 4: LIVE MATCHES */
+          <View style={{ width: '100%' }}>
+            <View style={styles.filterHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.filterHeaderTitle}>🔴 LIVE MATCHES ({liveMatches.length})</Text>
+                <Text style={styles.filterHeaderSub}>
+                  Matches currently in progress • Tap to continue scoring console
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelectedFilter(null)} style={styles.clearFilterBtn} activeOpacity={0.7}>
+                <Text style={styles.clearFilterText}>✕ Show Standard View</Text>
+              </TouchableOpacity>
+            </View>
+
+            {liveMatches.length > 0 ? (
+              liveMatches.map(match => (
+                <MatchCard key={match.id} match={match} variant="live" />
+              ))
+            ) : (
+              <Text style={styles.emptyText}>No live matches currently in progress.</Text>
+            )}
+          </View>
+        ) : selectedFilter === 'Postponed' ? (
+          /* VIEW 5: POSTPONED MATCHES */
+          <View style={{ width: '100%' }}>
+            <View style={styles.filterHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.filterHeaderTitle}>⏸️ POSTPONED MATCHES ({postponedMatches.length})</Text>
+                <Text style={styles.filterHeaderSub}>
+                  Matches temporarily postponed by Admin/Umpires • Details and reschedule status below
+                </Text>
+              </View>
+              <TouchableOpacity onPress={() => setSelectedFilter(null)} style={styles.clearFilterBtn} activeOpacity={0.7}>
+                <Text style={styles.clearFilterText}>✕ Show Standard View</Text>
+              </TouchableOpacity>
+            </View>
+
+            {postponedMatches.length > 0 ? (
+              postponedMatches.map(match => (
+                <View key={match.id} style={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', borderColor: '#fcd34d', borderWidth: 1.5, borderRadius: 8, padding: 16, marginBottom: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 3 }}>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+                    <Text style={{ fontWeight: '700', fontSize: 16, color: '#1e293b' }}>
+                      {match.teamA?.name || match.team_a_name || 'Team A'} <Text style={{ color: '#d97706' }}>vs</Text> {match.teamB?.name || match.team_b_name || 'Team B'}
+                    </Text>
+                    <View style={{ backgroundColor: '#fef3c7', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 4, borderColor: '#f59e0b', borderWidth: 1 }}>
+                      <Text style={{ color: '#b45309', fontWeight: '700', fontSize: 11 }}>⏸️ POSTPONED</Text>
+                    </View>
+                  </View>
+
+                  <Text style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>
+                    🏆 {match.tournamentName || 'Tournament'} • 📍 {match.venue || 'District Stadium'}
+                  </Text>
+
+                  <View style={{ backgroundColor: '#fffbeb', padding: 12, borderRadius: 6, marginTop: 10, borderColor: '#fde68a', borderWidth: 1 }}>
+                    <Text style={{ color: '#92400e', fontWeight: '700', fontSize: 13 }}>
+                      Reason: {match.postponement?.reason || match.postponementReason || 'Reason not recorded'}
+                    </Text>
+                    <Text style={{ color: '#78350f', fontSize: 12, marginTop: 3 }}>
+                      Original Schedule: 📅 {match.postponement?.original_date || match.originalDate || match.date} • ⏰ {match.postponement?.original_time || match.originalTime || match.time || '09:30 AM'}
+                    </Text>
+                    {(match.postponement?.rescheduled_date || match.rescheduledDate) ? (
+                      <Text style={{ color: '#15803d', fontWeight: '700', fontSize: 13, marginTop: 4 }}>
+                        📅 Rescheduled Date: {match.postponement?.rescheduled_date || match.rescheduledDate} • ⏰ {match.postponement?.rescheduled_time || match.rescheduledTime || '09:30 AM'}
+                      </Text>
+                    ) : (
+                      <Text style={{ color: '#b45309', fontStyle: 'italic', fontSize: 12, marginTop: 4 }}>
+                        ⏳ Awaiting Admin Rescheduling
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              ))
+            ) : (
+              <Text style={styles.emptyText}>No postponed matches.</Text>
+            )}
+          </View>
         ) : (
+          /* DEFAULT VIEW: TWO COLUMNS (LIVE + UPCOMING on LEFT, RECENT MATCHES on RIGHT) */
           <View style={styles.contentGrid}>
-            {/* MAIN LEFT COLUMN - LIVE & UPCOMING */}
             <View style={styles.mainCol}>
-              {(!selectedFilter || selectedFilter === 'Live') && liveMatches.length > 0 && (
+              {liveMatches.length > 0 && (
                 <View style={styles.section}>
-                  <Text style={styles.sectionHeader}>LIVE MATCHES</Text>
+                  <Text style={styles.sectionHeader}>LIVE MATCHES ({liveMatches.length})</Text>
                   {liveMatches.map(match => (
                     <MatchCard key={match.id} match={match} variant="live" />
                   ))}
                 </View>
               )}
 
-              {(!selectedFilter || selectedFilter === 'Upcoming') && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionHeader}>UPCOMING MATCHES</Text>
-                  {upcomingMatches.length > 0 ? (
-                    upcomingMatches.map(match => (
-                      <MatchCard key={match.id} match={match} variant="upcoming" />
-                    ))
-                  ) : (
-                    <Text style={styles.emptyText}>No unlocked matches for scoring right now.</Text>
-                  )}
-
-                  {lockedUpcomingMatches.length > 0 && (
-                    <View style={{ marginTop: 12, padding: 12, backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' }}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#64748b', marginBottom: 4 }}>
-                        🔒 Security Locked Matches ({lockedUpcomingMatches.length})
-                      </Text>
-                      <Text style={{ fontSize: 11.5, color: '#94a3b8' }}>
-                        Under federation digital governance, upcoming fixtures unlock automatically on Match Day, 2 hours prior to start time.
-                      </Text>
-                      {lockedUpcomingMatches.map(lm => (
-                        <View key={lm.id} style={{ marginTop: 6, paddingVertical: 4, borderTopWidth: 1, borderTopColor: '#f1f5f9' }}>
-                          <Text style={{ fontSize: 12, fontWeight: '600', color: '#475569' }}>
-                            • {lm.teamA || lm.team_a_name} vs {lm.teamB || lm.team_b_name} ({lm.date || lm.match_date} at {lm.time || lm.match_time})
-                          </Text>
-                        </View>
-                      ))}
-                    </View>
-                  )}
-                </View>
-              )}
+              <View style={styles.section}>
+                <Text style={styles.sectionHeader}>UPCOMING MATCHES ({upcomingMatches.length})</Text>
+                {upcomingMatches.length > 0 ? (
+                  upcomingMatches.map(match => (
+                    <MatchCard key={match.id} match={match} variant="upcoming" />
+                  ))
+                ) : (
+                  <Text style={styles.emptyText}>No upcoming matches scheduled.</Text>
+                )}
+              </View>
             </View>
 
-            {/* RIGHT COLUMN - RECENT MATCHES */}
             <View style={styles.sideCol}>
-              {(!selectedFilter || selectedFilter === 'Completed') && (
-                <View style={styles.section}>
-                  <Text style={styles.sectionHeader}>RECENT MATCHES</Text>
-                  {completedMatches.length > 0 ? (
-                    completedMatches.map(match => (
-                      <MatchCard key={match.id} match={match} variant="completed" />
-                    ))
-                  ) : (
-                    <Text style={styles.emptyText}>No recently completed matches.</Text>
-                  )}
-                </View>
-              )}
+              <View style={styles.section}>
+                <Text style={styles.sectionHeader}>RECENT MATCHES ({completedMatches.length})</Text>
+                {completedMatches.length > 0 ? (
+                  completedMatches.map(match => (
+                    <MatchCard key={match.id} match={match} variant="completed" />
+                  ))
+                ) : (
+                  <Text style={styles.emptyText}>No recently completed matches.</Text>
+                )}
+              </View>
             </View>
           </View>
         )}
@@ -414,6 +693,50 @@ const getStyles = (isDesktop: boolean) => StyleSheet.create({
   primaryActionText: { color: '#ffffff', fontWeight: 'bold', fontSize: 12, letterSpacing: 0.5 },
   secondaryActionBtn: { backgroundColor: 'transparent', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 4, alignItems: 'center', borderWidth: 1, borderColor: '#cbd5e1' },
   secondaryActionText: { color: '#334155', fontWeight: 'bold', fontSize: 12, letterSpacing: 0.5 },
+
+  // FILTER VIEW HEADERS
+  filterHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(226, 232, 240, 0.8)',
+    paddingBottom: 8,
+    gap: 12
+  },
+  filterHeaderTitle: {
+    color: '#1e293b',
+    fontSize: 16,
+    fontWeight: 'bold',
+    letterSpacing: 0.5
+  },
+  filterHeaderSub: {
+    color: '#64748b',
+    fontSize: 12,
+    marginTop: 2
+  },
+  clearFilterBtn: {
+    backgroundColor: '#f1f5f9',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#cbd5e1'
+  },
+  clearFilterText: {
+    color: '#475569',
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  activeFilterBtn: {
+    backgroundColor: '#059669',
+    borderColor: '#047857'
+  },
+  activeFilterText: {
+    color: '#ffffff',
+    fontWeight: 'bold'
+  },
 
   // CONTENT GRID
   contentGrid: { flexDirection: isDesktop ? 'row' : 'column', gap: 20 },

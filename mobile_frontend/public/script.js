@@ -1153,13 +1153,10 @@ async function handleOfficialRegisterSubmit(e) {
   const email = document.getElementById('off_email').value.trim().toLowerCase();
 
   const API_BASE = (function () {
-    if (typeof window !== 'undefined' && window.location) {
-      if (window.location.protocol === 'https:' || (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
-        return 'https://cricket-backend-dqdm.onrender.com/api';
-      }
-      if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+      return `http://${window.location.hostname}:5000/api`;
     }
-    return 'https://cricket-backend-dqdm.onrender.com/api';
+    return 'http://localhost:5000/api';
   })();
 
   let mongoId = null;
@@ -2482,7 +2479,7 @@ async function handleAdminApproveTeam(teamId) {
   if (idx === -1) return;
 
   try {
-    await fetch((window.location.protocol === 'https:' || window.location.hostname !== 'localhost' ? 'https://cricket-backend-dqdm.onrender.com/api' : 'http://localhost:5000/api') + '/auth/admin/approve-registration', {
+    await fetch('http://localhost:5000/api/auth/admin/approve-registration', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id: teamId, type: 'TEAM' })
@@ -4496,7 +4493,7 @@ async function handleUnifiedTeamVerify(e) {
 
 function getBackendApiBase() {
   if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-    if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+    return `http://${window.location.hostname}:5000/api`;
   }
   return 'http://localhost:5000/api';
 }
@@ -5526,13 +5523,10 @@ async function handleAdminLoginSubmit(e) {
   const pass = passInput ? passInput.value.trim() : '';
 
   const API_BASE = (function () {
-    if (typeof window !== 'undefined' && window.location) {
-      if (window.location.protocol === 'https:' || (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
-        return 'https://cricket-backend-dqdm.onrender.com/api';
-      }
-      if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+      return `http://${window.location.hostname}:5000/api`;
     }
-    return 'https://cricket-backend-dqdm.onrender.com/api';
+    return 'http://localhost:5000/api';
   })();
 
   let authenticated = false;
@@ -5661,13 +5655,10 @@ function initAdminDashboard() {
  */
 async function syncAdminDataFromBackend() {
   const API_BASE = (function () {
-    if (typeof window !== 'undefined' && window.location) {
-      if (window.location.protocol === 'https:' || (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
-        return 'https://cricket-backend-dqdm.onrender.com/api';
-      }
-      if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+      return `http://${window.location.hostname}:5000/api`;
     }
-    return 'https://cricket-backend-dqdm.onrender.com/api';
+    return 'http://localhost:5000/api';
   })();
 
   try {
@@ -6201,7 +6192,7 @@ function promptApproveTeam(teamId) {
       // 1. Sync with backend MongoDB API
       const API_BASE = (function () {
         if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-          if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+          return `http://${window.location.hostname}:5000/api`;
         }
         return 'http://localhost:5000/api';
       })();
@@ -6259,7 +6250,7 @@ function promptRejectTeam(teamId) {
       // 1. Sync with backend MongoDB API
       const API_BASE = (function () {
         if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-          if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+          return `http://${window.location.hostname}:5000/api`;
         }
         return 'http://localhost:5000/api';
       })();
@@ -6534,7 +6525,7 @@ function promptApproveScorer(scorerId) {
     onConfirm: async () => {
       const API_BASE = (function () {
         if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-          if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+          return `http://${window.location.hostname}:5000/api`;
         }
         return 'http://localhost:5000/api';
       })();
@@ -6594,7 +6585,7 @@ function promptRejectScorer(scorerId) {
     onConfirm: async (reason) => {
       const API_BASE = (function () {
         if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-          if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+          return `http://${window.location.hostname}:5000/api`;
         }
         return 'http://localhost:5000/api';
       })();
@@ -6744,13 +6735,10 @@ async function handleScorerLoginSubmit(e) {
   }
 
   const API_BASE = (function () {
-    if (typeof window !== 'undefined' && window.location) {
-      if (window.location.protocol === 'https:' || (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
-        return 'https://cricket-backend-dqdm.onrender.com/api';
-      }
-      if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+      return `http://${window.location.hostname}:5000/api`;
     }
-    return 'https://cricket-backend-dqdm.onrender.com/api';
+    return 'http://localhost:5000/api';
   })();
 
   // 1. Try Live MongoDB Authentication via Scorer Login API
@@ -7008,13 +6996,10 @@ function saveStoredNews(list) {
 
 async function syncAdminNewsFromBackend() {
   const API_BASE = (function () {
-    if (typeof window !== 'undefined' && window.location) {
-      if (window.location.protocol === 'https:' || (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
-        return 'https://cricket-backend-dqdm.onrender.com/api';
-      }
-      if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+      return `http://${window.location.hostname}:5000/api`;
     }
-    return 'https://cricket-backend-dqdm.onrender.com/api';
+    return 'http://localhost:5000/api';
   })();
 
   const token = localStorage.getItem('cfvd_admin_token') || '';
@@ -7172,13 +7157,10 @@ async function handleAdminPublishNews(event) {
   };
 
   const API_BASE = (function () {
-    if (typeof window !== 'undefined' && window.location) {
-      if (window.location.protocol === 'https:' || (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
-        return 'https://cricket-backend-dqdm.onrender.com/api';
-      }
-      if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+      return `http://${window.location.hostname}:5000/api`;
     }
-    return 'https://cricket-backend-dqdm.onrender.com/api';
+    return 'http://localhost:5000/api';
   })();
 
   try {
@@ -7248,13 +7230,10 @@ async function handleAdminDeleteNews(id) {
   }
 
   const API_BASE = (function () {
-    if (typeof window !== 'undefined' && window.location) {
-      if (window.location.protocol === 'https:' || (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
-        return 'https://cricket-backend-dqdm.onrender.com/api';
-      }
-      if (window.location.protocol === "https:" || (window.location.hostname && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1")) { return "https://cricket-backend-dqdm.onrender.com/api"; } return `http://${window.location.hostname}:5000/api`;
+    if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+      return `http://${window.location.hostname}:5000/api`;
     }
-    return 'https://cricket-backend-dqdm.onrender.com/api';
+    return 'http://localhost:5000/api';
   })();
 
   try {

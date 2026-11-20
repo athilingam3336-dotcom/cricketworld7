@@ -11,6 +11,8 @@ const tournamentController = require('../controllers/tournamentController');
 const adminDashboardController = require('../controllers/adminDashboardController');
 const { requireAdminAuth } = require('../middleware/authMiddleware');
 
+const masterSettingController = require('../controllers/masterSettingController');
+
 // Enforce ADMIN role across all administrative management routes
 router.use(requireAdminAuth);
 
@@ -248,25 +250,29 @@ router.get('/matches', async (req, res) => {
   }
 });
 
-router.post('/matches/schedule', async (req, res) => {
+const handleScheduleMatch = async (req, res) => {
   try {
     const adminEmail = req.adminUser?.email || 'admin@cfvd.org';
     const match = await adminService.scheduleMatch(req.body, adminEmail);
     res.json({ success: true, message: 'Match scheduled successfully', match });
   } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
+    res.status(400).json({ success: false, error: err.message, message: err.message });
   }
-});
+};
+router.post('/matches/schedule', handleScheduleMatch);
+router.post('/matches', handleScheduleMatch);
 
-router.put('/matches/:id', async (req, res) => {
+const handleUpdateMatch = async (req, res) => {
   try {
     const adminEmail = req.adminUser?.email || 'admin@cfvd.org';
     const match = await adminService.updateMatch(req.params.id, req.body, adminEmail);
     res.json({ success: true, message: 'Match updated successfully', match });
   } catch (err) {
-    res.status(400).json({ success: false, error: err.message });
+    res.status(400).json({ success: false, error: err.message, message: err.message });
   }
-});
+};
+router.put('/matches/:id', handleUpdateMatch);
+router.patch('/matches/:id', handleUpdateMatch);
 
 const handleCancelMatch = async (req, res) => {
   try {
@@ -280,6 +286,66 @@ const handleCancelMatch = async (req, res) => {
 };
 router.patch('/matches/:id/cancel', handleCancelMatch);
 router.post('/matches/:id/cancel', handleCancelMatch);
+
+const handlePostponeMatch = async (req, res) => {
+  try {
+    const adminEmail = req.adminUser?.email || 'admin@cfvd.org';
+    const reason = req.body?.reason || req.query?.reason;
+    const match = await adminService.postponeMatch(req.params.id, { reason }, adminEmail);
+    res.json({ success: true, message: 'Match postponed successfully', match });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message, message: err.message });
+  }
+};
+router.post('/matches/:id/postpone', handlePostponeMatch);
+router.patch('/matches/:id/postpone', handlePostponeMatch);
+
+const handleConfirmSchedule = async (req, res) => {
+  try {
+    const adminEmail = req.adminUser?.email || 'admin@cfvd.org';
+    const match = await adminService.confirmMatchSchedule(req.params.id, adminEmail);
+    res.json({ success: true, message: 'Match schedule confirmed successfully', match });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message, message: err.message });
+  }
+};
+router.post('/matches/:id/confirm-schedule', handleConfirmSchedule);
+router.patch('/matches/:id/confirm-schedule', handleConfirmSchedule);
+
+const handleRescheduleMatch = async (req, res) => {
+  try {
+    const adminEmail = req.adminUser?.email || 'admin@cfvd.org';
+    const { newDate, newTime, reason } = req.body;
+    const match = await adminService.rescheduleMatch(req.params.id, { newDate, newTime, reason }, adminEmail);
+    res.json({ success: true, message: 'Match rescheduled successfully', match });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message, message: err.message });
+  }
+};
+router.post('/matches/:id/reschedule', handleRescheduleMatch);
+router.put('/matches/:id/reschedule', handleRescheduleMatch);
+
+const handleGetPostponementRequests = async (req, res) => {
+  try {
+    const requests = await adminService.getPostponementRequests();
+    res.json({ success: true, requests });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+};
+router.get('/matches/postponement-requests', handleGetPostponementRequests);
+
+const handleReviewPostponementRequest = async (req, res) => {
+  try {
+    const adminEmail = req.adminUser?.email || 'admin@cfvd.org';
+    const { decision, reviewNotes } = req.body;
+    const match = await adminService.reviewUmpirePostponement(req.params.id, { decision, reviewNotes }, adminEmail);
+    res.json({ success: true, message: `Postponement request ${decision}D successfully`, match });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message, message: err.message });
+  }
+};
+router.post('/matches/:id/postponement-requests/review', handleReviewPostponementRequest);
 
 router.delete('/matches/:id', async (req, res) => {
   try {
@@ -423,6 +489,82 @@ router.delete('/content/:id', async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CRICKET LAWS MANAGEMENT (MCC 2017 Code – Fourth Edition 2026)
+// All routes protected by requireAdminAuth (already applied at top of this router)
+// ─────────────────────────────────────────────────────────────────────────────
+const cricketLawsCtrl = require('../controllers/cricketLawsController');
+
+/**
+ * GET /api/admin/cricket-laws – List all laws (same as public but with admin context)
+ */
+router.get('/cricket-laws', cricketLawsCtrl.getAllLaws);
+
+/**
+ * GET /api/admin/cricket-laws/stats – Dashboard statistics
+ */
+router.get('/cricket-laws/stats', cricketLawsCtrl.getLawStats);
+
+/**
+ * GET /api/admin/cricket-laws/audit-logs – View change history
+ */
+router.get('/cricket-laws/audit-logs', cricketLawsCtrl.getAuditLogs);
+
+/**
+ * GET /api/admin/cricket-laws/categories – Category list
+ */
+router.get('/cricket-laws/categories', cricketLawsCtrl.getLawCategories);
+
+/**
+ * GET /api/admin/cricket-laws/search – Keyword search
+ */
+router.get('/cricket-laws/search', cricketLawsCtrl.searchLaws);
+
+/**
+ * GET /api/admin/cricket-laws/:id – Single law with sections
+ */
+router.get('/cricket-laws/:id', cricketLawsCtrl.getLawById);
+
+/**
+ * POST /api/admin/cricket-laws – Create a new law
+ */
+router.post('/cricket-laws', cricketLawsCtrl.createLaw);
+
+/**
+ * PUT /api/admin/cricket-laws/:id – Update law
+ */
+router.put('/cricket-laws/:id', cricketLawsCtrl.updateLaw);
+
+/**
+ * POST /api/admin/cricket-laws/:id/sections – Add section to law
+ */
+router.post('/cricket-laws/:id/sections', cricketLawsCtrl.addSection);
+
+/**
+ * POST /api/admin/cricket-laws/:id/publish – Publish/verify law
+ */
+router.post('/cricket-laws/:id/publish', cricketLawsCtrl.publishLaw);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOURNAMENT CALCULATION SETTINGS (DLS / VJD)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/tournaments/:tournamentId/calculation-settings
+ * Get DLS/VJD setting for a specific tournament
+ */
+router.get('/tournaments/:tournamentId/calculation-settings', cricketLawsCtrl.getCalculationSettings);
+
+/**
+ * PUT /api/admin/tournaments/:tournamentId/calculation-settings
+ * Update DLS/VJD method for a specific tournament
+ */
+router.put('/tournaments/:tournamentId/calculation-settings', cricketLawsCtrl.updateCalculationSettings);
+
+/**
+ * POST /api/admin/calculate-prediction – Live DLS/VJD calculation
+ */
+router.post('/calculate-prediction', cricketLawsCtrl.calculatePrediction);
 /**
  * --------------------------------------------------------------------------
  * Admin Panel Dedicated Endpoints (powering mobile_frontend/src/admin)
@@ -453,4 +595,11 @@ router.get('/statistics', (req, res) => adminDashboardController.getStatistics(r
 router.get('/settings', (req, res) => adminDashboardController.getSettings(req, res));
 router.put('/settings', (req, res) => adminDashboardController.updateSettings(req, res));
 
+// MASTER SETTINGS & DYNAMIC SUBCATEGORIES (Taluk, Roles, Batting, Age, Certifications, State)
+router.get('/master-settings', (req, res) => masterSettingController.getSettings(req, res));
+router.post('/master-settings', (req, res) => masterSettingController.createSetting(req, res));
+router.put('/master-settings/:id', (req, res) => masterSettingController.updateSetting(req, res));
+router.delete('/master-settings/:id', (req, res) => masterSettingController.deleteSetting(req, res));
+
 module.exports = router;
+

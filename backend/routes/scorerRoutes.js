@@ -124,9 +124,9 @@ router.get('/matches/:matchId', async (req, res) => {
 });
 
 // Match Setup before match starts
-router.get('/matches/:matchId/setup', async (req, res) => {
+router.get('/matches/:matchId/setup', verifyMatchPermission, async (req, res) => {
   try {
-    const setup = await matchService.getMatchSetup(req.params.matchId);
+    const setup = await matchService.getMatchSetup(req.params.matchId, req.user);
     res.json({ success: true, data: setup });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
@@ -136,7 +136,7 @@ router.get('/matches/:matchId/setup', async (req, res) => {
 // Start Match (Toss, Playing XI)
 router.post('/matches/:matchId/start', verifyMatchPermission, async (req, res) => {
   try {
-    const result = await matchService.startMatch(req.params.matchId, req.body);
+    const result = await matchService.startMatch(req.params.matchId, req.body, req.user);
     res.json(result);
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
@@ -237,6 +237,25 @@ router.post('/matches/:matchId/undo', verifyMatchPermission, async (req, res) =>
   }
 });
 
+// Edit Delivery (Retroactive ball correction)
+const handleEditDelivery = async (req, res) => {
+  try {
+    const result = await scoringEngine.editDelivery(
+      req.params.matchId,
+      req.params.deliveryId,
+      req.body,
+      req.user?.id
+    );
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message, message: err.message });
+  }
+};
+
+router.patch('/matches/:matchId/deliveries/:deliveryId', verifyMatchPermission, handleEditDelivery);
+router.put('/matches/:matchId/deliveries/:deliveryId', verifyMatchPermission, handleEditDelivery);
+router.post('/matches/:matchId/deliveries/:deliveryId/edit', verifyMatchPermission, handleEditDelivery);
+
 // Swap Strike
 router.post('/matches/:matchId/swap-strike', verifyMatchPermission, async (req, res) => {
   try {
@@ -311,6 +330,16 @@ router.post('/matches/:matchId/super-over', verifyMatchPermission, async (req, r
 router.post('/matches/:matchId/breaks', verifyMatchPermission, async (req, res) => {
   try {
     const result = await scoringEngine.addBreak(req.params.matchId, req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+// Resume play / End active break
+router.post('/matches/:matchId/end-break', verifyMatchPermission, async (req, res) => {
+  try {
+    const result = await scoringEngine.endBreak(req.params.matchId);
     res.json(result);
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
@@ -402,6 +431,88 @@ router.post('/matches/:matchId/change-team', verifyMatchPermission, async (req, 
   try {
     const result = await scoringEngine.changeTeamBeforeStart(req.params.matchId, req.body);
     res.json(result);
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+// Umpire Decision Support & Decision Audit History
+router.get('/matches/:matchId/umpire-decisions', async (req, res) => {
+  try {
+    await db.initDb();
+    const decisions = await db.models.UmpireDecision.find({ match_id: req.params.matchId })
+      .sort({ timestamp: -1 })
+      .limit(50)
+      .lean();
+    const innings = await db.models.Innings.findOne({ match_id: req.params.matchId, is_completed: false })
+      .sort({ innings_number: -1 })
+      .lean();
+    res.json({
+      success: true,
+      decisions: decisions || [],
+      suspendedBowlers: innings?.suspended_bowler_ids || []
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/matches/:matchId/umpire-decisions', verifyMatchPermission, async (req, res) => {
+  try {
+    await db.initDb();
+    const { ruleName, lawReference, description, runsAwarded, bowlerId, bowlerName, warningLevel, targetTeamName } = req.body;
+    const matchId = req.params.matchId;
+
+    let innings = await db.models.Innings.findOne({ match_id: matchId, is_completed: false })
+      .sort({ innings_number: -1 });
+    if (!innings) {
+      innings = await db.models.Innings.findOne({ match_id: matchId }).sort({ innings_number: -1 });
+    }
+
+    const decId = `DEC-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const decisionRecord = await db.models.UmpireDecision.create({
+      id: decId,
+      match_id: matchId,
+      umpire_id: req.user?.id || 'UMP-OFFICIAL',
+      umpire_name: req.user?.name || 'Match Umpire',
+      decision_type: ruleName || 'RULE_DECISION',
+      description: description || `${ruleName} (${lawReference}): ${warningLevel || 'Applied'}`,
+      inning: innings?.innings_number || 1,
+      over: innings?.overs || 0,
+      ball: innings?.balls || 0,
+      timestamp: new Date()
+    });
+
+    // If bowler suspension applied:
+    if (warningLevel === 'SUSPENSION' && bowlerId && innings) {
+      if (!innings.suspended_bowler_ids) innings.suspended_bowler_ids = [];
+      if (!innings.suspended_bowler_ids.includes(bowlerId)) {
+        innings.suspended_bowler_ids.push(bowlerId);
+        await innings.save();
+      }
+    }
+
+    // If penalty runs were awarded:
+    if (runsAwarded && runsAwarded > 0 && innings) {
+      innings.total_runs += Number(runsAwarded);
+      if (!innings.extras) innings.extras = { wides: 0, no_balls: 0, byes: 0, leg_byes: 0, total: 0 };
+      innings.extras.total = (innings.extras.total || 0) + Number(runsAwarded);
+      innings.extras.penalty = (innings.extras.penalty || 0) + Number(runsAwarded);
+      await innings.save();
+    }
+
+    // Audit log
+    await db.models.AuditLog.create({
+      id: `AUD-${Date.now()}`,
+      user_id: req.user?.id || 'SCR-101',
+      action: 'UMPIRE_DECISION_APPLIED',
+      entity: 'Match',
+      entity_id: matchId,
+      details: { decisionId: decId, ruleName, lawReference, runsAwarded, warningLevel, bowlerName, targetTeamName },
+      timestamp: new Date()
+    });
+
+    res.json({ success: true, decision: decisionRecord, message: 'Umpire decision recorded and applied.' });
   } catch (err) {
     res.status(err.status || 500).json({ success: false, error: err.message });
   }

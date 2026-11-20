@@ -18,6 +18,7 @@ import {
   StyleSheet,
   View,
   Text,
+  Image,
   TouchableOpacity,
   ScrollView,
   useWindowDimensions,
@@ -46,8 +47,10 @@ export type TeamTabType =
   | 'team'
   | 'squad'
   | 'tournaments'
+  | 'allocation'
   | 'schedule'
   | 'matches'
+  | 'postponed'
   | 'scorecard'
   | 'statistics'
   | 'notifications'
@@ -67,12 +70,15 @@ export interface TeamSidebarProps {
   activeTab: TeamTabType;
   onSelectTab: (tab: TeamTabType) => void;
   teamName?: string;
+  teamPhoto?: string | null;
   coachName?: string;
   teamId?: string;
   taluk?: string;
   squadCount?: number;
   matchesCount?: number;
+  allocationPendingCount?: number;
   upcomingCount?: number;
+  postponedCount?: number;
   registrationsCount?: number;
   notificationsCount?: number;
   isDesktop?: boolean;
@@ -86,7 +92,9 @@ export interface TeamSidebarProps {
 export const getTeamNavItems = (badges?: {
   squadCount?: number;
   matchesCount?: number;
+  allocationPendingCount?: number;
   upcomingCount?: number;
+  postponedCount?: number;
   registrationsCount?: number;
   notificationsCount?: number;
 }): TeamNavItem[] => [
@@ -115,6 +123,13 @@ export const getTeamNavItems = (badges?: {
     badgeType: 'gold'
   },
   {
+    key: 'allocation',
+    label: 'Allocation',
+    icon: (c) => <UsersIcon size={18} color={c} />,
+    badge: badges?.allocationPendingCount,
+    badgeType: 'orange'
+  },
+  {
     key: 'schedule',
     label: 'Schedule',
     icon: (c) => <CricketBatIcon size={18} color={c} />,
@@ -126,6 +141,13 @@ export const getTeamNavItems = (badges?: {
     label: 'Matches',
     icon: (c) => <MatchesIcon size={18} color={c} />,
     badge: badges?.matchesCount,
+    badgeType: 'orange'
+  },
+  {
+    key: 'postponed',
+    label: 'Postponed Matches',
+    icon: (c) => <LiveScoringIcon size={18} color={c} />,
+    badge: badges?.postponedCount,
     badgeType: 'orange'
   },
   {
@@ -152,16 +174,30 @@ export const getTeamNavItems = (badges?: {
   }
 ];
 
+export const getTeamInitials = (name?: string): string => {
+  if (!name || typeof name !== 'string') return 'TM';
+  const clean = name.trim();
+  if (!clean) return 'TM';
+  const parts = clean.split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return clean.slice(0, 2).toUpperCase();
+};
+
 export const TeamSidebar: React.FC<TeamSidebarProps> = ({
   activeTab,
   onSelectTab,
-  teamName = 'Official Club CC',
+  teamName = 'Team',
+  teamPhoto = null,
   coachName = 'Head Coach',
-  teamId = 'TM-101',
+  teamId = '',
   taluk = 'Virudhunagar',
-  squadCount = 15,
+  squadCount = 0,
   matchesCount = 0,
+  allocationPendingCount = 0,
   upcomingCount = 0,
+  postponedCount = 0,
   registrationsCount = 0,
   notificationsCount = 0,
   isDesktop: propIsDesktop,
@@ -197,21 +233,34 @@ export const TeamSidebar: React.FC<TeamSidebarProps> = ({
 
   // Build nav items with dynamic badges
   const navItems = getTeamNavItems({
-    squadCount: squadCount || 15,
+    squadCount: squadCount ?? 0,
     matchesCount,
     upcomingCount,
+    postponedCount,
     registrationsCount,
     notificationsCount
   });
 
   const sidebarContent = (
-    <View style={[styles.sidebarContainer, isCollapsed && styles.sidebarCollapsed]}>
+    <View style={[
+      styles.sidebarContainer,
+      !isDesktop && styles.sidebarContainerMobile,
+      isCollapsed && styles.sidebarCollapsed
+    ]}>
       {/* 1. Team Profile Header Card */}
       <View style={[styles.sidebarTeamCard, isCollapsed && styles.sidebarTeamCardCollapsed]}>
         <View style={styles.teamAvatarCircle}>
-          <Text style={styles.teamAvatarText}>
-            {teamName ? teamName.charAt(0).toUpperCase() : 'T'}
-          </Text>
+          {teamPhoto ? (
+            <Image
+              source={{ uri: teamPhoto }}
+              style={styles.teamAvatarImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <Text style={styles.teamAvatarText}>
+              {getTeamInitials(teamName)}
+            </Text>
+          )}
         </View>
         {!isCollapsed && (
           <View style={styles.sidebarTeamInfo}>
@@ -376,7 +425,7 @@ export const TeamSidebar: React.FC<TeamSidebarProps> = ({
               <CloseIcon size={18} color="#e2e8f0" />
             </TouchableOpacity>
           </View>
-          <View style={{ flex: 1, minHeight: 0 }}>
+          <View style={{ flex: 1, minHeight: 0, width: '100%' }}>
             {sidebarContent}
           </View>
         </View>
@@ -392,6 +441,8 @@ const styles = StyleSheet.create({
   // 1. SIDEBAR CONTAINER — WHITE background, golden accents (Reference: PlayerSidebar)
   sidebarContainer: {
     width: 250,
+    flex: 1,
+    height: '100%',
     alignSelf: 'stretch',
     backgroundColor: '#ffffff',
     borderRightWidth: 1,
@@ -406,7 +457,15 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     minHeight: 0,
     overflow: 'hidden',
-    ...(Platform.OS === 'web' ? ({ height: '100%', overflowY: 'hidden' } as any) : {})
+    ...(Platform.OS === 'web' ? ({ position: 'sticky', top: 0, height: '100vh', overflowY: 'hidden', alignSelf: 'flex-start', flexShrink: 0 } as any) : {})
+  },
+  sidebarContainerMobile: {
+    width: '100%',
+    flex: 1,
+    height: '100%',
+    borderRightWidth: 0,
+    elevation: 0,
+    shadowOpacity: 0
   },
   sidebarCollapsed: {
     width: 76
@@ -437,15 +496,22 @@ const styles = StyleSheet.create({
     borderColor: '#d4af37',
     justifyContent: 'center',
     alignItems: 'center',
+    overflow: 'hidden',
     shadowColor: '#d4af37',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.4,
     elevation: 2
   },
+  teamAvatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 6
+  },
   teamAvatarText: {
     color: '#f59e0b',
-    fontSize: 18,
-    fontWeight: '900'
+    fontSize: 15,
+    fontWeight: '900',
+    letterSpacing: 0.5
   },
   sidebarTeamInfo: {
     flex: 1,
@@ -674,10 +740,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(7, 16, 38, 0.65)'
   },
   mobileDrawerContainer: {
-    width: 270,
+    width: 280,
     maxWidth: '85%',
     height: '100%',
-    backgroundColor: '#071026',
+    backgroundColor: '#ffffff',
     flexDirection: 'column',
     zIndex: 1000,
     shadowColor: '#000',

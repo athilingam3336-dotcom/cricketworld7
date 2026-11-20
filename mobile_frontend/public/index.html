@@ -3,15 +3,6 @@
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
-    <script>
-      (function(){
-        var redirect = sessionStorage.redirect;
-        delete sessionStorage.redirect;
-        if (redirect && redirect !== location.href) {
-          history.replaceState(null, null, redirect);
-        }
-      })();
-    </script>
     
     <!-- Responsive Viewport for All Mobile Devices & Browsers (iOS Safari, Android Chrome, Edge, Firefox) -->
     <meta 
@@ -60,6 +51,11 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Cricket Federation of Virudhunagar District" />
     <meta name="twitter:description" content="Official cricket portal featuring live scorecards, tournament fixtures, and wagon wheel analytics." />
+
+    <!-- Video Preload & Connection Pre-warming for Instant Streaming -->
+    <link rel="preload" href="/preloader.mp4" as="video" type="video/mp4" crossorigin="anonymous" />
+    <link rel="preconnect" href="http://localhost:5000" crossorigin />
+    <link rel="dns-prefetch" href="http://localhost:5000" />
 
     <!-- Structured Data JSON-LD for Google & Search Engine Rich Snippets -->
     <script type="application/ld+json">
@@ -225,14 +221,615 @@
         background: #e2e8f0 !important;
         color: #1e293b !important;
       }
+
+      /* ============================================================ */
+      /* CINEMATIC PRELOADER & GRAND WEBSITE ENTRANCE ANIMATIONS     */
+      /* ============================================================ */
+      body.cfvd-preloader-active {
+        overflow: hidden !important;
+      }
+
+      body.cfvd-preloader-active #root {
+        opacity: 0;
+        transform: scale(0.93) translateY(24px);
+        filter: blur(14px) brightness(0.75);
+        pointer-events: none;
+        will-change: transform, opacity, filter;
+      }
+
+      /* Grand Website Entrance Animation upon Video Completion */
+      #root.cfvd-revealing {
+        opacity: 1 !important;
+        transform: scale(1) translateY(0) !important;
+        filter: blur(0px) brightness(1) !important;
+        pointer-events: auto !important;
+        transition: transform 1.25s cubic-bezier(0.16, 1, 0.3, 1),
+                    opacity 1.05s cubic-bezier(0.16, 1, 0.3, 1),
+                    filter 1.05s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        will-change: transform, opacity, filter;
+      }
+
+      /* Stadium Floodlight Burst Flash */
+      #cfvd-stadium-flash {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        height: 100dvh;
+        background: radial-gradient(circle at 50% 45%, rgba(251, 191, 36, 0.95) 0%, rgba(245, 158, 11, 0.6) 35%, rgba(2, 6, 18, 0) 75%),
+                    linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(245, 158, 11, 0) 55%);
+        pointer-events: none;
+        z-index: 2147483646;
+        opacity: 0;
+        visibility: hidden;
+        mix-blend-mode: screen;
+      }
+
+      #cfvd-stadium-flash.active {
+        visibility: visible;
+        animation: cfvdFlashAnimation 1.15s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
+      @keyframes cfvdFlashAnimation {
+        0% {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        25% {
+          opacity: 0.95;
+          transform: scale(1.05);
+        }
+        100% {
+          opacity: 0;
+          transform: scale(1.3);
+          visibility: hidden;
+        }
+      }
+
+      /* Audio Equalizer Pulsing Waves */
+      @keyframes cfvdSoundWave1 {
+        0%, 100% { height: 4px; }
+        50% { height: 14px; }
+      }
+      @keyframes cfvdSoundWave2 {
+        0%, 100% { height: 14px; }
+        50% { height: 5px; }
+      }
+      @keyframes cfvdSoundWave3 {
+        0%, 100% { height: 7px; }
+        50% { height: 16px; }
+      }
+
+      @keyframes cfvdPromptPulse {
+        0%, 100% {
+          transform: translateX(-50%) scale(1);
+          box-shadow: 0 4px 20px rgba(245, 158, 11, 0.4), inset 0 0 10px rgba(245, 158, 11, 0.2);
+        }
+        50% {
+          transform: translateX(-50%) scale(1.04);
+          box-shadow: 0 6px 30px rgba(245, 158, 11, 0.8), inset 0 0 18px rgba(245, 158, 11, 0.4);
+        }
+      }
+
+      /* Full Mobile & Responsive Screen Video Coverage */
+      #cfvd-preloader-video {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+        object-position: center center !important;
+        background-color: #020612 !important;
+      }
+
+      @media (max-width: 768px), (orientation: portrait), (max-aspect-ratio: 1/1) {
+        #cfvd-preloader-video {
+          width: 100vw !important;
+          height: 100vh !important;
+          height: 100dvh !important;
+          object-fit: cover !important;
+          object-position: center center !important;
+        }
+        .cfvd-top-bar-responsive {
+          top: 14px !important;
+          left: 12px !important;
+          right: 12px !important;
+        }
+        .cfvd-brand-badge-responsive {
+          padding: 6px 12px !important;
+        }
+        .cfvd-brand-title-responsive {
+          font-size: 10px !important;
+          letter-spacing: 0.8px !important;
+        }
+        .cfvd-sound-badge-responsive {
+          padding: 6px 12px !important;
+          font-size: 10.5px !important;
+        }
+        .cfvd-skip-btn-responsive {
+          padding: 8px 16px !important;
+          font-size: 11px !important;
+          min-height: 40px !important;
+        }
+      }
     </style>
   </head>
-  <body>
+  <body class="cfvd-preloader-active">
     <noscript>
       <div style="padding: 20px; text-align: center; color: #fff; background: #020612;">
         JavaScript is required to view live cricket scores and fixtures. Please enable JavaScript to continue.
       </div>
     </noscript>
+
+    <!-- Stadium Floodlight Flare Transition Overlay -->
+    <div id="cfvd-stadium-flash"></div>
+
+    <!-- ============================================================ -->
+    <!-- CRICKET FEDERATION OFFICIAL VIDEO PRELOADER (WEB & MOBILE)    -->
+    <!-- ============================================================ -->
+    <div id="cfvd-preloader-root" style="
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      background-color: #020612;
+      z-index: 2147483647;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      opacity: 1;
+      visibility: visible;
+      transform: scale(1);
+      filter: blur(0px);
+      transition: opacity 0.85s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.85s cubic-bezier(0.16, 1, 0.3, 1),
+                  filter 0.85s cubic-bezier(0.16, 1, 0.3, 1);
+    ">
+      <!-- Background Ambient Vignette -->
+      <div style="
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(circle at center, rgba(15, 23, 42, 0) 55%, rgba(2, 6, 18, 0.9) 100%);
+        pointer-events: none;
+        z-index: 2;
+      "></div>
+
+      <!-- Main Video Container -->
+      <div style="
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #020612;
+        overflow: hidden;
+      ">
+        <video
+          id="cfvd-preloader-video"
+          autoplay
+          playsinline
+          webkit-playsinline
+          preload="auto"
+          style="
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            object-position: center center;
+            background: #020612;
+          "
+        >
+          <source src="/preloader.mp4" type="video/mp4" />
+          <source src="./preloader.mp4" type="video/mp4" />
+          <source src="/assets/preloader.mp4" type="video/mp4" />
+          <source src="http://localhost:5000/uploads/preloader.mp4" type="video/mp4" />
+        </video>
+      </div>
+
+      <!-- Floating Controls: Top Bar -->
+      <div class="cfvd-top-bar-responsive" style="
+        position: absolute;
+        top: 24px;
+        left: 20px;
+        right: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        z-index: 2147483647;
+        pointer-events: auto;
+      ">
+        <!-- Brand Badge -->
+        <div class="cfvd-brand-badge-responsive" style="
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          background: rgba(2, 6, 18, 0.75);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          border: 1px solid rgba(245, 158, 11, 0.35);
+          padding: 7px 16px;
+          border-radius: 9999px;
+          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+          user-select: none;
+        ">
+          <span style="font-size: 14px;">🏏</span>
+          <span class="cfvd-brand-title-responsive" style="
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1.1px;
+            color: #f59e0b;
+            text-transform: uppercase;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          ">CRICKET FEDERATION</span>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <!-- Permanent Unmuted Audio Status Badge -->
+          <div
+            id="cfvd-sound-badge"
+            class="cfvd-sound-badge-responsive"
+            style="
+              background: rgba(245, 158, 11, 0.18);
+              backdrop-filter: blur(14px);
+              -webkit-backdrop-filter: blur(14px);
+              border: 1px solid rgba(245, 158, 11, 0.65);
+              color: #fbbf24;
+              padding: 7px 14px;
+              border-radius: 9999px;
+              font-size: 11px;
+              font-weight: 800;
+              letter-spacing: 0.7px;
+              display: flex;
+              align-items: center;
+              gap: 6px;
+              box-shadow: 0 0 16px rgba(245, 158, 11, 0.3);
+              user-select: none;
+            "
+          >
+            <span style="font-size: 12px;">🔊</span>
+            <span id="cfvd-sound-status-text">SOUND ON</span>
+            <span style="display: inline-flex; align-items: flex-end; gap: 2px; height: 12px;">
+              <span style="width: 2px; height: 5px; background: #fbbf24; border-radius: 2px; animation: cfvdSoundWave1 0.8s ease-in-out infinite;"></span>
+              <span style="width: 2px; height: 12px; background: #f59e0b; border-radius: 2px; animation: cfvdSoundWave2 0.6s ease-in-out infinite 0.15s;"></span>
+              <span style="width: 2px; height: 8px; background: #d97706; border-radius: 2px; animation: cfvdSoundWave3 0.75s ease-in-out infinite 0.3s;"></span>
+            </span>
+          </div>
+
+          <!-- Skip Button (Guaranteed Clickable & Tap Friendly) -->
+          <button
+            id="cfvd-skip-btn"
+            type="button"
+            class="cfvd-skip-btn-responsive"
+            onclick="window.__dismissCfvdPreloader && window.__dismissCfvdPreloader(false)"
+            ontouchstart="window.__dismissCfvdPreloader && window.__dismissCfvdPreloader(false)"
+            ontouchend="window.__dismissCfvdPreloader && window.__dismissCfvdPreloader(false)"
+            style="
+              background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+              color: #020612;
+              border: 1.5px solid rgba(251, 191, 36, 0.95);
+              padding: 8px 18px;
+              border-radius: 9999px;
+              font-size: 11.5px;
+              font-weight: 900;
+              letter-spacing: 0.8px;
+              cursor: pointer;
+              display: flex;
+              align-items: center;
+              gap: 5px;
+              box-shadow: 0 4px 18px rgba(245, 158, 11, 0.5);
+              transition: all 0.15s ease;
+              user-select: none;
+              -webkit-user-select: none;
+              touch-action: manipulation;
+              pointer-events: auto !important;
+              z-index: 2147483647 !important;
+            "
+          >
+            <span>SKIP INTRO</span>
+            <span style="font-size: 13px; font-weight: 900;">✕</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Center Pulsating Audio Activation Banner (shown only if browser policy restricts audio until first touch) -->
+      <div
+        id="cfvd-tap-sound-hint"
+        style="
+          display: none;
+          position: absolute;
+          top: 80px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 20;
+          background: rgba(15, 23, 42, 0.85);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1.5px solid #f59e0b;
+          border-radius: 9999px;
+          padding: 9px 24px;
+          color: #fef08a;
+          font-size: 12.5px;
+          font-weight: 800;
+          letter-spacing: 0.7px;
+          animation: cfvdPromptPulse 1.8s ease-in-out infinite;
+          cursor: pointer;
+          user-select: none;
+          white-space: nowrap;
+        "
+      >
+        🔊 TAP ANYWHERE FOR FULL STADIUM SOUND
+      </div>
+
+      <!-- Bottom Progress Bar & Title -->
+      <div style="
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 10;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: linear-gradient(to top, rgba(2, 6, 18, 0.95) 0%, rgba(2, 6, 18, 0) 100%);
+        padding: 28px 20px 16px 20px;
+        pointer-events: none;
+      ">
+        <div style="
+          font-size: 11.5px;
+          font-weight: 700;
+          color: #94a3b8;
+          letter-spacing: 1.2px;
+          text-transform: uppercase;
+          margin-bottom: 10px;
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        ">
+          VIRUDHUNAGAR DISTRICT CRICKET ASSOCIATION • OFFICIAL PORTAL
+        </div>
+        <!-- Progress Bar Track -->
+        <div style="
+          width: 100%;
+          max-width: 480px;
+          height: 3.5px;
+          background: rgba(255, 255, 255, 0.14);
+          border-radius: 3px;
+          overflow: hidden;
+        ">
+          <div id="cfvd-preloader-progress" style="
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #f59e0b, #fbbf24);
+            border-radius: 3px;
+            transition: width 0.1s linear;
+          "></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function() {
+        var preloader = document.getElementById('cfvd-preloader-root');
+        var video = document.getElementById('cfvd-preloader-video');
+        var skipBtn = document.getElementById('cfvd-skip-btn');
+        var soundHint = document.getElementById('cfvd-tap-sound-hint');
+        var progressBar = document.getElementById('cfvd-preloader-progress');
+        var stadiumFlash = document.getElementById('cfvd-stadium-flash');
+
+        if (!preloader || !video) return;
+
+        // Check if user already saw the preloader in this session
+        var hasSeen = false;
+        try {
+          hasSeen = Boolean(sessionStorage.getItem('cfvd_preloader_seen'));
+        } catch(e) {}
+
+        var dismissed = false;
+        window.__dismissCfvdPreloader = function(immediate) {
+          if (dismissed) return;
+          dismissed = true;
+          try {
+            sessionStorage.setItem('cfvd_preloader_seen', 'true');
+          } catch(e) {}
+
+          var root = document.getElementById('root');
+          var flash = document.getElementById('cfvd-stadium-flash');
+
+          // Pause video immediately
+          try {
+            if (video) video.pause();
+          } catch(e) {}
+
+          // Immediately unlock body scroll
+          document.body.classList.remove('cfvd-preloader-active');
+          if (root) {
+            root.classList.add('cfvd-revealing');
+          }
+
+          if (immediate) {
+            if (root) {
+              root.style.opacity = '1';
+              root.style.transform = 'none';
+              root.style.filter = 'none';
+              root.style.pointerEvents = 'auto';
+            }
+            if (preloader && preloader.parentNode) {
+              preloader.parentNode.removeChild(preloader);
+            }
+            if (flash && flash.parentNode) {
+              flash.parentNode.removeChild(flash);
+            }
+            return;
+          }
+
+          // 1. Trigger Golden Stadium Floodlight Flash Flare
+          if (flash) {
+            flash.classList.add('active');
+          }
+
+          // 2. Cinematic Preloader Forward Zoom & Depth Blur Dissolve
+          if (preloader) {
+            preloader.style.transition = 'opacity 0.65s cubic-bezier(0.16, 1, 0.3, 1), transform 0.65s cubic-bezier(0.16, 1, 0.3, 1), filter 0.65s cubic-bezier(0.16, 1, 0.3, 1)';
+            preloader.style.opacity = '0';
+            preloader.style.transform = 'scale(1.12)';
+            preloader.style.filter = 'blur(14px)';
+            preloader.style.pointerEvents = 'none';
+          }
+
+          setTimeout(function() {
+            if (preloader && preloader.parentNode) {
+              preloader.parentNode.removeChild(preloader);
+            }
+            if (flash && flash.parentNode) {
+              flash.parentNode.removeChild(flash);
+            }
+          }, 650);
+        };
+
+        if (hasSeen) {
+          window.__dismissCfvdPreloader(true);
+          return;
+        }
+
+        function triggerPreloaderSkip(e) {
+          if (e) {
+            try { e.stopPropagation(); } catch(_e) {}
+            try { e.preventDefault(); } catch(_e) {}
+          }
+          window.__dismissCfvdPreloader(false);
+        }
+
+        if (skipBtn) {
+          skipBtn.addEventListener('click', triggerPreloaderSkip, { passive: false });
+          skipBtn.addEventListener('touchend', triggerPreloaderSkip, { passive: false });
+          skipBtn.addEventListener('touchstart', triggerPreloaderSkip, { passive: false });
+          skipBtn.addEventListener('pointerup', triggerPreloaderSkip, { passive: false });
+        }
+
+        window.addEventListener('keydown', function(e) {
+          if (e.key === 'Escape') {
+            window.__dismissCfvdPreloader(false);
+          }
+        });
+
+        // ============================================================
+        // SOUND ENGINE: GUARANTEED MOBILE & WEB UNMUTED STADIUM AUDIO
+        // ============================================================
+        var soundBadge = document.getElementById('cfvd-sound-badge');
+        var soundStatusText = document.getElementById('cfvd-sound-status-text');
+
+        function forceEnableStadiumAudio() {
+          try {
+            video.muted = false;
+            video.volume = 1.0;
+            var p = video.play();
+            if (p !== undefined) {
+              p.catch(function(e) {
+                console.warn('[CFVD Audio] Retry play error:', e);
+              });
+            }
+          } catch(e) {}
+          if (soundHint) soundHint.style.display = 'none';
+          if (soundStatusText) soundStatusText.textContent = 'SOUND ON';
+          if (soundBadge) {
+            soundBadge.style.borderColor = 'rgba(245, 158, 11, 0.9)';
+            soundBadge.style.background = 'rgba(245, 158, 11, 0.28)';
+          }
+        }
+
+        if (soundBadge) {
+          soundBadge.style.cursor = 'pointer';
+          soundBadge.addEventListener('click', forceEnableStadiumAudio);
+          soundBadge.addEventListener('touchend', forceEnableStadiumAudio);
+        }
+
+        // Global touch & click listener for mobile devices to unmute on first gesture
+        var gestureEvents = ['touchstart', 'touchend', 'click', 'pointerdown', 'keydown'];
+        function handleUserGesture() {
+          forceEnableStadiumAudio();
+          gestureEvents.forEach(function(evt) {
+            window.removeEventListener(evt, handleUserGesture, true);
+          });
+        }
+        gestureEvents.forEach(function(evt) {
+          window.addEventListener(evt, handleUserGesture, { capture: true, once: true });
+        });
+
+        // Also tapping the preloader video directly un-mutes audio on mobile
+        preloader.addEventListener('touchstart', handleUserGesture, { passive: true, once: true });
+        preloader.addEventListener('click', handleUserGesture, { passive: true, once: true });
+
+        if (soundHint) {
+          soundHint.addEventListener('click', function(e) {
+            e.stopPropagation();
+            forceEnableStadiumAudio();
+          });
+          soundHint.addEventListener('touchend', function(e) {
+            e.stopPropagation();
+            forceEnableStadiumAudio();
+          });
+        }
+
+        // Attempt initial unmuted play
+        video.muted = false;
+        video.volume = 1.0;
+        var playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise.catch(function(err) {
+            // Mobile browser policy restricted sound before first touch: play muted temporarily and display activation hint
+            console.warn('[CFVD Preloader] Autoplay audio waiting for mobile gesture:', err);
+            video.muted = true;
+            video.play().then(function() {
+              if (soundHint) soundHint.style.display = 'block';
+              if (soundStatusText) soundStatusText.textContent = 'TAP FOR SOUND';
+            }).catch(function() {});
+          });
+        }
+
+        // ============================================================
+        // BAIL LOCK AUDIO SYNC: AT ~6.9s WHEN THE BAILS FIX INTO PLACE
+        // WITH THE CLACK SOUND, THE WEBSITE LOCKS INTO POSITION!
+        // ============================================================
+        var transitionTriggered = false;
+        video.addEventListener('timeupdate', function() {
+          if (video.duration && progressBar) {
+            var pct = (video.currentTime / video.duration) * 100;
+            progressBar.style.width = Math.min(100, pct) + '%';
+          }
+
+          // Exact Synchronization: When bails lock into the wickets with the clack sound (~6.9s),
+          // trigger the stadium flash and fix the website into place smoothly!
+          if (video.currentTime >= 6.9 && !transitionTriggered) {
+            transitionTriggered = true;
+            window.__dismissCfvdPreloader(false);
+          }
+        });
+
+        video.addEventListener('ended', function() {
+          if (!transitionTriggered) {
+            transitionTriggered = true;
+            window.__dismissCfvdPreloader(false);
+          }
+        });
+
+        // Safety fallback timeout after 9.5s
+        setTimeout(function() {
+          if (!transitionTriggered) {
+            transitionTriggered = true;
+            window.__dismissCfvdPreloader(false);
+          }
+        }, 9500);
+      })();
+    </script>
+
     <div id="root"></div>
   </body>
 </html>

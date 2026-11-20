@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { View, StyleSheet, Platform, Alert } from 'react-native';
+import { router, useLocalSearchParams, usePathname } from 'expo-router';
 import { getCurrentUser, getAuthToken } from '../services/api';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 
@@ -15,6 +16,8 @@ export type AppScreenName =
   | 'Player'
   | 'Coach'
   | 'Team'
+  | 'TeamDetail'
+  | 'PlayerDetail'
   | 'Content';
 
 export interface ScreenAccessResult {
@@ -52,12 +55,12 @@ export function checkScreenAccess(
       loginRole: 'PLAYER'
     },
     Scorer: {
-      roles: ['SCORER', 'ADMIN'],
+      roles: ['SCORER', 'ADMIN', 'UMPIRE'],
       portalName: 'Official Match Console',
       loginRole: 'SCORER'
     },
     Umpire: {
-      roles: ['UMPIRE', 'ADMIN'],
+      roles: ['UMPIRE', 'ADMIN', 'SCORER'],
       portalName: 'Official Umpire Console',
       loginRole: 'UMPIRE'
     },
@@ -136,7 +139,147 @@ const AppNavigationContext = createContext<AppNavigationContextType>({
   goBack: () => {}
 });
 
-export const useAppNavigation = () => useContext(AppNavigationContext);
+export const useAppNavigation = () => {
+  const context = useContext(AppNavigationContext);
+  const localParams = useLocalSearchParams();
+  const currentPath = usePathname() || '/';
+
+  const resolveScreenFromPath = (path: string): AppScreenName => {
+    if (!path || path === '/') return 'Home';
+    if (path.includes('login') && path.includes('admin')) return 'AdminLogin';
+    if (path.includes('login')) return 'Login';
+    if (path.includes('register')) return 'Registration';
+    if (path.includes('admin')) return 'Admin';
+    if (path.includes('team-detail') || path.includes('team-profile')) return 'TeamDetail';
+    if (path.includes('team') || path.includes('coach')) return 'Team';
+    if (path.includes('player-detail') || path.includes('player-profile')) return 'PlayerDetail';
+    if (path.includes('player')) return 'Player';
+    if (path.includes('umpire')) return 'Umpire';
+    if (path.includes('scorer')) return 'Scorer';
+    if (path.includes('scorecard')) return 'Scorecard';
+    return 'Home';
+  };
+
+  const navigate = useCallback((screenName: AppScreenName, screenParams?: any) => {
+    try {
+      switch (screenName) {
+        case 'Home':
+          router.push('/');
+          break;
+        case 'Login':
+          router.push({ pathname: '/login', params: screenParams });
+          break;
+        case 'AdminLogin':
+          router.push({ pathname: '/admin-login', params: screenParams });
+          break;
+        case 'Registration':
+          if (screenParams?.initialRole) {
+            const role = String(screenParams.initialRole).toLowerCase();
+            router.push({ pathname: `/register/${role}` as any, params: screenParams });
+          } else {
+            router.push({ pathname: '/register', params: screenParams });
+          }
+          break;
+        case 'Scorecard':
+          if (screenParams?.matchId) {
+            router.push({ pathname: `/scorecard/${screenParams.matchId}` as any, params: screenParams });
+          } else {
+            router.push({ pathname: '/scorecard', params: screenParams });
+          }
+          break;
+        case 'TeamDetail':
+          if (screenParams?.teamId || screenParams?.id) {
+            const tId = screenParams.teamId || screenParams.id;
+            router.push({ pathname: `/team-detail/${tId}` as any, params: screenParams });
+          } else {
+            router.push({ pathname: '/team-detail' as any, params: screenParams });
+          }
+          break;
+        case 'Team':
+        case 'Coach':
+          if (screenParams?.tab || screenParams?.initialTab) {
+            const tab = String(screenParams.tab || screenParams.initialTab).toLowerCase();
+            router.push({ pathname: `/team/${tab}` as any, params: screenParams });
+          } else {
+            router.push({ pathname: '/team', params: screenParams });
+          }
+          break;
+        case 'PlayerDetail':
+          if (screenParams?.playerId || screenParams?.id) {
+            const pId = screenParams.playerId || screenParams.id;
+            router.push({ pathname: `/player-detail/${pId}` as any, params: screenParams });
+          } else {
+            router.push({ pathname: '/player-detail' as any, params: screenParams });
+          }
+          break;
+        case 'Player':
+          if (screenParams?.tab || screenParams?.initialTab) {
+            const tab = String(screenParams.tab || screenParams.initialTab).toLowerCase();
+            router.push({ pathname: `/player/${tab}` as any, params: screenParams });
+          } else {
+            router.push({ pathname: '/player', params: screenParams });
+          }
+          break;
+        case 'Admin':
+          if (screenParams?.tab || screenParams?.activeTab) {
+            const tab = String(screenParams.tab || screenParams.activeTab).toLowerCase();
+            router.push({ pathname: `/admin/${tab}` as any, params: screenParams });
+          } else {
+            router.push({ pathname: '/admin', params: screenParams });
+          }
+          break;
+        case 'Umpire':
+          if (screenParams?.tab || screenParams?.initialTab) {
+            const tab = String(screenParams.tab || screenParams.initialTab).toLowerCase();
+            router.push({ pathname: `/umpire/${tab}` as any, params: screenParams });
+          } else {
+            router.push({ pathname: '/umpire', params: screenParams });
+          }
+          break;
+        case 'Scorer':
+          if (screenParams?.initialScreen || screenParams?.scorerScreen) {
+            const scr = String(screenParams.initialScreen || screenParams.scorerScreen).toLowerCase();
+            router.push({ pathname: `/scorer/${scr}` as any, params: screenParams });
+          } else {
+            router.push({ pathname: '/scorer', params: screenParams });
+          }
+          break;
+        default:
+          router.push('/');
+      }
+      return;
+    } catch (e) {
+      if (context && context.navigate) {
+        context.navigate(screenName, screenParams);
+      }
+    }
+  }, [context]);
+
+  const goBack = useCallback(() => {
+    try {
+      if (router.canGoBack()) {
+        router.back();
+        return;
+      }
+      router.replace('/');
+      return;
+    } catch (e) {
+      if (context && context.goBack) {
+        context.goBack();
+      }
+    }
+  }, [context]);
+
+  const currentScreen = resolveScreenFromPath(currentPath) || context?.currentScreen || 'Home';
+  const effectiveParams = localParams && Object.keys(localParams).length > 0 ? localParams : context?.params;
+
+  return {
+    currentScreen,
+    navigate,
+    params: effectiveParams,
+    goBack
+  };
+};
 
 interface AppNavigatorProps {
   children?: React.ReactNode;
@@ -158,23 +301,96 @@ export default function AppNavigator({
     let requested: AppScreenName = initialScreen;
     let urlParams: any = null;
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const pathname = window.location.pathname.toLowerCase();
       const p = (window.location.pathname + window.location.search + window.location.hash).toLowerCase();
-      if (p.includes('admin/login') || p.includes('admin-login')) requested = 'AdminLogin';
-      else if (p.includes('umpire')) requested = 'Umpire';
-      else if (p.includes('scorer')) requested = 'Scorer';
-      else if (p.includes('player')) requested = 'Player';
-      else if (p.includes('team') || p.includes('coach')) requested = 'Team';
-      else if (p.includes('admin')) requested = 'Admin';
+      const search = window.location.search;
+      const getQuery = (key: string) => {
+        const match = search.match(new RegExp(`[?&]${key}=([^&]+)`, 'i'));
+        return match && match[1] ? decodeURIComponent(match[1]) : null;
+      };
+
+      // When accessing the root URL or opening a new tab without explicit route, ALWAYS load Home
+      if (pathname === '/' || pathname === '' || pathname === '/home') {
+        requested = 'Home';
+        urlParams = null;
+      }
+      else if (p.includes('admin/login') || p.includes('admin-login')) requested = 'AdminLogin';
+      else if (p.includes('umpire')) {
+        requested = 'Umpire';
+        const tab = getQuery('tab');
+        const matchId = getQuery('matchId');
+        if (tab || matchId) {
+          urlParams = {
+            ...(tab ? { initialTab: tab } : {}),
+            ...(matchId ? { matchId } : {})
+          };
+        }
+      }
+      else if (p.includes('milestone')) {
+        requested = 'Scorer';
+        urlParams = { initialScreen: 'MilestoneGallery' };
+      }
+      else if (p.includes('scorer')) {
+        requested = 'Scorer';
+        const sScreen = getQuery('scorerScreen');
+        const matchId = getQuery('matchId');
+        if (sScreen || matchId) {
+          urlParams = {
+            ...(sScreen ? { initialScreen: sScreen } : {}),
+            ...(matchId ? { matchId } : {})
+          };
+        }
+      }
+      else if (p.includes('player-detail') || p.includes('player-profile')) {
+        requested = 'PlayerDetail';
+        const playerId = getQuery('playerId') || getQuery('id');
+        const playerName = getQuery('playerName') || getQuery('name');
+        if (playerId || playerName) {
+          urlParams = {
+            ...(playerId ? { playerId } : {}),
+            ...(playerName ? { playerName } : {})
+          };
+        }
+      }
+      else if (p.includes('player')) {
+        requested = 'Player';
+        const tab = getQuery('tab');
+        if (tab) urlParams = { initialTab: tab };
+      }
+      else if (p.includes('team-detail') || p.includes('team-profile')) {
+        requested = 'TeamDetail';
+        const teamId = getQuery('teamId') || getQuery('id');
+        const teamName = getQuery('teamName') || getQuery('name');
+        if (teamId || teamName) {
+          urlParams = {
+            ...(teamId ? { teamId } : {}),
+            ...(teamName ? { teamName } : {})
+          };
+        }
+      }
+      else if (p.includes('team') || p.includes('coach')) {
+        requested = 'Team';
+        const tab = getQuery('tab');
+        if (tab) urlParams = { initialTab: tab };
+      }
+      else if (p.includes('admin')) {
+        requested = 'Admin';
+        const tab = getQuery('tab');
+        if (tab) urlParams = { tab, activeTab: tab };
+      }
       else if (p.includes('scorecard')) {
         requested = 'Scorecard';
-        // Check for matchId in query
-        const match = window.location.search.match(/[?&]matchId=([^&]+)/i);
-        if (match && match[1]) {
-          urlParams = { matchId: decodeURIComponent(match[1]) };
+        const matchId = getQuery('matchId');
+        if (matchId) {
+          urlParams = { matchId };
         }
       }
       else if (p.includes('login')) requested = 'Login';
       else if (p.includes('register')) requested = 'Registration';
+      else {
+        requested = 'Home';
+        urlParams = null;
+      }
     }
 
     const user = getCurrentUser();
@@ -229,17 +445,36 @@ export default function AppNavigator({
         if (targetScreen === 'AdminLogin') route = '/admin/login';
         else if (targetScreen === 'Login') route = '/login';
         else if (targetScreen === 'Registration') route = '/register';
-        else if (targetScreen === 'Scorecard') route = screenParams?.matchId ? `/scorecard?matchId=${screenParams.matchId}` : '/scorecard';
-        else if (targetScreen === 'Scorer') route = '/scorer';
-        else if (targetScreen === 'Umpire') route = '/umpire';
-        else if (targetScreen === 'Admin') route = '/admin';
-        else if (targetScreen === 'Player') route = '/player';
-        else if (targetScreen === 'Team' || targetScreen === 'Coach') route = '/team';
+        else if (targetScreen === 'Scorecard') {
+          const m = screenParams?.matchId || localStorage.getItem('cfvd_last_scorecard_match_id');
+          route = m ? `/scorecard?matchId=${m}` : '/scorecard';
+        }
+        else if (targetScreen === 'Scorer') {
+          const s = screenParams?.initialScreen || screenParams?.scorerScreen || localStorage.getItem('cfvd_last_scorer_screen');
+          const m = screenParams?.matchId || localStorage.getItem('cfvd_last_scorer_match_id');
+          route = s ? `/scorer?scorerScreen=${s}${m ? `&matchId=${m}` : ''}` : (m ? `/scorer?matchId=${m}` : '/scorer');
+        }
+        else if (targetScreen === 'Umpire') {
+          const t = screenParams?.initialTab || screenParams?.tab || localStorage.getItem('cfvd_umpire_active_tab');
+          const m = screenParams?.matchId || localStorage.getItem('cfvd_umpire_active_match_id');
+          route = t ? `/umpire?tab=${t}${m ? `&matchId=${m}` : ''}` : (m ? `/umpire?matchId=${m}` : '/umpire');
+        }
+        else if (targetScreen === 'Admin') route = (screenParams?.tab || screenParams?.activeTab) ? `/admin?tab=${screenParams.tab || screenParams.activeTab}` : '/admin';
+        else if (targetScreen === 'Player') {
+          const tab = screenParams?.tab || localStorage.getItem('cfvd_player_active_tab');
+          route = tab ? `/player?tab=${tab}` : '/player';
+        }
+        else if (targetScreen === 'Team' || targetScreen === 'Coach') {
+          const tab = screenParams?.tab || localStorage.getItem('cfvd_team_active_tab');
+          route = tab ? `/team?tab=${tab}` : '/team';
+        }
         else if (targetScreen === 'Content') route = '/admin';
         else if (targetScreen === 'Home') route = '/';
 
-        if (window.location.pathname !== route) {
-          window.history.pushState({ appScreen: targetScreen }, '', route);
+        localStorage.setItem('cfvd_last_app_screen', targetScreen);
+        const currentFull = window.location.pathname + window.location.search;
+        if (currentFull !== route) {
+          window.history.replaceState({ appScreen: targetScreen }, '', route);
         }
       } catch (e) {}
     }
@@ -251,26 +486,25 @@ export default function AppNavigator({
     const access = checkScreenAccess(targetScreen, user);
 
     if (!access.allowed) {
-      showAccessAlert(access.message || 'Access Denied.');
-
       if (access.reason === 'UNAUTHENTICATED') {
         const isTargetAdmin = targetScreen === 'Admin';
         const targetLoginScreen: AppScreenName = isTargetAdmin ? 'AdminLogin' : 'Login';
-        // Redirect to Login (or AdminLogin if accessing Admin)
+        // Redirect to Login (or AdminLogin if accessing Admin) directly without alert popup
         setParams({ initialRole: access.loginRole, attemptedScreen: targetScreen, ...screenParams });
         setScreenHistory((prev) => [...prev.filter((s) => s !== targetLoginScreen), targetLoginScreen]);
         updateBrowserUrl(targetLoginScreen);
         return;
-      } else {
-        // Role mismatch: do not allow entering forbidden screen!
-        const userPortal = getUserDashboardScreen(user);
-        updateBrowserUrl(userPortal);
-        if (currentScreen !== userPortal && userPortal !== 'Home') {
-          setParams(null);
-          setScreenHistory((prev) => [...prev.filter((s) => s !== userPortal), userPortal]);
-        }
-        return;
       }
+
+      // Role mismatch: show alert and bounce to user's permitted portal
+      showAccessAlert(access.message || 'Access Denied.');
+      const userPortal = getUserDashboardScreen(user);
+      updateBrowserUrl(userPortal);
+      if (currentScreen !== userPortal && userPortal !== 'Home') {
+        setParams(null);
+        setScreenHistory((prev) => [...prev.filter((s) => s !== userPortal), userPortal]);
+      }
+      return;
     }
 
     setParams(screenParams || null);
@@ -306,7 +540,9 @@ export default function AppNavigator({
           else if (path.includes('admin')) requested = 'Admin';
           else if (path.includes('umpire')) requested = 'Umpire';
           else if (path.includes('scorer')) requested = 'Scorer';
+          else if (path.includes('player-detail') || path.includes('player-profile')) requested = 'PlayerDetail';
           else if (path.includes('player')) requested = 'Player';
+          else if (path.includes('team-detail') || path.includes('team-profile')) requested = 'TeamDetail';
           else if (path.includes('team') || path.includes('coach')) requested = 'Team';
           else if (path.includes('login')) requested = 'Login';
           else if (path.includes('register')) requested = 'Registration';
@@ -317,18 +553,19 @@ export default function AppNavigator({
         const access = checkScreenAccess(requested, user);
 
         if (!access.allowed) {
-          showAccessAlert(access.message || 'Access Denied.');
           if (access.reason === 'UNAUTHENTICATED') {
             const isTargetAdmin = requested === 'Admin';
             const targetLoginScreen: AppScreenName = isTargetAdmin ? 'AdminLogin' : 'Login';
             setParams({ initialRole: access.loginRole, attemptedScreen: requested });
             setScreenHistory([targetLoginScreen]);
             updateBrowserUrl(targetLoginScreen);
-          } else {
-            const fallback = getUserDashboardScreen(user);
-            setScreenHistory([fallback]);
-            updateBrowserUrl(fallback);
+            return;
           }
+
+          showAccessAlert(access.message || 'Access Denied.');
+          const fallback = getUserDashboardScreen(user);
+          setScreenHistory([fallback]);
+          updateBrowserUrl(fallback);
           return;
         }
 

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View,
   Text,
@@ -14,12 +15,37 @@ import {
   Image
 } from 'react-native';
 import { useScorerNavigation } from '../../navigation/ScorerNavigationContext';
+
+const milestoneBatsmanImage = require('../../../assets/milestone_batsman.png');
+const centuryBatsmanImage = require('../../../assets/century_batsman.jpg');
 import SharedFooter from '../../components/scorer/SharedFooter';
 import { ScorerApi, getCurrentUser } from '../../services/api';
+import { ClockPickerModal, calculateDurationMinutes } from '../../components/common/ClockPickerModal';
+import CricketRulesModal, { CricketRuleType } from '../../components/scorer/CricketRulesModal';
+import CricketConfetti from '../../components/common/CricketConfetti';
+import CricketFigurine3D from '../../components/common/CricketFigurine3D';
+import InteractiveWagonWheelModal, { ShotDirectionResult } from '../../components/analytics/InteractiveWagonWheelModal';
+import UmpireSignalOverlay, { UmpireSignalEvent, UmpireSignalsGalleryModal, UmpireSignalType } from '../../components/common/UmpireSignalOverlay';
+import FieldingEventOverlay, { FieldingEventData, FieldingEventType } from '../../components/common/FieldingEventOverlay';
+import BroadcastLiveBallAction from '../../components/common/BroadcastLiveBallAction';
+import { VPLEventBanner, VPLSoundControls } from '../../components/common/VPLEventBanner';
+import { mapBallToEvents, normalizeExtraType, normalizeDismissal } from '../../utils/vplEventMapper';
+import CalculationSettingsManagement from '../../admin/components/CalculationSettingsManagement';
+import { DeliveryInspectionModal } from '../../components/scorer/DeliveryInspectionModal';
 
 const IMG_LOGO = require('../../../assets/logo_transparent.png');
 const IMG_CHAMPIONS = require('../../../assets/cricket_champions.png');
 const IMG_END_INNINGS = require('../../../assets/cricket_end_innings.png');
+const IMG_MAN_OF_THE_MATCH = require('../../../assets/man_of_the_match.png');
+const catchMilestoneImage = require('../../../assets/catch_milestone.jpg');
+const bestBowlerImage = require('../../../assets/best_bowler.png');
+const runOutMilestoneImage = require('../../../assets/run_out_milestone.png');
+const keeperDismissalImage = require('../../../assets/keeper_dismissal.png');
+const overthrowImage = require('../../../assets/overthrow.jpg');
+const deadBallImage = require('../../../assets/popups/popup_deadball.jpg');
+const doubleCenturyImage = require('../../../assets/double_century_200.jpg');
+const team50Image = require('../../../assets/team_50.jpg');
+const team100Image = require('../../../assets/team_100.jpg');
 
 const STANDARD_BREAK_OPTIONS = [
   { label: 'Tea break', icon: '☕', sub: 'Afternoon tea interval' },
@@ -33,6 +59,49 @@ const STANDARD_BREAK_OPTIONS = [
   { label: 'Sight Screen Delay', icon: '🛑', sub: 'Sight screen adjustment' },
   { label: 'Ball Lost / Damage', icon: '⚾', sub: 'Ball replacement' },
   { label: 'Other / Custom Break', icon: '✏️', sub: 'Type custom break reason below' }
+];
+
+export const RECENT_OVER_THEMES = [
+  {
+    name: 'amber',
+    badgeBg: '#fef3c7',
+    badgeBorder: '#f59e0b',
+    badgeText: '#b45309',
+    chipBg: '#fffdf5',
+    chipBorder: '#f59e0b',
+    subText: '#d97706',
+    dotText: '#78350f',
+  },
+  {
+    name: 'cyan',
+    badgeBg: '#e0f2fe',
+    badgeBorder: '#0284c7',
+    badgeText: '#0369a1',
+    chipBg: '#f0f9ff',
+    chipBorder: '#38bdf8',
+    subText: '#0284c7',
+    dotText: '#0c4a6e',
+  },
+  {
+    name: 'emerald',
+    badgeBg: '#d1fae5',
+    badgeBorder: '#059669',
+    badgeText: '#047857',
+    chipBg: '#f0fdf4',
+    chipBorder: '#34d399',
+    subText: '#059669',
+    dotText: '#064e3b',
+  },
+  {
+    name: 'purple',
+    badgeBg: '#ede9fe',
+    badgeBorder: '#7c3aed',
+    badgeText: '#6d28d9',
+    chipBg: '#faf5ff',
+    chipBorder: '#a855f7',
+    subText: '#7c3aed',
+    dotText: '#4c1d95',
+  },
 ];
 
 const STANDARD_PENALTY_REASONS = [
@@ -49,17 +118,6 @@ const STANDARD_PENALTY_REASONS = [
   'Dissent towards umpire decision'
 ];
 
-const STANDARD_SESSION_OPTIONS = [
-  { label: 'Morning Session', icon: '🌅', sub: 'Session 1' },
-  { label: 'Lunch', icon: '🍽️', sub: 'Lunch interval' },
-  { label: 'Afternoon Session', icon: '☀️', sub: 'Session 2' },
-  { label: 'Tea', icon: '☕', sub: 'Tea interval' },
-  { label: 'Evening Session', icon: '🌇', sub: 'Session 3' },
-  { label: 'End of Day', icon: '🌙', sub: 'Stumps' },
-  { label: 'Extended Session', icon: '⏱️', sub: 'Overs recovery' },
-  { label: 'Rain Delayed Session', icon: '🌧️', sub: 'Weather revised session' },
-  { label: 'Other / Custom Session', icon: '✏️', sub: 'Type custom session below' }
-];
 
 const BALL_TYPE_OPTIONS = [
   'Good Length',
@@ -96,12 +154,47 @@ const SHOT_TYPE_OPTIONS = [
   'No Shot'
 ];
 
+const LiveDrawerClock = React.memo(({ textStyle }: { textStyle: any }) => {
+  const [timeStr, setTimeStr] = useState<string>('');
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setTimeStr(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }));
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return <Text style={textStyle}>{timeStr || '11:34:00 am'}</Text>;
+});
+
 export default function LiveScoringScreen() {
-  const { navigate, params } = useScorerNavigation();
+  const { navigate, params, onExit } = useScorerNavigation();
   const { width } = useWindowDimensions();
   const isDesktop = width > 768;
-  const matchId = params?.matchId || 'M002';
-  const styles = getStyles(isDesktop);
+  const matchId = params?.matchId ||
+    (Platform.OS === 'web' && typeof window !== 'undefined'
+      ? (new URL(window.location.href).searchParams.get('matchId') || localStorage.getItem('cfvd_last_scorer_match_id'))
+      : null) ||
+    'M002';
+  const styles = useMemo(() => getStyles(isDesktop), [isDesktop]);
+
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('cfvd_last_scorer_screen', 'LiveScoring');
+        if (matchId) {
+          localStorage.setItem('cfvd_last_scorer_match_id', matchId);
+          const currentUrl = new URL(window.location.href);
+          if (currentUrl.searchParams.get('scorerScreen') !== 'LiveScoring' || currentUrl.searchParams.get('matchId') !== matchId) {
+            currentUrl.searchParams.set('scorerScreen', 'LiveScoring');
+            currentUrl.searchParams.set('matchId', matchId);
+            window.history.replaceState({ appScreen: 'Scorer', scorerScreen: 'LiveScoring', matchId }, '', currentUrl.toString());
+          }
+        }
+      } catch (e) { }
+    }
+  }, [matchId]);
 
   const currentUser = getCurrentUser();
   const [profileUser, setProfileUser] = useState<any>(currentUser);
@@ -114,7 +207,7 @@ export default function LiveScoringScreen() {
           setProfileUser(u);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const activeUser = profileUser || currentUser;
@@ -154,8 +247,41 @@ export default function LiveScoringScreen() {
   const [matchStatus, setMatchStatus] = useState<string>('LIVE');
   const [isInningsBreak, setIsInningsBreak] = useState<boolean>(false);
   const [isMatchEnded, setIsMatchEnded] = useState<boolean>(false);
+  const [confettiActive, setConfettiActive] = useState<boolean>(true);
   const [targetRuns, setTargetRuns] = useState<number | null>(null);
   const [allInningsList, setAllInningsList] = useState<any[]>([]);
+
+  const playVictoryFanfare = () => {
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      try {
+        const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        if (ctx.state === 'suspended') {
+          ctx.resume();
+        }
+        const notes = [
+          { freq: 261.63, start: 0, dur: 0.15 }, // C4
+          { freq: 329.63, start: 0.15, dur: 0.15 }, // E4
+          { freq: 392.00, start: 0.30, dur: 0.18 }, // G4
+          { freq: 523.25, start: 0.48, dur: 0.55 }, // C5 High
+        ];
+        notes.forEach(({ freq, start, dur }) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + start);
+          gain.gain.setValueAtTime(0.001, ctx.currentTime + start);
+          gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + start + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + start);
+          osc.stop(ctx.currentTime + start + dur);
+        });
+      } catch (_e) { }
+    }
+  };
 
   // Striker, Non-Striker & Bowler
   const [striker, setStriker] = useState<any>(null);
@@ -203,9 +329,12 @@ export default function LiveScoringScreen() {
   // End Innings Modal
   const [showEndModal, setShowEndModal] = useState<boolean>(false);
 
-  // --- SCORER SIDE OPTIONS & DOCUMENT WORKFLOW STATES ---
-  // Live Clock for Slide Menu
-  const [currentTimeStr, setCurrentTimeStr] = useState<string>('');
+  // Smart Cricket Rule & Umpire Assistant Modal
+  const [showCricketRulesModal, setShowCricketRulesModal] = useState<boolean>(false);
+  const [activeCricketRule, setActiveCricketRule] = useState<CricketRuleType | null>('FREE_HIT');
+  const [cricketRuleContext, setCricketRuleContext] = useState<any>({});
+  const [isFreeHitActive, setIsFreeHitActive] = useState<boolean>(false);
+  const [consecutiveWidesCount, setConsecutiveWidesCount] = useState<number>(0);
 
   // Wi-Fi / Connectivity Status (New Feature from Manual)
   const [isOnline, setIsOnline] = useState<boolean>(true);
@@ -215,6 +344,7 @@ export default function LiveScoringScreen() {
 
   // 1. Breaks Modal State
   const [showBreaksModal, setShowBreaksModal] = useState<boolean>(false);
+  const [currentBreak, setCurrentBreak] = useState<any>(null);
   const [breaksList, setBreaksList] = useState<any[]>([]);
   const [breakType, setBreakType] = useState<string>('Tea break');
   const [isBreakTypeDropdownOpen, setIsBreakTypeDropdownOpen] = useState<boolean>(false);
@@ -222,36 +352,90 @@ export default function LiveScoringScreen() {
   const [breakStartTime, setBreakStartTime] = useState<string>('11:35 am');
   const [breakEndTime, setBreakEndTime] = useState<string>('11:40 am');
   const [breakDuration, setBreakDuration] = useState<string>('5');
+  const [isDurationAutoCalculated, setIsDurationAutoCalculated] = useState<boolean>(true);
   const [excludeBatsmanTime, setExcludeBatsmanTime] = useState<boolean>(false);
   const [isSubmittingBreak, setIsSubmittingBreak] = useState<boolean>(false);
+  const [showResumeConfirmModal, setShowResumeConfirmModal] = useState<boolean>(false);
 
-  // 2. Sessions Modal State
-  const [showSessionsModal, setShowSessionsModal] = useState<boolean>(false);
-  const [sessionsList, setSessionsList] = useState<any[]>([]);
-  const [sessionDayNo, setSessionDayNo] = useState<string>('1');
-  const [sessionType, setSessionType] = useState<string>('Lunch');
-  const [isSessionTypeDropdownOpen, setIsSessionTypeDropdownOpen] = useState<boolean>(false);
-  const [customSessionTypeInput, setCustomSessionTypeInput] = useState<string>('');
-  const [sessionStartInnings, setSessionStartInnings] = useState<string>('1');
-  const [sessionEndInnings, setSessionEndInnings] = useState<string>('1');
-  const [sessionStartOver, setSessionStartOver] = useState<string>('0.0');
-  const [sessionEndOver, setSessionEndOver] = useState<string>('25.0');
-  const [sessionStartTime, setSessionStartTime] = useState<string>('09:30 am');
-  const [sessionEndTime, setSessionEndTime] = useState<string>('12:30 pm');
-  const [sessionDuration, setSessionDuration] = useState<string>('180');
-  const [isSubmittingSession, setIsSubmittingSession] = useState<boolean>(false);
+  // Resume play from active break
+  const handleResumePlay = async () => {
+    try {
+      await ScorerApi.endBreak(matchId);
+      setCurrentBreak(null);
+      await loadLiveState(false);
+      const msg = 'Play resumed successfully.';
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Play Resumed', msg);
+    } catch (err: any) {
+      const msg = err.message || 'Failed to resume play.';
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
+    }
+  };
 
-  // 3. End Day Modal State
-  const [showEndDayModal, setShowEndDayModal] = useState<boolean>(false);
-  const [endDayNo, setEndDayNo] = useState<string>('1');
-  const [endDayStartInnings, setEndDayStartInnings] = useState<string>('1');
-  const [endDayEndInnings, setEndDayEndInnings] = useState<string>('1');
-  const [endDayOvers, setEndDayOvers] = useState<string>('90.0');
-  const [endDayStartTime, setEndDayStartTime] = useState<string>('09:30 am');
-  const [endDayEndTime, setEndDayEndTime] = useState<string>('05:30 pm');
-  const [endDayDuration, setEndDayDuration] = useState<string>('480');
-  const [endDayComments, setEndDayComments] = useState<string>('Day 1 Stumps');
-  const [isSubmittingEndDay, setIsSubmittingEndDay] = useState<boolean>(false);
+  // Clock Picker Modal State
+  const [clockPickerVisible, setClockPickerVisible] = useState<boolean>(false);
+  const [clockPickerTarget, setClockPickerTarget] = useState<'BREAK_START' | 'BREAK_END'>('BREAK_START');
+
+  // Open Breaks modal with current time and default duration
+  const handleOpenBreaksModal = () => {
+    const now = new Date();
+    let h = now.getHours();
+    const m = now.getMinutes();
+    const p = h >= 12 ? 'pm' : 'am';
+    h = h % 12 || 12;
+    const startFormatted = `${h}:${String(m).padStart(2, '0')} ${p}`;
+
+    const endTotal = ((h % 12 + (p === 'pm' ? 12 : 0)) * 60 + m + 15) % 1440;
+    let endH = Math.floor(endTotal / 60);
+    const endM = endTotal % 60;
+    const endP = endH >= 12 ? 'pm' : 'am';
+    endH = endH % 12 || 12;
+    const endFormatted = `${endH}:${String(endM).padStart(2, '0')} ${endP}`;
+
+    setBreakStartTime(startFormatted);
+    setBreakEndTime(endFormatted);
+    setBreakDuration('15');
+    setIsDurationAutoCalculated(true);
+    setShowBreaksModal(true);
+  };
+
+  const handleBreakStartTimeChange = (val: string) => {
+    setBreakStartTime(val);
+    const mins = calculateDurationMinutes(val, breakEndTime);
+    if (mins !== null) {
+      setBreakDuration(String(mins));
+      setIsDurationAutoCalculated(true);
+    }
+  };
+
+  const handleBreakEndTimeChange = (val: string) => {
+    setBreakEndTime(val);
+    const mins = calculateDurationMinutes(breakStartTime, val);
+    if (mins !== null) {
+      setBreakDuration(String(mins));
+      setIsDurationAutoCalculated(true);
+    }
+  };
+
+  const handleClockPickerSelect = (formattedTime: string) => {
+    if (clockPickerTarget === 'BREAK_START') {
+      setBreakStartTime(formattedTime);
+      const mins = calculateDurationMinutes(formattedTime, breakEndTime);
+      if (mins !== null) {
+        setBreakDuration(String(mins));
+        setIsDurationAutoCalculated(true);
+      }
+    } else if (clockPickerTarget === 'BREAK_END') {
+      setBreakEndTime(formattedTime);
+      const mins = calculateDurationMinutes(breakStartTime, formattedTime);
+      if (mins !== null) {
+        setBreakDuration(String(mins));
+        setIsDurationAutoCalculated(true);
+      }
+    }
+    setClockPickerVisible(false);
+  };
+
+
 
   // 4. Declare Innings Modal State
   const [showDeclareModal, setShowDeclareModal] = useState<boolean>(false);
@@ -321,9 +505,32 @@ export default function LiveScoringScreen() {
 
   // Keypad Popups
   const [showMoreRunsModal, setShowMoreRunsModal] = useState<boolean>(false);
+  const [moreRunsSelected, setMoreRunsSelected] = useState<number>(5);
+  const [moreRunsReasonKey, setMoreRunsReasonKey] = useState<string>('');
+  const [moreRunsReason, setMoreRunsReason] = useState<string>('');
+  const [customMoreRunsReason, setCustomMoreRunsReason] = useState<string>('');
+  const [isMoreRunsReasonDropdownOpen, setIsMoreRunsReasonDropdownOpen] = useState<boolean>(false);
+
+  // Bowler Substitution Dedicated Modal
+  const [showBowlerSubstitutedModal, setShowBowlerSubstitutedModal] = useState<boolean>(false);
+  const [bowlerSubstitutedData, setBowlerSubstitutedData] = useState<{
+    oldBowlerName: string;
+    newBowlerName: string;
+    reason: string;
+    ballsBowledByOldBowler: number;
+    oversBowledByOldBowler: string;
+    remainingBallsInOver: number;
+    currentOverNumber: number;
+    ballToBowlNext: number;
+  } | null>(null);
+
   const [showOverThrowModal, setShowOverThrowModal] = useState<boolean>(false);
   const [customOverthrowInput, setCustomOverthrowInput] = useState<string>('');
+  const [selectedOverthrowFielders, setSelectedOverthrowFielders] = useState<string[]>([]);
+  const [isOverthrowFielderDropdownOpen, setIsOverthrowFielderDropdownOpen] = useState<boolean>(false);
   const [showExtrasModal, setShowExtrasModal] = useState<boolean>(false);
+  const [showDeadBallModal, setShowDeadBallModal] = useState<boolean>(false);
+  const [deadBallReason, setDeadBallReason] = useState<string>('Umpire intervention / Play stopped');
   const [showFieldingModal, setShowFieldingModal] = useState<boolean>(false);
   const [selectedFieldingAction, setSelectedFieldingAction] = useState<string>('Clean Collect');
   const [showWagonWheelModal, setShowWagonWheelModal] = useState<boolean>(false);
@@ -340,8 +547,21 @@ export default function LiveScoringScreen() {
   const [umpireCommentsInput, setUmpireCommentsInput] = useState<string>('Fair match without disputes');
   const [isSubmittingUmpire, setIsSubmittingUmpire] = useState<boolean>(false);
 
-  // 8. Edit Mode Flag
+  // 8. Edit Mode Flag & Retroactive Direct Ball Edit
   const [isEditMode, setIsEditMode] = useState<boolean>(false);
+  const [recentDeliveries, setRecentDeliveries] = useState<any[]>([]);
+  const [editingDelivery, setEditingDelivery] = useState<any | null>(null);
+  const [showEditDeliveryModal, setShowEditDeliveryModal] = useState<boolean>(false);
+  const [editRunsInput, setEditRunsInput] = useState<number>(0);
+  const [editExtraType, setEditExtraType] = useState<'NONE' | 'WIDE' | 'NO_BALL' | 'BYE' | 'LEG_BYE'>('NONE');
+  const [editWicket, setEditWicket] = useState<boolean>(false);
+  const [editWicketType, setEditWicketType] = useState<string>('BOWLED');
+  const [editShotZone, setEditShotZone] = useState<string>('Cover');
+  const [editFielderName, setEditFielderName] = useState<string>('');
+  const [editDismissedPlayer, setEditDismissedPlayer] = useState<'STRIKER' | 'NON_STRIKER'>('STRIKER');
+  const [isSubmittingEditDelivery, setIsSubmittingEditDelivery] = useState<boolean>(false);
+  const [offlineQueueCount, setOfflineQueueCount] = useState<number>(0);
+  const [inspectingDelivery, setInspectingDelivery] = useState<any | null>(null);
 
   // 9. Revised Overs & Revised Target Modal State
   const [showRevisedOversModal, setShowRevisedOversModal] = useState<boolean>(false);
@@ -369,6 +589,40 @@ export default function LiveScoringScreen() {
   // 12. Exit Screen Modal State
   const [showExitModal, setShowExitModal] = useState<boolean>(false);
 
+  // 13. Cricket Milestones Celebration State (50s, 100s, 5-Wickets, Catches, Run Outs, Keeper Outs, MOTM)
+  interface MilestoneCelebration {
+    type: 'BATTER_50' | 'BATTER_100' | 'BATTER_150' | 'BATTER_200' | 'BOWLER_3W' | 'BOWLER_5W' | 'HAT_TRICK' | 'TOP_CATCHES' | 'RUN_OUT' | 'KEEPER_OUT' | 'MAN_OF_THE_MATCH' | 'TEAM_50' | 'TEAM_100' | 'TEAM_150' | 'TEAM_200';
+    title: string;
+    badge: string;
+    subtitle: string;
+    playerName: string;
+    teamName: string;
+    scoreText: string;
+    ballsText: string;
+    strikeRateText?: string;
+    fours?: number;
+    sixes?: number;
+    imageKey?: 'BATSMAN_SHOT' | 'BATSMAN_CENTURY' | 'BOWLER' | 'CATCH' | 'RUN_OUT' | 'KEEPER' | 'MOTM';
+  }
+  const [activeMilestone, setActiveMilestone] = useState<MilestoneCelebration | null>(null);
+  const [showMilestoneModal, setShowMilestoneModal] = useState<boolean>(false);
+  const shownMilestonesRef = useRef<Set<string>>(new Set());
+  const shownRulesRef = useRef<Set<string>>(new Set());
+  const initialDeliveryIdRef = useRef<string | null>(null);
+  const hasRecordedNewBallRef = useRef<boolean>(false);
+
+  // Broadcast Umpire Signal Overlay & Hand Signals Gallery State
+  const [activeUmpireSignal, setActiveUmpireSignal] = useState<UmpireSignalEvent | null>(null);
+  const [showUmpireGallery, setShowUmpireGallery] = useState<boolean>(false);
+
+  // Broadcast Fielding Event Animation Overlay State
+  const [activeFieldingEvent, setActiveFieldingEvent] = useState<FieldingEventData | null>(null);
+
+  // DLS & VJD Live Chasing Predictor Modal State
+  const [showDlsModal, setShowDlsModal] = useState<boolean>(false);
+  const [dlsModalMinimized, setDlsModalMinimized] = useState<boolean>(false);
+  const [dlsModalMaximized, setDlsModalMaximized] = useState<boolean>(false);
+
   // Manual Batter Change & Strike Swap Modal State
   const [showChangeBatterModal, setShowChangeBatterModal] = useState<boolean>(false);
   const [changeBatterTarget, setChangeBatterTarget] = useState<'striker' | 'nonStriker'>('striker');
@@ -385,6 +639,23 @@ export default function LiveScoringScreen() {
   const [isChangeBowlerDropdownOpen, setIsChangeBowlerDropdownOpen] = useState<boolean>(false);
   const [changeBowlerSearch, setChangeBowlerSearch] = useState<string>('');
   const [isUpdatingBowler, setIsUpdatingBowler] = useState<boolean>(false);
+  const [changeBowlerReason, setChangeBowlerReason] = useState<'INJURY' | 'TACTICAL' | 'NO_BALL_SUSPENSION'>('TACTICAL');
+  const [isSuspendingCurrentBowler, setIsSuspendingCurrentBowler] = useState<boolean>(false);
+  const [bowlerSituation, setBowlerSituation] = useState<string>('Bowler Injured');
+  const [isSituationDropdownOpen, setIsSituationDropdownOpen] = useState<boolean>(false);
+  const BOWLER_SITUATIONS = [
+    { id: 'INJURY', label: '🤕 Bowler Injured', text: 'Bowler Injured' },
+    { id: 'CRAMPS', label: '⚠️ Cramps / Fatigue', text: 'Cramps / Fatigue' },
+    { id: 'SUSPENDED', label: '🚫 Umpire Suspended (2 Dangerous No-Balls)', text: 'Umpire Suspended (2 No-Balls)' },
+    { id: 'MEDICAL', label: '🚑 Medical Treatment Required', text: 'Medical Treatment' },
+    { id: 'TACTICAL', label: '🔄 Captain / Tactical Call', text: 'Tactical Change' },
+    { id: 'ROTATION', label: '⏱️ Bowling Rotation / Rest', text: 'Bowling Rotation' },
+    { id: 'CUSTOM', label: '✏️ Other Reason (Type Below)', text: '' }
+  ];
+
+  // 2 No-Balls Dangerous Bowling Alert (MCC Law 41.7)
+  const [noBallAlert, setNoBallAlert] = useState<{ bowlerId: string; bowlerName: string; count: number } | null>(null);
+  const [dismissedNoBallBowlers, setDismissedNoBallBowlers] = useState<string[]>([]);
 
   // AI Commentary & Fielding
   const [selectedFieldPosition, setSelectedFieldPosition] = useState<string>('Cover');
@@ -410,6 +681,167 @@ export default function LiveScoringScreen() {
   useEffect(() => {
     loadLiveState(true);
 
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      (window as any).__OPEN_MODAL__ = (modalName: string, param?: string) => {
+        if (modalName === 'wicket') {
+          setShowWicketModal(true);
+        } else if (modalName === 'bowler') {
+          setChangeBowlerReason('TACTICAL');
+          setShowChangeBowlerModal(true);
+        } else if (modalName === 'injury') {
+          setChangeBowlerReason('INJURY');
+          setBowlerSituation('Bowler Injured');
+          setIsSituationDropdownOpen(true);
+          setShowChangeBowlerModal(true);
+        } else if (modalName === 'overthrow') {
+          setShowOverThrowModal(true);
+        } else if (modalName === 'extras') {
+          setShowExtrasModal(true);
+        } else if (modalName === 'umpire') {
+          setShowUmpireModal(true);
+        } else if (modalName === 'edit') {
+          setIsEditMode(true);
+        } else if (modalName === 'rules') {
+          if (param) setActiveCricketRule(param as any);
+          setShowCricketRulesModal(true);
+        } else if (modalName === 'milestone') {
+          (window as any).__TRIGGER_MILESTONE__(param || '50');
+        } else if (modalName === 'closeAll') {
+          setShowWicketModal(false);
+          setShowChangeBowlerModal(false);
+          setShowOverThrowModal(false);
+          setShowExtrasModal(false);
+          setShowUmpireModal(false);
+          setShowCricketRulesModal(false);
+          setShowMilestoneModal(false);
+        }
+      };
+
+      (window as any).__TRIGGER_MILESTONE__ = (type: string = '50') => {
+        if (type === '200') {
+          triggerMilestone({
+            type: 'BATTER_200',
+            title: 'DOUBLE CENTURY (200*)!',
+            badge: '💎 200 RUNS DOUBLE TON 💎',
+            subtitle: 'Colossal achievement! An immortal double hundred etched in history.',
+            playerName: striker?.name || 'N. Jagadeesan',
+            teamName: matchInfo?.battingTeam || 'Virudhunagar Spartans',
+            scoreText: '202*',
+            ballsText: '112 Balls',
+            strikeRateText: '180.4',
+            fours: 22,
+            sixes: 8
+          });
+        } else if (type === '100') {
+          triggerMilestone({
+            type: 'BATTER_100',
+            title: 'MAGNIFICENT CENTURY!',
+            badge: '👑 100 RUNS CENTURY 👑',
+            subtitle: 'Outstanding masterclass ton! Raises the bat to a standing ovation.',
+            playerName: striker?.name || 'N. Jagadeesan',
+            teamName: matchInfo?.battingTeam || 'Virudhunagar Spartans',
+            scoreText: '100*',
+            ballsText: '58 Balls',
+            strikeRateText: '172.4',
+            fours: 11,
+            sixes: 4
+          });
+        } else if (type === '150') {
+          triggerMilestone({
+            type: 'BATTER_150',
+            title: 'COLOSSAL 150* RUNS!',
+            badge: '🔥 150 RUNS MILESTONE 🔥',
+            subtitle: 'Unbelievable power-hitting and determination!',
+            playerName: striker?.name || 'N. Jagadeesan',
+            teamName: matchInfo?.battingTeam || 'Virudhunagar Spartans',
+            scoreText: '150*',
+            ballsText: '84 Balls',
+            strikeRateText: '178.6',
+            fours: 16,
+            sixes: 6
+          });
+        } else if (type === '5w' || type === 'bowler') {
+          triggerMilestone({
+            type: 'BOWLER_5W',
+            imageKey: 'BOWLER',
+            title: 'FIVE-WICKET HAUL (FIFER)!',
+            badge: '🔥 5-WICKET HAUL 🔥',
+            subtitle: 'Spectacular bowling spell! Dismantles the batting lineup.',
+            playerName: bowler?.name || 'S. Sandeep Warrier',
+            teamName: matchInfo?.bowlingTeam || 'Rajapalayam Royals',
+            scoreText: '5/18',
+            ballsText: '3.4 Overs',
+            strikeRateText: 'ER: 4.9'
+          });
+        } else if (type === 'catch') {
+          triggerMilestone({
+            type: 'TOP_CATCHES',
+            imageKey: 'CATCH',
+            title: 'OUTSTANDING CATCH!',
+            badge: '🦅 SPECTACULAR CATCH 🦅',
+            subtitle: 'Sensational athleticism! Full-length diving catch near the boundary.',
+            playerName: 'M. Siddharth',
+            teamName: matchInfo?.bowlingTeam || 'Rajapalayam Royals',
+            scoreText: 'WICKET',
+            ballsText: 'Super Catch'
+          });
+        } else if (type === 'runout') {
+          triggerMilestone({
+            type: 'RUN_OUT',
+            imageKey: 'RUN_OUT',
+            title: 'DIRECT HIT RUN OUT!',
+            badge: '🎯 SPECTACULAR RUN OUT 🎯',
+            subtitle: 'Incredible direct-hit throw! Batter caught short of the crease.',
+            playerName: 'R. Sanjay',
+            teamName: 'Direct Hit Dismissal',
+            scoreText: 'RUN OUT',
+            ballsText: 'Bullseye Throw'
+          });
+        } else if (type === 'keeper') {
+          triggerMilestone({
+            type: 'KEEPER_OUT',
+            imageKey: 'KEEPER',
+            title: 'LIGHTNING STUMPING!',
+            badge: '🧤 WICKETKEEPER STUMPING 🧤',
+            subtitle: 'Flawless glovework! Feet out of the crease, bails dislodged in 0.12 seconds.',
+            playerName: 'Dinesh Karthik',
+            teamName: matchInfo?.bowlingTeam || 'Rajapalayam Royals',
+            scoreText: 'STUMPED',
+            ballsText: 'Lightning Gloves'
+          });
+        } else if (type === 'motm') {
+          triggerMilestone({
+            type: 'MAN_OF_THE_MATCH',
+            imageKey: 'MOTM',
+            title: 'MAN OF THE MATCH!',
+            badge: '🏆 OFFICIAL PLAYER OF THE MATCH 🏆',
+            subtitle: 'Spectacular match-winning all-round performance on the big stage!',
+            playerName: matchInfo?.playerOfTheMatch || 'N. Jagadeesan',
+            teamName: matchInfo?.battingTeam || 'Virudhunagar Spartans',
+            scoreText: '86* (48b)',
+            ballsText: 'Match Winner',
+            strikeRateText: 'SR: 179.2',
+            fours: 8,
+            sixes: 4
+          });
+        } else {
+          triggerMilestone({
+            type: 'BATTER_50',
+            title: 'HALF-CENTURY!',
+            badge: '⭐ 50 RUNS MILESTONE ⭐',
+            subtitle: 'Splendid half-century under pressure! A crucial innings for the team.',
+            playerName: striker?.name || 'N. Jagadeesan',
+            teamName: matchInfo?.battingTeam || 'Virudhunagar Spartans',
+            scoreText: '52*',
+            ballsText: '31 Balls',
+            strikeRateText: '167.7',
+            fours: 6,
+            sixes: 3
+          });
+        }
+      };
+    }
+
     // Socket.IO real-time score updates
     const socket = ScorerApi.connectSocket(matchId, (payload) => {
       if (payload && payload.score) {
@@ -424,6 +856,18 @@ export default function LiveScoringScreen() {
         if (payload.isOverComplete && matchStatus === 'LIVE') {
           setShowBowlerModal(true);
         }
+      }
+      if (payload?.action === 'BREAK_ENDED' || payload?.currentBreak === null) {
+        setCurrentBreak(null);
+      } else if (payload?.action === 'BREAK_ADDED' && payload?.currentBreak) {
+        setCurrentBreak(payload.currentBreak);
+      }
+      if (payload?.noBallWarning && !dismissedNoBallBowlers.includes(payload.noBallWarning.bowlerId)) {
+        setNoBallAlert({
+          bowlerId: payload.noBallWarning.bowlerId,
+          bowlerName: payload.noBallWarning.bowlerName || bowler?.name || 'Current Bowler',
+          count: payload.noBallWarning.noBallCount || 2
+        });
       }
     });
 
@@ -445,17 +889,6 @@ export default function LiveScoringScreen() {
         window.removeEventListener('offline', handleOffline);
       };
     }
-  }, []);
-
-  // Live Digital Clock for Slide Menu
-  useEffect(() => {
-    const updateTime = () => {
-      const now = new Date();
-      setCurrentTimeStr(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }));
-    };
-    updateTime();
-    const timer = setInterval(updateTime, 1000);
-    return () => clearInterval(timer);
   }, []);
 
   const getWinnerInfo = () => {
@@ -485,6 +918,327 @@ export default function LiveScoringScreen() {
     return { winnerName, winMargin, fullSummary: summary || `${winnerName} ${winMargin}` };
   };
 
+  const triggerMilestone = (m: MilestoneCelebration) => {
+    setActiveMilestone(m);
+    setShowMilestoneModal(true);
+  };
+
+  const checkMilestones = (d: any, isInitial: boolean) => {
+    if (!d) return;
+
+    const innId = d.innings?.id || 'inn1';
+    const tRuns = d.innings?.totalRuns ?? 0;
+    const sRuns = d.striker?.runs;
+    const sId = d.striker?.id || d.striker?.name || 's1';
+    const nsRuns = d.nonStriker?.runs;
+    const nsId = d.nonStriker?.id || d.nonStriker?.name || 'ns1';
+    const bWkts = d.bowler?.wickets;
+    const bId = d.bowler?.id || d.bowler?.name || 'b1';
+
+    // ── STEP 1: DYNAMIC BIDIRECTIONAL PRUNING (Handles Undo Ball & Retroactive Edits) ──
+    // If scores dropped below milestone thresholds (via Undo or Edit), delete those milestone keys
+    // so that when the team or batter reaches the milestone again, the 3D celebration triggers reliably!
+    if (tRuns < 50) {
+      shownMilestonesRef.current.delete(`team_50_${innId}`);
+      shownMilestonesRef.current.delete(`team_100_${innId}`);
+      shownMilestonesRef.current.delete(`team_150_${innId}`);
+      shownMilestonesRef.current.delete(`team_200_${innId}`);
+    } else if (tRuns < 100) {
+      shownMilestonesRef.current.delete(`team_100_${innId}`);
+      shownMilestonesRef.current.delete(`team_150_${innId}`);
+      shownMilestonesRef.current.delete(`team_200_${innId}`);
+    } else if (tRuns < 150) {
+      shownMilestonesRef.current.delete(`team_150_${innId}`);
+      shownMilestonesRef.current.delete(`team_200_${innId}`);
+    } else if (tRuns < 200) {
+      shownMilestonesRef.current.delete(`team_200_${innId}`);
+    }
+
+    if (sRuns !== undefined) {
+      if (sRuns < 50) {
+        shownMilestonesRef.current.delete(`50_${sId}_${innId}`);
+        shownMilestonesRef.current.delete(`100_${sId}_${innId}`);
+        shownMilestonesRef.current.delete(`150_${sId}_${innId}`);
+        shownMilestonesRef.current.delete(`200_${sId}_${innId}`);
+      } else if (sRuns < 100) {
+        shownMilestonesRef.current.delete(`100_${sId}_${innId}`);
+        shownMilestonesRef.current.delete(`150_${sId}_${innId}`);
+        shownMilestonesRef.current.delete(`200_${sId}_${innId}`);
+      } else if (sRuns < 150) {
+        shownMilestonesRef.current.delete(`150_${sId}_${innId}`);
+        shownMilestonesRef.current.delete(`200_${sId}_${innId}`);
+      } else if (sRuns < 200) {
+        shownMilestonesRef.current.delete(`200_${sId}_${innId}`);
+      }
+    }
+
+    if (nsRuns !== undefined) {
+      if (nsRuns < 50) {
+        shownMilestonesRef.current.delete(`50_${nsId}_${innId}`);
+        shownMilestonesRef.current.delete(`100_${nsId}_${innId}`);
+        shownMilestonesRef.current.delete(`150_${nsId}_${innId}`);
+      } else if (nsRuns < 100) {
+        shownMilestonesRef.current.delete(`100_${nsId}_${innId}`);
+        shownMilestonesRef.current.delete(`150_${nsId}_${innId}`);
+      } else if (nsRuns < 150) {
+        shownMilestonesRef.current.delete(`150_${nsId}_${innId}`);
+      }
+    }
+
+    if (bWkts !== undefined) {
+      if (bWkts < 3) {
+        shownMilestonesRef.current.delete(`3w_${bId}_${innId}`);
+        shownMilestonesRef.current.delete(`5w_${bId}_${innId}`);
+      } else if (bWkts < 5) {
+        shownMilestonesRef.current.delete(`5w_${bId}_${innId}`);
+      }
+    }
+
+    // On initial page mount, we only seed the passed milestones so an existing match does not suddenly pop up on initial refresh
+    if (isInitial) {
+      if (tRuns >= 50) shownMilestonesRef.current.add(`team_50_${innId}`);
+      if (tRuns >= 100) shownMilestonesRef.current.add(`team_100_${innId}`);
+      if (tRuns >= 150) shownMilestonesRef.current.add(`team_150_${innId}`);
+      if (tRuns >= 200) shownMilestonesRef.current.add(`team_200_${innId}`);
+      if (sRuns !== undefined) {
+        if (sRuns >= 50) shownMilestonesRef.current.add(`50_${sId}_${innId}`);
+        if (sRuns >= 100) shownMilestonesRef.current.add(`100_${sId}_${innId}`);
+        if (sRuns >= 150) shownMilestonesRef.current.add(`150_${sId}_${innId}`);
+        if (sRuns >= 200) shownMilestonesRef.current.add(`200_${sId}_${innId}`);
+      }
+      if (nsRuns !== undefined) {
+        if (nsRuns >= 50) shownMilestonesRef.current.add(`50_${nsId}_${innId}`);
+        if (nsRuns >= 100) shownMilestonesRef.current.add(`100_${nsId}_${innId}`);
+      }
+      if (bWkts !== undefined) {
+        if (bWkts >= 3) shownMilestonesRef.current.add(`3w_${bId}_${innId}`);
+        if (bWkts >= 5) shownMilestonesRef.current.add(`5w_${bId}_${innId}`);
+      }
+      return;
+    }
+
+    // 1. Striker Milestone (50, 100, 150, 200)
+    if (d.striker && d.striker.runs !== undefined) {
+      const sRuns = d.striker.runs;
+      const sBalls = d.striker.balls || 0;
+      const sName = d.striker.name || 'Batter';
+      const sId = d.striker.id || sName;
+      const team = d.innings?.battingTeam || matchInfo?.battingTeam || 'Batting Team';
+      const sr = sBalls > 0 ? ((sRuns / sBalls) * 100).toFixed(1) : '0.0';
+
+      if (sRuns >= 50 && sRuns < 100) {
+        const k50 = `50_${sId}_${innId}`;
+        if (!shownMilestonesRef.current.has(k50)) {
+          shownMilestonesRef.current.add(k50);
+          triggerMilestone({
+            type: 'BATTER_50',
+            title: 'HALF-CENTURY!',
+            badge: '⭐ 50 RUNS MILESTONE ⭐',
+            subtitle: 'Splendid half-century under pressure! A crucial innings for the team.',
+            playerName: sName,
+            teamName: team,
+            scoreText: `${sRuns}*`,
+            ballsText: `${sBalls} Balls`,
+            strikeRateText: sr,
+            fours: d.striker.fours || 0,
+            sixes: d.striker.sixes || 0
+          });
+          return;
+        }
+      } else if (sRuns >= 100 && sRuns < 150) {
+        const k100 = `100_${sId}_${innId}`;
+        if (!shownMilestonesRef.current.has(k100)) {
+          shownMilestonesRef.current.add(k100);
+          triggerMilestone({
+            type: 'BATTER_100',
+            title: 'MAGNIFICENT CENTURY!',
+            badge: '👑 100 RUNS CENTURY 👑',
+            subtitle: 'Outstanding masterclass ton! Raises the bat to a standing ovation.',
+            playerName: sName,
+            teamName: team,
+            scoreText: `${sRuns}*`,
+            ballsText: `${sBalls} Balls`,
+            strikeRateText: sr,
+            fours: d.striker.fours || 0,
+            sixes: d.striker.sixes || 0
+          });
+          return;
+        }
+      } else if (sRuns >= 150 && sRuns < 200) {
+        const k150 = `150_${sId}_${innId}`;
+        if (!shownMilestonesRef.current.has(k150)) {
+          shownMilestonesRef.current.add(k150);
+          triggerMilestone({
+            type: 'BATTER_150',
+            title: 'COLOSSAL 150* RUNS!',
+            badge: '🔥 150 RUNS MILESTONE 🔥',
+            subtitle: 'Unbelievable power-hitting and determination!',
+            playerName: sName,
+            teamName: team,
+            scoreText: `${sRuns}*`,
+            ballsText: `${sBalls} Balls`,
+            strikeRateText: sr,
+            fours: d.striker.fours || 0,
+            sixes: d.striker.sixes || 0
+          });
+          return;
+        }
+      } else if (sRuns >= 200) {
+        const k200 = `200_${sId}_${innId}`;
+        if (!shownMilestonesRef.current.has(k200)) {
+          shownMilestonesRef.current.add(k200);
+          triggerMilestone({
+            type: 'BATTER_200',
+            title: 'HISTORIC DOUBLE TON (200*)!',
+            badge: '💎 200 RUNS DOUBLE CENTURY 💎',
+            subtitle: 'A historic monumental innings for the ages!',
+            playerName: sName,
+            teamName: team,
+            scoreText: `${sRuns}*`,
+            ballsText: `${sBalls} Balls`,
+            strikeRateText: sr,
+            fours: d.striker.fours || 0,
+            sixes: d.striker.sixes || 0
+          });
+          return;
+        }
+      }
+    }
+
+    // 2. Non-Striker Milestone
+    if (d.nonStriker && d.nonStriker.runs !== undefined) {
+      const nsRuns = d.nonStriker.runs;
+      const nsBalls = d.nonStriker.balls || 0;
+      const nsName = d.nonStriker.name || 'Batter';
+      const nsId = d.nonStriker.id || nsName;
+      const team = d.innings?.battingTeam || matchInfo?.battingTeam || 'Batting Team';
+      const sr = nsBalls > 0 ? ((nsRuns / nsBalls) * 100).toFixed(1) : '0.0';
+
+      if (nsRuns >= 50 && nsRuns < 100) {
+        const k50 = `50_${nsId}_${innId}`;
+        if (!shownMilestonesRef.current.has(k50)) {
+          shownMilestonesRef.current.add(k50);
+          triggerMilestone({
+            type: 'BATTER_50',
+            title: 'HALF-CENTURY!',
+            badge: '⭐ 50 RUNS MILESTONE ⭐',
+            subtitle: 'Splendid half-century under pressure!',
+            playerName: nsName,
+            teamName: team,
+            scoreText: `${nsRuns}*`,
+            ballsText: `${nsBalls} Balls`,
+            strikeRateText: sr,
+            fours: d.nonStriker.fours || 0,
+            sixes: d.nonStriker.sixes || 0
+          });
+          return;
+        }
+      } else if (nsRuns >= 100 && nsRuns < 150) {
+        const k100 = `100_${nsId}_${innId}`;
+        if (!shownMilestonesRef.current.has(k100)) {
+          shownMilestonesRef.current.add(k100);
+          triggerMilestone({
+            type: 'BATTER_100',
+            title: 'MAGNIFICENT CENTURY!',
+            badge: '👑 100 RUNS CENTURY 👑',
+            subtitle: 'Sensational ton! Raises the bat to great acclaim.',
+            playerName: nsName,
+            teamName: team,
+            scoreText: `${nsRuns}*`,
+            ballsText: `${nsBalls} Balls`,
+            strikeRateText: sr,
+            fours: d.nonStriker.fours || 0,
+            sixes: d.nonStriker.sixes || 0
+          });
+          return;
+        }
+      }
+    }
+
+    // 3. Bowler Milestones (3 Wickets, 5 Wickets / Fifer)
+    if (d.bowler && d.bowler.wickets !== undefined) {
+      const bWkts = d.bowler.wickets;
+      const bName = d.bowler.name || 'Bowler';
+      const bId = d.bowler.id || bName;
+      const bOvers = d.bowler.overs || '0.0';
+      const bRuns = d.bowler.runs || 0;
+      const bowlingTeam = d.innings?.bowlingTeam || matchInfo?.bowlingTeam || 'Bowling Team';
+
+      if (bWkts >= 5) {
+        const k5w = `5w_${bId}_${innId}`;
+        if (!shownMilestonesRef.current.has(k5w)) {
+          shownMilestonesRef.current.add(k5w);
+          triggerMilestone({
+            type: 'BOWLER_5W',
+            imageKey: 'BOWLER',
+            title: 'FIVE-WICKET HAUL (FIFER)!',
+            badge: '🔥 5-WICKET HAUL 🔥',
+            subtitle: 'Spectacular bowling spell! Dismantles the batting lineup.',
+            playerName: bName,
+            teamName: bowlingTeam,
+            scoreText: `${bWkts}/${bRuns}`,
+            ballsText: `${bOvers} Overs`,
+            strikeRateText: `ER: ${d.bowler.economy || '0.0'}`
+          });
+          return;
+        }
+      } else if (bWkts === 3) {
+        const k3w = `3w_${bId}_${innId}`;
+        if (!shownMilestonesRef.current.has(k3w)) {
+          shownMilestonesRef.current.add(k3w);
+          triggerMilestone({
+            type: 'BOWLER_3W',
+            imageKey: 'BOWLER',
+            title: 'THREE WICKETS HAUL!',
+            badge: '🎯 3 WICKETS HAUL 🎯',
+            subtitle: 'Crucial bowling breakthroughs that turned the game!',
+            playerName: bName,
+            teamName: bowlingTeam,
+            scoreText: `${bWkts}/${bRuns}`,
+            ballsText: `${bOvers} Overs`,
+            strikeRateText: `ER: ${d.bowler.economy || '0.0'}`
+          });
+          return;
+        }
+      }
+    }
+
+    // 4. Team Milestones (50, 100, 150, 200 Team Runs)
+    if (d.innings && d.innings.totalRuns !== undefined) {
+      const tRuns = d.innings.totalRuns;
+      const team = d.innings.battingTeam || matchInfo?.battingTeam || 'Batting Team';
+      const teamOvers = d.innings.overs || '0.0';
+
+      const thresholds = [
+        { run: 200, badge: '🚀 TEAM 200 RUNS UP! 🚀', title: 'TEAM 200 UP!' },
+        { run: 150, badge: '⚡ TEAM 150 RUNS UP! ⚡', title: 'TEAM 150 UP!' },
+        { run: 100, badge: '💯 TEAM 100 RUNS UP! 💯', title: 'TEAM 100 UP!' },
+        { run: 50, badge: '🏏 TEAM 50 RUNS UP! 🏏', title: 'TEAM 50 UP!' }
+      ];
+
+      for (const th of thresholds) {
+        if (tRuns >= th.run) {
+          const kt = `team_${th.run}_${innId}`;
+          if (!shownMilestonesRef.current.has(kt)) {
+            shownMilestonesRef.current.add(kt);
+            triggerMilestone({
+              type: ('TEAM_' + th.run) as any,
+              title: th.title,
+              badge: th.badge,
+              subtitle: `Sensational collective batting! ${team} crosses the ${th.run}-run mark.`,
+              playerName: team,
+              teamName: `Overs: ${teamOvers} | Score: ${tRuns}/${d.innings.wickets || 0}`,
+              scoreText: `${tRuns}/${d.innings.wickets || 0}`,
+              ballsText: `${teamOvers} Ov`,
+              strikeRateText: `CRR: ${d.innings.runRate || '0.0'}`
+            });
+            break;
+          }
+        }
+      }
+    }
+  };
+
   const loadLiveState = async (isInitial = false) => {
     try {
       if (isInitial) {
@@ -500,10 +1254,16 @@ export default function LiveScoringScreen() {
       const curMatchStatus = d.match?.status || 'LIVE';
       setMatchStatus(curMatchStatus);
 
+      const curBreak = d.match?.currentBreak || null;
+      setCurrentBreak(curBreak);
+
       const isBreak = curMatchStatus === 'INNINGS_BREAK';
-      const isCompleted = curMatchStatus === 'COMPLETED';
+      const targetVal = d.match?.revisedTarget || d.innings?.target || d.match?.targetRuns || 0;
+      const isTargetReached = (d.innings?.inningsNumber === 2 && targetVal > 0 && (d.innings?.runs || 0) >= targetVal);
+      const hasWinSummary = Boolean(d.match?.resultSummary && !d.match?.resultSummary.toLowerCase().includes('delayed') && (d.match?.resultSummary.toLowerCase().includes('won') || d.match?.resultSummary.toLowerCase().includes('tied')));
+      const isCompleted = curMatchStatus === 'COMPLETED' || isTargetReached || hasWinSummary;
       setIsInningsBreak(isBreak);
-      setIsMatchEnded(isCompleted);
+      setIsMatchEnded(Boolean(isCompleted));
 
       if (d.match) {
         const teamAName = d.match.teamA || d.innings?.battingTeam || 'Team A';
@@ -546,6 +1306,12 @@ export default function LiveScoringScreen() {
         if (d.match.teamAId && !superOverBattingTeam) {
           setSuperOverBattingTeam(d.match.teamAId);
         }
+        if (d.match.umpire1_name || d.match.umpire1) {
+          setUmpire1Name(d.match.umpire1_name || d.match.umpire1);
+        }
+        if (d.match.umpire2_name || d.match.umpire2) {
+          setUmpire2Name(d.match.umpire2_name || d.match.umpire2);
+        }
       }
 
       if (d.innings) {
@@ -553,6 +1319,7 @@ export default function LiveScoringScreen() {
         setWickets(d.innings.wickets ?? 0);
         setBalls(d.innings.ballsTotal ?? 0);
         setTargetRuns(d.innings.target ?? null);
+        setIsFreeHitActive(Boolean(d.innings.isFreeHit || d.innings.is_free_hit));
 
         const overDone = !!d.innings.isOverComplete;
         setIsOverComplete(overDone);
@@ -629,6 +1396,18 @@ export default function LiveScoringScreen() {
       if (d.lastDismissal) {
         setLastDismissal(d.lastDismissal);
       }
+      if (d.recentDeliveries && Array.isArray(d.recentDeliveries)) {
+        setRecentDeliveries(d.recentDeliveries);
+        if (isInitial && d.recentDeliveries.length > 0) {
+          initialDeliveryIdRef.current = String(d.recentDeliveries[0].id || `${d.recentDeliveries[0].ball || '0'}`);
+          hasRecordedNewBallRef.current = false;
+        }
+      }
+      if (ScorerApi.getOfflineQueueCount) {
+        setOfflineQueueCount(ScorerApi.getOfflineQueueCount());
+      }
+      // Automatic Milestone Celebration Popup (50s, 100s, 5-Wickets, etc.)
+      checkMilestones(d, isInitial);
     } catch (err: any) {
       console.error('loadLiveState error:', err);
       setApiError(err.message || 'Unable to connect to live scoring database.');
@@ -672,15 +1451,37 @@ export default function LiveScoringScreen() {
       legbye: 'LEG_BYE'
     };
 
-    const isExtra = type === 'wide' || type === 'noball';
-    const runsBatter = isExtra && type !== 'noball' ? 0 : run;
-    const runsExtras = isExtra
-      ? type === 'wide' || type === 'noball'
-        ? 1 + run
-        : run
-      : type === 'bye' || type === 'legbye'
-      ? run
-      : 0;
+    let runsBatter = 0;
+    let runsExtras = 0;
+
+    if (type === 'normal') {
+      runsBatter = run;
+      runsExtras = 0;
+    } else if (type === 'wide') {
+      runsBatter = 0;
+      runsExtras = 1 + run;
+    } else if (type === 'noball') {
+      if (customOpts.isByeOrLegBye) {
+        runsBatter = 0;
+        runsExtras = 1 + run;
+      } else {
+        runsBatter = run;
+        runsExtras = 1;
+      }
+    } else if (type === 'bye') {
+      runsBatter = 0;
+      runsExtras = run > 0 ? run : 1;
+    } else if (type === 'legbye') {
+      runsBatter = 0;
+      runsExtras = run > 0 ? run : 1;
+    }
+
+    const finalFieldingPos =
+      customOpts.wagonSector && customOpts.wagonSector !== 'Unspecified'
+        ? customOpts.wagonSector
+        : customOpts.wagonSector === 'Unspecified'
+          ? undefined
+          : (selectedWagonSector || selectedFieldPosition);
 
     const payload = {
       strikerId: striker?.id,
@@ -690,11 +1491,21 @@ export default function LiveScoringScreen() {
       runsExtras,
       extraType: extraTypeMap[type] || 'NONE',
       wicket: false,
-      fieldingPosition: customOpts.wagonSector || selectedWagonSector || selectedFieldPosition,
+      fieldingPosition: finalFieldingPos,
       shotType: selectedShotType,
       ballType: selectedBallType,
       bowlingMode,
       isMarkedForEdit,
+      shotAngle: customOpts.shotAngle ?? undefined,
+      shotDistance: customOpts.shotDistance ?? undefined,
+      shotZone: customOpts.shotZone ?? finalFieldingPos ?? undefined,
+      shotX: customOpts.shotX ?? undefined,
+      shotY: customOpts.shotY ?? undefined,
+      fielderId: selectedFielderId || undefined,
+      fielderName: customOpts.fielderName || undefined,
+      isOverthrow: customOpts.isOverthrow ?? undefined,
+      overthrowFielders: customOpts.overthrowFielders ?? undefined,
+      fieldingAction: selectedFieldingAction || (customOpts.isOverthrow ? 'Overthrow' : undefined),
       remarks: customOpts.remarks || deliveryRemarks || undefined
     };
 
@@ -704,13 +1515,149 @@ export default function LiveScoringScreen() {
         throw new Error(res?.message || 'Failed to record delivery.');
       }
 
+      hasRecordedNewBallRef.current = true;
       setIsBallInProgress(false);
       if (res.commentary) {
         setAiCommentary(res.commentary);
       }
+      if (currentBreak) {
+        setCurrentBreak(null);
+      }
 
       // Seamless background update without full page refresh
       await loadLiveState(false);
+
+      // Smart Rules Analysis: Free Hit status (Rule modal triggers ONCE per match)
+      if (res.isFreeHit || res.data?.isFreeHit || type === 'noball') {
+        setIsFreeHitActive(true);
+        if (type === 'noball') {
+          setActiveCricketRule('FREE_HIT');
+          setCricketRuleContext({
+            bowlerName: bowler?.name || 'Bowler',
+            strikerName: striker?.name || 'Striker',
+            nonStrikerName: nonStriker?.name || 'Non-Striker'
+          });
+        }
+      } else if (isFreeHitActive && type === 'normal') {
+        setIsFreeHitActive(false);
+      }
+
+      // ─── Broadcast Umpire Signal Trigger (Official Hand Signals & Broadcast HUD) ───
+      if (type === 'wide') {
+        const isConsecutive = (consecutiveWidesCount + 1 >= 2);
+        setActiveUmpireSignal({
+          type: isConsecutive ? 'CONSECUTIVE_WIDES' : 'WIDE',
+          batterName: striker?.name,
+          bowlerName: bowler?.name,
+          overText: `Over ${getOvers(balls)}`,
+          extraDetails: isConsecutive
+            ? `Consecutive wide balls bowled by ${bowler?.name || 'Bowler'} • Standing umpire caution issued`
+            : '+1 Extra run added to team total • Ball must be re-bowled (MCC Law 22)'
+        });
+      } else if (type === 'noball') {
+        setActiveUmpireSignal({
+          type: 'NO_BALL',
+          batterName: striker?.name,
+          bowlerName: bowler?.name,
+          overText: `Over ${getOvers(balls)}`,
+          extraDetails: '+1 Penalty run • Mandatory Free Hit awarded for next delivery (MCC Law 21)'
+        });
+      } else if ((type as string) === 'deadball') {
+        setActiveUmpireSignal({
+          type: 'DEAD_BALL',
+          batterName: striker?.name,
+          bowlerName: bowler?.name,
+          overText: `Over ${getOvers(balls)}`,
+          extraDetails: 'Ball is dead • Delivery cancelled, ball does not count toward over (MCC Law 20)'
+        });
+      } else if (type === 'legbye') {
+        setActiveUmpireSignal({
+          type: 'LEG_BYE',
+          batterName: striker?.name,
+          bowlerName: bowler?.name,
+          runs: runs,
+          overText: `Over ${getOvers(balls)}`,
+          extraDetails: `${runs} Leg Bye run(s) credited to extras • Signal to official scorer (MCC Law 23)`
+        });
+      } else if (type === 'bye') {
+        setActiveUmpireSignal({
+          type: 'BYE',
+          batterName: striker?.name,
+          bowlerName: bowler?.name,
+          runs: runs,
+          overText: `Over ${getOvers(balls)}`,
+          extraDetails: `${runs} Bye run(s) credited to extras • Signal to official scorer (MCC Law 23)`
+        });
+      } else if (type === 'normal' && runs === 4) {
+        setActiveUmpireSignal({
+          type: 'FOUR',
+          batterName: striker?.name,
+          bowlerName: bowler?.name,
+          runs: 4,
+          overText: `Over ${getOvers(balls)}`,
+          extraDetails: `${striker?.name || 'Batter'} hits boundary four along the ground (MCC Law 19)`
+        });
+      } else if (type === 'normal' && runs === 6) {
+        setActiveUmpireSignal({
+          type: 'SIX',
+          batterName: striker?.name,
+          bowlerName: bowler?.name,
+          runs: 6,
+          overText: `Over ${getOvers(balls)}`,
+          extraDetails: `${striker?.name || 'Batter'} smashes massive six over the boundary rope (MCC Law 19)`
+        });
+      }
+
+      // Smart Rules Analysis: Consecutive Wides
+      if (type === 'wide') {
+        const nextWides = consecutiveWidesCount + 1;
+        setConsecutiveWidesCount(nextWides);
+        if (nextWides >= 2) {
+          setActiveCricketRule('CONSECUTIVE_WIDES');
+          setCricketRuleContext({
+            bowlerName: bowler?.name || 'Bowler',
+            count: nextWides,
+            overNumber: Math.floor(balls / 6) + 1
+          });
+        }
+      } else if (type === 'normal') {
+        setConsecutiveWidesCount(0);
+      }
+
+      const cwWarn = res?.consecutiveWidesWarning || res?.data?.consecutiveWidesWarning;
+      if (cwWarn) {
+        setActiveCricketRule('CONSECUTIVE_WIDES');
+        setCricketRuleContext({
+          bowlerName: cwWarn.bowlerName || bowler?.name || 'Bowler',
+          count: cwWarn.count || 2,
+          overNumber: cwWarn.overNumber
+        });
+      }
+
+      // Smart Rules Analysis: Bowler Quota
+      const bqWarn = res?.bowlerQuotaWarning || res?.data?.bowlerQuotaWarning;
+      if (bqWarn) {
+        setActiveCricketRule('OVER_QUOTA');
+        setCricketRuleContext({
+          bowlerName: bqWarn.bowlerName || bowler?.name || 'Bowler',
+          oversBowled: bqWarn.overs,
+          maxQuota: bqWarn.maxQuota
+        });
+      }
+
+      // Check for 2 No-Balls dangerous bowling warning (MCC Law 41.7)
+      const nbWarn = res?.noBallWarning || res?.data?.noBallWarning;
+      const currentBowlerNoBalls = (bowler?.no_balls || bowler?.noBalls || 0) + (type === 'noball' ? 1 : 0);
+      const isSecondNoBall = (nbWarn && (nbWarn.noBallCount >= 2 || nbWarn.beamerCount >= 2)) || (type === 'noball' && currentBowlerNoBalls >= 2);
+      const targetBowlerId = nbWarn?.bowlerId || bowler?.id || 'B1';
+
+      if (isSecondNoBall && !dismissedNoBallBowlers.includes(targetBowlerId)) {
+        setNoBallAlert({
+          bowlerId: targetBowlerId,
+          bowlerName: nbWarn?.bowlerName || bowler?.name || 'Current Bowler',
+          count: nbWarn?.noBallCount || currentBowlerNoBalls || 2
+        });
+      }
 
       // Trigger automatic Next Bowler popup after 6 legal deliveries (only if match is still LIVE)
       if (res.isOverComplete || res.data?.isOverComplete) {
@@ -727,6 +1674,23 @@ export default function LiveScoringScreen() {
     }
   };
 
+  const handleWagonWheelConfirm = async (result: ShotDirectionResult) => {
+    setSelectedWagonSector(result.zone);
+    setShowWagonWheelModal(false);
+    if (pendingBoundaryRun !== null) {
+      const r = pendingBoundaryRun;
+      setPendingBoundaryRun(null);
+      await handleScore(r, 'normal', {
+        wagonSector: result.zone,
+        shotZone: result.zone,
+        shotAngle: result.angle,
+        shotDistance: result.distance,
+        shotX: result.x,
+        shotY: result.y
+      });
+    }
+  };
+
   const handleWagonWheelSelect = async (sector: string) => {
     setSelectedWagonSector(sector);
     setShowWagonWheelModal(false);
@@ -737,15 +1701,113 @@ export default function LiveScoringScreen() {
     }
   };
 
-  const handleMoreRunsSelect = async (r: number) => {
+  const handleWagonWheelSkip = async () => {
+    setShowWagonWheelModal(false);
+    if (pendingBoundaryRun !== null) {
+      const r = pendingBoundaryRun;
+      setPendingBoundaryRun(null);
+      await handleScore(r, 'normal', { wagonSector: 'Unspecified' });
+    }
+  };
+
+  const handleMoreRunsSelect = (r: number) => {
+    setMoreRunsSelected(r);
+  };
+
+  const handleAwardMoreRuns = async () => {
+    const customTrimmed = customMoreRunsReason.trim();
+    let finalReason = '';
+    if (customTrimmed) {
+      finalReason = customTrimmed;
+    } else if (moreRunsReasonKey === 'WIDE') {
+      finalReason = `Wide + ${moreRunsSelected - 1} (Overthrow/Boundary)`;
+    } else if (moreRunsReasonKey === 'NO_BALL') {
+      finalReason = `No Ball + ${moreRunsSelected - 1} (Bat Boundary)`;
+    } else if (moreRunsReasonKey === 'OVERTHROW') {
+      finalReason = `${moreRunsSelected} Overthrow Runs (All Extras)`;
+    } else if (moreRunsReasonKey === 'RUNNING') {
+      finalReason = `${moreRunsSelected} Running Runs (Between Wickets)`;
+    } else if (moreRunsReasonKey === 'PENALTY') {
+      finalReason = `Penalty 5 Runs (Law 28 - Helmet Hit)`;
+    } else if (moreRunsReason) {
+      finalReason = moreRunsReason;
+    }
+
+    if (!finalReason) {
+      const msg = 'Please select or type a delivery reason before awarding more runs.';
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('Reason Required', msg);
+      }
+      return;
+    }
+
     setShowMoreRunsModal(false);
-    await handleScore(r, 'normal');
+    const totalR = moreRunsSelected;
+
+    if (moreRunsReasonKey === 'WIDE' || finalReason.toLowerCase().includes('wide')) {
+      await handleScore(1, 'wide', {
+        runsExtras: totalR,
+        extraType: 'WIDE',
+        remarks: finalReason
+      });
+    } else if (moreRunsReasonKey === 'NO_BALL' || finalReason.toLowerCase().includes('no ball') || finalReason.toLowerCase().includes('noball')) {
+      await handleScore(Math.max(0, totalR - 1), 'noball', {
+        extraType: 'NO_BALL',
+        remarks: finalReason
+      });
+    } else if (moreRunsReasonKey === 'PENALTY' || finalReason.toLowerCase().includes('penalty')) {
+      await handleScore(0, 'normal', {
+        runsExtras: totalR,
+        extraType: 'PENALTY',
+        remarks: finalReason
+      });
+    } else {
+      await handleScore(totalR, 'normal', {
+        remarks: finalReason
+      });
+    }
+    setMoreRunsReasonKey('');
+    setMoreRunsReason('');
+    setCustomMoreRunsReason('');
+  };
+
+  const toggleOverthrowFielder = (playerName: string) => {
+    setSelectedOverthrowFielders((prev) =>
+      prev.includes(playerName) ? prev.filter((p) => p !== playerName) : [...prev, playerName]
+    );
   };
 
   const handleOverThrowSelect = async (r: number) => {
     setShowOverThrowModal(false);
     setCustomOverthrowInput('');
-    await handleScore(r, 'normal', { remarks: `Overthrow: ${r} runs` });
+    setIsOverthrowFielderDropdownOpen(false);
+
+    const fldNames = selectedOverthrowFielders.length > 0
+      ? selectedOverthrowFielders.join(', ')
+      : (bowler?.name || 'Fielding Side');
+
+    // Trigger instant broadcast animation with Overthrow illustration
+    setActiveFieldingEvent({
+      type: 'OVERTHROW',
+      fielderName: fldNames,
+      teamName: matchInfo?.bowlingTeam || 'Bowling Team',
+      title: `OVERTHROW: +${r} EXTRA RUNS! ⚡`,
+      badge: `+${r} RUNS CONCEDED`,
+      stats: `MCC Law 19.8 • ${r} Extra Run${r > 1 ? 's' : ''}`,
+      details: `Stray throw by ${fldNames} missed stumps and keeper, allowing batters to complete ${r} overthrow run${r > 1 ? 's' : ''}!`,
+      durationMs: 3500
+    });
+
+    await handleScore(r, 'normal', {
+      remarks: `Overthrow: +${r} runs (throw by ${fldNames})`,
+      isOverthrow: true,
+      overthrowFielders: selectedOverthrowFielders,
+      fielderName: fldNames
+    });
+
+    setSelectedOverthrowFielders([]);
   };
 
   const handleExtrasSelect = async (extraTypeKey: string) => {
@@ -753,17 +1815,23 @@ export default function LiveScoringScreen() {
     if (extraTypeKey === 'WIDE') {
       await handleScore(0, 'wide');
     } else if (extraTypeKey === 'NO_BALL') {
-      await handleScore(0, 'noball');
+      await handleScore(0, 'noball', { remarks: 'Front-foot crease overstep' });
+    } else if (extraTypeKey === 'NO_BALL_BEAMER') {
+      await handleScore(0, 'noball', { noBallReason: 'BEAMER', isDangerousDelivery: true, remarks: 'Dangerous waist-high full toss (Law 41.7)' });
+    } else if (extraTypeKey === 'NO_BALL_BOUNCER') {
+      await handleScore(0, 'noball', { noBallReason: 'BOUNCER', remarks: 'Bouncer limit exceeded (Law 41.6)' });
+    } else if (extraTypeKey === 'DEAD_BALL') {
+      setShowDeadBallModal(true);
     } else if (extraTypeKey === 'BYE') {
       await handleScore(1, 'bye');
     } else if (extraTypeKey === 'LEG_BYE') {
       await handleScore(1, 'legbye');
     } else if (extraTypeKey === 'NO_BALL_BYE') {
-      await handleScore(1, 'noball', { remarks: 'No Ball + Bye' });
+      await handleScore(1, 'noball', { isByeOrLegBye: true, remarks: 'No Ball + 1 Bye (Law 21.18)' });
     } else if (extraTypeKey === 'NO_BALL_LEG_BYE') {
-      await handleScore(1, 'noball', { remarks: 'No Ball + Leg Bye' });
+      await handleScore(1, 'noball', { isByeOrLegBye: true, remarks: 'No Ball + 1 Leg Bye (Law 21.18)' });
     } else if (extraTypeKey === 'NO_BALL_RUNS') {
-      setCustomCategory('noball');
+      setCustomCategory('noball_bat');
       setCustomRunsInput('1');
       setShowCustomModal(true);
     } else if (extraTypeKey === 'PENALTY') {
@@ -775,9 +1843,23 @@ export default function LiveScoringScreen() {
     setSelectedFieldingAction(action);
     setShowFieldingModal(false);
     const fielderObj = bowlingSquad.find(f => f.id === selectedFielderId);
-    const fielderName = fielderObj ? fielderObj.name : 'Fielder';
-    const msg = `Fielding Action Recorded: ${fielderName} - ${action}`;
-    Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Fielding Logged', msg);
+    const fielderName = fielderObj ? fielderObj.name : 'Active Fielder';
+
+    // Map to FieldingEventType for instant broadcast animation
+    let fType: FieldingEventType = 'CLEAN_COLLECT';
+    if (action.includes('Direct Hit')) fType = 'DIRECT_HIT';
+    else if (action.includes('Boundary Save') || action.includes('Slide')) fType = 'BOUNDARY_SAVE';
+    else if (action.includes('Pick and Throw')) fType = 'PICK_AND_THROW';
+    else if (action.includes('Relay Throw')) fType = 'RELAY_THROW';
+    else if (action.includes('Dropped Catch') || action.includes('Misfield')) fType = 'MISFIELD';
+    else if (action.includes('Overthrow')) fType = 'OVERTHROW';
+
+    setActiveFieldingEvent({
+      type: fType,
+      fielderName: fielderName,
+      teamName: matchInfo?.bowlingTeam || 'Fielding Team',
+      details: `${fielderName} executed ${action} • Logged for match scorecard`
+    });
   };
 
   const handleWicketClick = () => {
@@ -793,10 +1875,18 @@ export default function LiveScoringScreen() {
       return;
     }
 
+    // Special Cricket Rule: Free Hit Immunity check (MCC Law 21.19)
+    if (isFreeHitActive) {
+      const msg = '⚡ FREE HIT ACTIVE! Batter CANNOT be dismissed Bowled, Caught, LBW, or Stumped (MCC Law 21.19). Only RUN OUT is allowed.';
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Free Hit Immunity', msg);
+      setWicketType('RUN_OUT');
+    } else {
+      setWicketType('BOWLED');
+    }
+
     // Initialize rich wicket state
     setWicketStep(1);
     setDismissedTarget('striker');
-    setWicketType('BOWLED');
     setSelectedFielderId('');
     setCustomFielderName('');
     setIsFielderDropdownOpen(false);
@@ -818,7 +1908,8 @@ export default function LiveScoringScreen() {
     if (isSubmittingDelivery) return;
 
     const outBatter = dismissedTarget === 'striker' ? striker : nonStriker;
-    const isTenthWicket = wickets + 1 >= 10;
+    const isRetiredHurt = wicketType === 'RETIRED_HURT';
+    const isTenthWicket = !isRetiredHurt && wickets + 1 >= 10;
 
     let nextBatterId = selectedNextBatterId;
     let nextBatterName = customBatterName.trim();
@@ -858,7 +1949,7 @@ export default function LiveScoringScreen() {
     setIsSubmittingDelivery(true);
     setShowWicketModal(false);
 
-    if (outBatter?.id) {
+    if (outBatter?.id && !isRetiredHurt) {
       setDismissedBatters((prev) => [...prev, outBatter.id]);
     }
 
@@ -869,7 +1960,7 @@ export default function LiveScoringScreen() {
       runsBatter: runsOnWicket,
       runsExtras: 0,
       extraType: 'NONE',
-      wicket: true,
+      wicket: !isRetiredHurt,
       wicketType: wicketType,
       dismissedPlayerId: outBatter?.id,
       replacementBatterId: isTenthWicket ? null : nextBatterId,
@@ -881,11 +1972,74 @@ export default function LiveScoringScreen() {
 
     try {
       const res = await ScorerApi.recordDelivery(matchId, payload);
+      hasRecordedNewBallRef.current = true;
       if (res && res.commentary) {
         setAiCommentary(res.commentary);
       }
       setCustomBatterName('');
       await loadLiveState(false);
+
+      // Trigger Official Broadcast Umpire Signal (OUT - Index Finger Raised)
+      setActiveUmpireSignal({
+        type: 'OUT',
+        title: `OUT! (${wicketType.replace('_', ' ')})`,
+        batterName: outBatter?.name || 'Batter',
+        bowlerName: bowler?.name || 'Bowler',
+        dismissalType: wicketType.replace('_', ' '),
+        overText: `Over ${getOvers(balls + 1)}`,
+        extraDetails: `Appeal upheld by standing umpire: ${outBatter?.name || 'Batter'} dismissed ${wicketType.replace('_', ' ')} (MCC Law 31)`
+      });
+
+      // Trigger Dismissal Celebrations (Run Out, Keeper Stumped/Caught Behind, Diving Catch)
+      if (wicketType === 'RUN_OUT') {
+        triggerMilestone({
+          type: 'RUN_OUT',
+          imageKey: 'RUN_OUT',
+          title: 'DIRECT HIT RUN OUT!',
+          badge: '🎯 SPECTACULAR RUN OUT 🎯',
+          subtitle: `Incredible direct-hit throw by ${resolvedFielderName || 'Fielder'}! ${outBatter?.name || 'Batter'} is caught short of the crease.`,
+          playerName: resolvedFielderName || 'Fielder',
+          teamName: `${outBatter?.name || 'Batter'} dismissed`,
+          scoreText: 'RUN OUT',
+          ballsText: `Ov ${getOvers(balls + 1)}`
+        });
+      } else if (wicketType === 'STUMPED') {
+        triggerMilestone({
+          type: 'KEEPER_OUT',
+          imageKey: 'KEEPER',
+          title: 'LIGHTNING STUMPING!',
+          badge: '🧤 WICKETKEEPER STUMPING 🧤',
+          subtitle: `Flawless glovework by ${resolvedFielderName || 'Wicketkeeper'}! Feet out of the crease, bails dislodged in a flash.`,
+          playerName: resolvedFielderName || 'Wicketkeeper',
+          teamName: `${outBatter?.name || 'Batter'} st ${resolvedFielderName || 'Keeper'} b ${bowler?.name || 'Bowler'}`,
+          scoreText: 'STUMPED',
+          ballsText: `Ov ${getOvers(balls + 1)}`
+        });
+      } else if (wicketType === 'CAUGHT_BEHIND') {
+        triggerMilestone({
+          type: 'KEEPER_OUT',
+          imageKey: 'KEEPER',
+          title: 'CAUGHT BEHIND!',
+          badge: '🧤 WICKETKEEPER CATCH 🧤',
+          subtitle: `Snicked to the keeper! Superb reflex catch taken by ${resolvedFielderName || 'Wicketkeeper'}.`,
+          playerName: resolvedFielderName || 'Wicketkeeper',
+          teamName: `${outBatter?.name || 'Batter'} c ${resolvedFielderName || 'Keeper'} b ${bowler?.name || 'Bowler'}`,
+          scoreText: 'CAUGHT BEHIND',
+          ballsText: `Ov ${getOvers(balls + 1)}`
+        });
+      } else if (wicketType === 'CAUGHT') {
+        triggerMilestone({
+          type: 'TOP_CATCHES',
+          imageKey: 'CATCH',
+          title: 'OUTSTANDING CATCH!',
+          badge: '🦅 SPECTACULAR CATCH 🦅',
+          subtitle: `Sensational athleticism! Full-length diving catch by ${resolvedFielderName || 'Fielder'} under pressure.`,
+          playerName: resolvedFielderName || 'Fielder',
+          teamName: `${outBatter?.name || 'Batter'} c ${resolvedFielderName || 'Fielder'} b ${bowler?.name || 'Bowler'}`,
+          scoreText: 'WICKET',
+          ballsText: `Ov ${getOvers(balls + 1)}`
+        });
+      }
 
       if (res.isOverComplete || res.data?.isOverComplete) {
         if (res.matchStatus === 'LIVE' && !res.data?.isMatchCompleted) {
@@ -927,12 +2081,12 @@ export default function LiveScoringScreen() {
         extraType: 'WIDE',
         reason: reasonText
       });
-    } else if (customCategory === 'noball_bat') {
+    } else if (customCategory === 'noball' || customCategory === 'noball_bat') {
       await handleCustomDeliveryDirect({
-        runsBatter: Math.max(0, runNum - 1),
+        runsBatter: runNum,
         runsExtras: 1,
         extraType: 'NO_BALL',
-        reason: reasonText
+        reason: reasonText || 'No Ball + Runs (Off Bat)'
       });
     } else if (customCategory === 'noball_extra') {
       await handleCustomDeliveryDirect({
@@ -1000,6 +2154,7 @@ export default function LiveScoringScreen() {
 
     try {
       const res = await ScorerApi.recordDelivery(matchId, payload);
+      hasRecordedNewBallRef.current = true;
       if (res && res.commentary) {
         setAiCommentary(res.commentary);
       }
@@ -1151,6 +2306,23 @@ export default function LiveScoringScreen() {
     setCustomChangeBowlerName('');
     setIsChangeBowlerDropdownOpen(false);
     setChangeBowlerSearch('');
+    const isMid = balls % 6 > 0;
+    setChangeBowlerReason(isMid ? 'INJURY' : 'TACTICAL');
+    setBowlerSituation(isMid ? 'Bowler Injured' : 'Tactical Change');
+    setIsSituationDropdownOpen(false);
+    setIsSuspendingCurrentBowler(false);
+    setShowChangeBowlerModal(true);
+  };
+
+  const handleOpenInjuryBowlerChange = () => {
+    setSelectedChangeBowlerId('');
+    setCustomChangeBowlerName('');
+    setIsChangeBowlerDropdownOpen(false);
+    setChangeBowlerSearch('');
+    setChangeBowlerReason('INJURY');
+    setBowlerSituation('Bowler Injured');
+    setIsSituationDropdownOpen(false);
+    setIsSuspendingCurrentBowler(false);
     setShowChangeBowlerModal(true);
   };
 
@@ -1170,11 +2342,23 @@ export default function LiveScoringScreen() {
       if (f) bwlName = f.name;
     }
 
+    const oldBwlName = bowler?.name || 'Previous Bowler';
+    const oldBwlBalls = Number(bowler?.balls || 0);
+    const oldBwlOvers = `${Math.floor(oldBwlBalls / 6)}.${oldBwlBalls % 6}`;
+    const ballsInCurrentOver = balls % 6;
+    const remainingBalls = ballsInCurrentOver > 0 ? (6 - ballsInCurrentOver) : 6;
+    const nextBallNum = ballsInCurrentOver + 1;
+    const currOverNum = Math.floor(balls / 6) + 1;
+    const reasonTag = bowlerSituation.trim() || changeBowlerReason || 'Bowler Injured';
+
     setIsUpdatingBowler(true);
     try {
       const res = await ScorerApi.changeBowler(matchId, {
         newBowlerId: bwlId,
-        newBowlerName: bwlName
+        newBowlerName: bwlName,
+        reason: changeBowlerReason,
+        situation: bowlerSituation.trim() || changeBowlerReason,
+        suspendCurrentBowler: isSuspendingCurrentBowler
       });
       if (res && res.bowler) {
         setBowler(res.bowler);
@@ -1183,8 +2367,18 @@ export default function LiveScoringScreen() {
       }
       setShowChangeBowlerModal(false);
       await loadLiveState(false);
-      const succMsg = `Bowler updated to ${bwlName || 'new bowler'}.`;
-      Platform.OS === 'web' ? window.alert(succMsg) : Alert.alert('Bowler Changed', succMsg);
+
+      setBowlerSubstitutedData({
+        oldBowlerName: oldBwlName,
+        newBowlerName: bwlName || 'New Bowler',
+        reason: reasonTag,
+        ballsBowledByOldBowler: ballsInCurrentOver,
+        oversBowledByOldBowler: oldBwlOvers,
+        remainingBallsInOver: remainingBalls,
+        currentOverNumber: currOverNum,
+        ballToBowlNext: nextBallNum
+      });
+      setShowBowlerSubstitutedModal(true);
     } catch (err: any) {
       const msg = err.message || 'Failed to change bowler.';
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
@@ -1370,14 +2564,16 @@ export default function LiveScoringScreen() {
     setIsSubmittingBreak(true);
     try {
       const finalBreakType = customBreakTypeInput.trim() || breakType || 'Tea break';
-      await ScorerApi.addBreak(matchId, {
+      const breakPayload = {
         type: finalBreakType,
         startTime: breakStartTime || new Date().toLocaleTimeString(),
         endTime: breakEndTime || '',
         duration: breakDuration || '5',
         comments: finalBreakType,
         excludeBatsmanTime
-      });
+      };
+      await ScorerApi.addBreak(matchId, breakPayload);
+      setCurrentBreak(breakPayload);
       setShowBreaksModal(false);
       await loadLiveState(false);
       const msg = `Break (${finalBreakType}) recorded successfully.`;
@@ -1387,61 +2583,6 @@ export default function LiveScoringScreen() {
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
     } finally {
       setIsSubmittingBreak(false);
-    }
-  };
-
-  // --- 2. SESSIONS HANDLER ---
-  const handleAddSessionSubmit = async () => {
-    setIsSubmittingSession(true);
-    try {
-      const finalSessionType = customSessionTypeInput.trim() || sessionType || 'Lunch';
-      await ScorerApi.addSession(matchId, {
-        dayNo: parseInt(sessionDayNo, 10) || 1,
-        type: finalSessionType,
-        startInningsNo: parseInt(sessionStartInnings, 10) || 1,
-        endInningsNo: parseInt(sessionEndInnings, 10) || 1,
-        startOver: sessionStartOver,
-        endOver: sessionEndOver,
-        startTime: sessionStartTime,
-        endTime: sessionEndTime,
-        duration: sessionDuration
-      });
-      setShowSessionsModal(false);
-      await loadLiveState(false);
-      const msg = `Session (${finalSessionType}) recorded successfully.`;
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Success', msg);
-    } catch (err: any) {
-      const msg = err.message || 'Failed to save session.';
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
-    } finally {
-      setIsSubmittingSession(false);
-    }
-  };
-
-  // --- 3. END DAY HANDLER ---
-  const handleAddEndDaySubmit = async () => {
-    setIsSubmittingEndDay(true);
-    try {
-      await ScorerApi.addEndDay(matchId, {
-        dayNo: parseInt(endDayNo, 10) || 1,
-        startInningsNo: parseInt(endDayStartInnings, 10) || 1,
-        endInningsNo: parseInt(endDayEndInnings, 10) || 1,
-        startOver: '0.0',
-        endOver: endDayOvers,
-        startTime: endDayStartTime,
-        endTime: endDayEndTime,
-        duration: endDayDuration,
-        comments: endDayComments
-      });
-      setShowEndDayModal(false);
-      await loadLiveState(false);
-      const msg = 'Day concluded and saved successfully.';
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Success', msg);
-    } catch (err: any) {
-      const msg = err.message || 'Failed to end day.';
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
-    } finally {
-      setIsSubmittingEndDay(false);
     }
   };
 
@@ -1635,17 +2776,148 @@ export default function LiveScoringScreen() {
   // --- 10. UNDO LAST DELIVERY HANDLER (Edit Mode) ---
   const [isUndoingDelivery, setIsUndoingDelivery] = useState(false);
   const handleUndoLastDelivery = async () => {
+    const lastDel = recentDeliveries && recentDeliveries.length > 0 ? recentDeliveries[0] : null;
     setIsUndoingDelivery(true);
     try {
-      await ScorerApi.undoDelivery(matchId);
+      setShowMilestoneModal(false);
+      setActiveMilestone(null);
+      hasRecordedNewBallRef.current = false;
+      const res = await ScorerApi.undoDelivery(matchId);
       await loadLiveState(false);
-      const msg = 'Last delivery successfully reversed and match state restored.';
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Undo Successful', msg);
+
+      if (recentDeliveries && recentDeliveries.length > 1) {
+        initialDeliveryIdRef.current = String(recentDeliveries[1].id || `${recentDeliveries[1].ball || '0'}`);
+      } else {
+        initialDeliveryIdRef.current = null;
+      }
+
+      // Identify the reversed ball details (Ball number, runs, extras, wickets)
+      const ballNum = res?.reversedDelivery?.ball || lastDel?.ball || (lastDel?.overNumber !== undefined ? `${lastDel.overNumber}.${lastDel.ballNumber}` : 'Last Ball');
+      const totalRuns = res?.reversedDelivery?.totalRuns !== undefined
+        ? res.reversedDelivery.totalRuns
+        : (lastDel ? (Number(lastDel.runsBatter || lastDel.runs || 0) + Number(lastDel.runsExtras || 0)) : 0);
+      const isWicket = res?.reversedDelivery?.wicket !== undefined ? res.reversedDelivery.wicket : Boolean(lastDel?.wicket);
+      const wktType = res?.reversedDelivery?.wicketType || lastDel?.wicketType || (lastDel?.wicket?.type ? lastDel.wicket.type : 'Wicket');
+      const extra = res?.reversedDelivery?.extraType || lastDel?.extraType || (lastDel?.extra ? lastDel.extra : null);
+
+      let actionDesc = `${totalRuns} run${totalRuns !== 1 ? 's' : ''}`;
+      if (extra && extra !== 'NONE') {
+        actionDesc += ` (${extra})`;
+      }
+      if (isWicket) {
+        actionDesc += ` + WICKET (${wktType})`;
+      }
+
+      const msg = `Ball ${ballNum} Successfully Undone!\n\nReversed: ${actionDesc}\nMatch score, overs & player statistics restored.`;
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Undo Delivery Success', msg);
     } catch (err: any) {
       const msg = err.message || 'Failed to undo last delivery.';
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
     } finally {
       setIsUndoingDelivery(false);
+    }
+  };
+
+  // --- RETROACTIVE DIRECT DELIVERY EDIT HANDLERS (Edit Mode) ---
+  const handleOpenEditDelivery = (del: any) => {
+    setEditingDelivery(del);
+    setEditRunsInput(typeof del.runsBatter === 'number' ? del.runsBatter : (typeof del.runs === 'number' ? del.runs : 0));
+    setEditExtraType(del.extraType || (del.extra ? del.extra : 'NONE'));
+    setEditWicket(Boolean(del.wicket));
+    setEditWicketType(del.wicketType || 'BOWLED');
+    setEditShotZone(del.shotZone || del.shot_zone || 'Cover');
+    setEditFielderName(del.fielderName || del.fielder_name || '');
+    setEditDismissedPlayer(del.dismissedPlayerId && del.dismissedPlayerId === del.nonStrikerId ? 'NON_STRIKER' : 'STRIKER');
+    setShowEditDeliveryModal(true);
+  };
+
+  const handleSaveDeliveryEdit = async () => {
+    if (!editingDelivery) return;
+    setIsSubmittingEditDelivery(true);
+    try {
+      let rBat = 0;
+      let rExt = 0;
+      if (editExtraType === 'WIDE') {
+        rBat = 0;
+        rExt = editRunsInput > 0 ? editRunsInput : 1;
+      } else if (editExtraType === 'NO_BALL') {
+        rBat = editRunsInput;
+        rExt = 1;
+      } else if (editExtraType === 'BYE' || editExtraType === 'LEG_BYE') {
+        rBat = 0;
+        rExt = editRunsInput;
+      } else {
+        rBat = editRunsInput;
+        rExt = 0;
+      }
+
+      const dismissedId = editWicket ? (
+        editDismissedPlayer === 'NON_STRIKER'
+          ? (editingDelivery.nonStrikerId || nonStriker?.id)
+          : (editingDelivery.strikerId || striker?.id)
+      ) : null;
+
+      const payload = {
+        runsBatter: rBat,
+        runsExtras: rExt,
+        extraType: editExtraType,
+        wicket: editWicket,
+        wicketType: editWicket ? editWicketType : null,
+        shotZone: editShotZone,
+        fielderName: editFielderName.trim() || null,
+        dismissedPlayerId: dismissedId
+      };
+      await ScorerApi.editDelivery(matchId, editingDelivery.id, payload);
+      
+      const isWkt = Boolean(payload.wicket);
+      const isWd = payload.extraType === 'WIDE';
+      const isNb = payload.extraType === 'NO_BALL';
+      const textVal = isWkt ? 'W' : (isWd ? 'WD' : (isNb ? 'NB' : (payload.runsBatter + (payload.runsExtras || 0))));
+
+      const updatedDel = {
+        ...editingDelivery,
+        runs: payload.runsBatter,
+        runsBatter: payload.runsBatter,
+        runsExtras: payload.runsExtras,
+        totalRuns: payload.runsBatter + (payload.runsExtras || 0),
+        wicket: isWkt,
+        wicketType: payload.wicket ? payload.wicketType : null,
+        wicket_type: payload.wicket ? payload.wicketType : null,
+        extraType: payload.extraType,
+        extra_type: payload.extraType,
+        extra: payload.extraType !== 'NONE' ? payload.extraType : null,
+        shotZone: payload.shotZone,
+        shot_zone: payload.shotZone,
+        fielderName: payload.fielderName,
+        dismissedPlayerId: payload.dismissedPlayerId,
+        text: textVal
+      };
+
+      setRecentDeliveries(prev => prev.map(item => (item.id === editingDelivery.id ? updatedDel : item)));
+      setShowEditDeliveryModal(false);
+      setEditingDelivery(null);
+      await loadLiveState(false);
+      setInspectingDelivery(updatedDel);
+    } catch (err: any) {
+      const msg = err.message || 'Failed to update delivery.';
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
+    } finally {
+      setIsSubmittingEditDelivery(false);
+    }
+  };
+
+  const handleSyncOfflineQueue = async () => {
+    try {
+      const res = await ScorerApi.syncOfflineDeliveries();
+      if (ScorerApi.getOfflineQueueCount) {
+        setOfflineQueueCount(ScorerApi.getOfflineQueueCount());
+      }
+      await loadLiveState(false);
+      const msg = `Synced ${res.synced} deliveries from offline queue! Remaining: ${res.remaining}`;
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Offline Sync', msg);
+    } catch (err: any) {
+      const msg = err.message || 'Error syncing offline deliveries.';
+      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Sync Error', msg);
     }
   };
 
@@ -1706,27 +2978,27 @@ export default function LiveScoringScreen() {
 
   const availableSquad = batterSearchQuery.trim()
     ? rawAvailableList.filter((p) => {
-        const q = batterSearchQuery.trim().toLowerCase();
-        return p.name.toLowerCase().includes(q) || (p.role && p.role.toLowerCase().includes(q));
-      })
+      const q = batterSearchQuery.trim().toLowerCase();
+      return p.name.toLowerCase().includes(q) || (p.role && p.role.toLowerCase().includes(q));
+    })
     : rawAvailableList;
 
   const selectedBatterObj = rawAvailableList.find((p) => p.id === selectedNextBatterId);
 
   const changeBatterAvailableSquad = changeBatterSearch.trim()
     ? rawAvailableList.filter((p) => {
-        const q = changeBatterSearch.trim().toLowerCase();
-        return p.name.toLowerCase().includes(q) || (p.role && p.role.toLowerCase().includes(q));
-      })
+      const q = changeBatterSearch.trim().toLowerCase();
+      return p.name.toLowerCase().includes(q) || (p.role && p.role.toLowerCase().includes(q));
+    })
     : rawAvailableList;
 
   const selectedChangeBatterObj = rawAvailableList.find((p) => p.id === selectedChangeBatterId);
 
   const filteredChangeBowlerSquad = changeBowlerSearch.trim()
     ? (bowlingSquad || []).filter((p) => {
-        const q = changeBowlerSearch.trim().toLowerCase();
-        return p.name.toLowerCase().includes(q) || (p.role && p.role.toLowerCase().includes(q));
-      })
+      const q = changeBowlerSearch.trim().toLowerCase();
+      return p.name.toLowerCase().includes(q) || (p.role && p.role.toLowerCase().includes(q));
+    })
     : (bowlingSquad || []);
 
   const selectedChangeBowlerObj = (bowlingSquad || []).find((p) => p.id === selectedChangeBowlerId);
@@ -1746,9 +3018,9 @@ export default function LiveScoringScreen() {
 
   const filteredFielders = fielderSearchQuery.trim()
     ? rawFielderList.filter((f) => {
-        const q = fielderSearchQuery.trim().toLowerCase();
-        return f.name.toLowerCase().includes(q) || (f.role && f.role.toLowerCase().includes(q));
-      })
+      const q = fielderSearchQuery.trim().toLowerCase();
+      return f.name.toLowerCase().includes(q) || (f.role && f.role.toLowerCase().includes(q));
+    })
     : rawFielderList;
 
   const selectedFielderObj = rawFielderList.find((f) => f.id === selectedFielderId);
@@ -1792,6 +3064,27 @@ export default function LiveScoringScreen() {
             </View>
 
             <ScrollView style={styles.drawerMenuScroll} showsVerticalScrollIndicator={false}>
+              {/* 0. Return to Matches Dashboard */}
+              <TouchableOpacity
+                style={[styles.drawerMenuItem, { backgroundColor: '#ecfdf5', borderColor: '#10b981' }]}
+                onPress={() => {
+                  setShowSideDrawer(false);
+                  navigate('Dashboard');
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.drawerMenuIconBox, { backgroundColor: '#059669', borderColor: '#047857' }]}>
+                  <Text style={[styles.drawerMenuIconText, { color: '#ffffff' }]}>🏠</Text>
+                </View>
+                <View style={styles.drawerMenuTextBox}>
+                  <Text style={[styles.drawerMenuLabel, { color: '#047857', fontWeight: 'bold' }]}>
+                    All Matches (Dashboard)
+                  </Text>
+                  <Text style={styles.drawerMenuDesc}>Return to Scorer Match Portal</Text>
+                </View>
+                <Text style={[styles.drawerMenuChevron, { color: '#059669' }]}>›</Text>
+              </TouchableOpacity>
+
               {/* 0a. Live Scoring (Active) */}
               <TouchableOpacity
                 style={[styles.drawerMenuItem, { backgroundColor: '#fef3c7', borderColor: '#d97706' }]}
@@ -1829,28 +3122,29 @@ export default function LiveScoringScreen() {
                 <Text style={styles.drawerMenuChevron}>›</Text>
               </TouchableOpacity>
 
-              {/* 0c. Wagon Wheel */}
+              {/* 0c. 3D Milestone Showcase */}
               <TouchableOpacity
                 style={styles.drawerMenuItem}
                 onPress={() => {
                   setShowSideDrawer(false);
-                  setShowWagonWheelModal(true);
+                  navigate('MilestoneGallery');
                 }}
                 activeOpacity={0.7}
               >
-                <View style={[styles.drawerMenuIconBox, { backgroundColor: '#dcfce7', borderColor: '#86efac' }]}>
-                  <Text style={styles.drawerMenuIconText}>🎯</Text>
+                <View style={[styles.drawerMenuIconBox, { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}>
+                  <Text style={styles.drawerMenuIconText}>🏆</Text>
                 </View>
                 <View style={styles.drawerMenuTextBox}>
-                  <Text style={styles.drawerMenuLabel}>Wagon Wheel</Text>
-                  <Text style={styles.drawerMenuDesc}>Shot angles & ground distribution</Text>
+                  <Text style={[styles.drawerMenuLabel, { color: '#b45309' }]}>3D Milestones Showcase</Text>
+                  <Text style={styles.drawerMenuDesc}>Inspect all 11 cricket milestone statuettes</Text>
                 </View>
                 <Text style={styles.drawerMenuChevron}>›</Text>
               </TouchableOpacity>
+
               {/* 1. Breaks */}
               <TouchableOpacity
                 style={styles.drawerMenuItem}
-                onPress={() => { setShowSideDrawer(false); setShowBreaksModal(true); }}
+                onPress={() => { setShowSideDrawer(false); handleOpenBreaksModal(); }}
                 activeOpacity={0.7}
               >
                 <View style={[styles.drawerMenuIconBox, { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}>
@@ -1863,37 +3157,7 @@ export default function LiveScoringScreen() {
                 <Text style={styles.drawerMenuChevron}>›</Text>
               </TouchableOpacity>
 
-              {/* 2. Sessions */}
-              <TouchableOpacity
-                style={styles.drawerMenuItem}
-                onPress={() => { setShowSideDrawer(false); setShowSessionsModal(true); }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.drawerMenuIconBox, { backgroundColor: '#e0f2fe', borderColor: '#bae6fd' }]}>
-                  <Text style={styles.drawerMenuIconText}>⏱️</Text>
-                </View>
-                <View style={styles.drawerMenuTextBox}>
-                  <Text style={styles.drawerMenuLabel}>Sessions</Text>
-                  <Text style={styles.drawerMenuDesc}>Morning / Afternoon Session</Text>
-                </View>
-                <Text style={styles.drawerMenuChevron}>›</Text>
-              </TouchableOpacity>
 
-              {/* 3. End Day */}
-              <TouchableOpacity
-                style={styles.drawerMenuItem}
-                onPress={() => { setShowSideDrawer(false); setShowEndDayModal(true); }}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.drawerMenuIconBox, { backgroundColor: '#ffedd5', borderColor: '#fed7aa' }]}>
-                  <Text style={styles.drawerMenuIconText}>🌅</Text>
-                </View>
-                <View style={styles.drawerMenuTextBox}>
-                  <Text style={styles.drawerMenuLabel}>End Day</Text>
-                  <Text style={styles.drawerMenuDesc}>Stumps / Close of Play</Text>
-                </View>
-                <Text style={styles.drawerMenuChevron}>›</Text>
-              </TouchableOpacity>
 
               {/* 4. End Innings */}
               <TouchableOpacity
@@ -2047,7 +3311,78 @@ export default function LiveScoringScreen() {
 
             {/* Live Digital Clock at bottom of Slide Menu (Matches Screenshot) */}
             <View style={styles.drawerClockBox}>
-              <Text style={styles.drawerClockText}>{currentTimeStr || '11:34:00 am'}</Text>
+              <LiveDrawerClock textStyle={styles.drawerClockText} />
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* RESUME PLAY CONFIRMATION MODAL */}
+      <Modal
+        visible={showResumeConfirmModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowResumeConfirmModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 440, padding: 20 }]}>
+            <View style={{ alignItems: 'center', marginBottom: 12 }}>
+              <View style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                backgroundColor: currentBreak?.type?.toLowerCase().includes('rain') ? '#e0f2fe' : '#dcfce7',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 8
+              }}>
+                <Text style={{ fontSize: 28 }}>
+                  {currentBreak?.type?.toLowerCase().includes('rain') ? '🌤️' : '▶️'}
+                </Text>
+              </View>
+              <Text style={{ fontSize: 18, fontWeight: '900', color: '#0f172a', textAlign: 'center' }}>
+                {currentBreak?.type?.toLowerCase().includes('rain') ? 'Rain Stopped & Restart Match?' : 'Resume Match Play?'}
+              </Text>
+              <Text style={{ fontSize: 12.5, color: '#64748b', textAlign: 'center', marginTop: 4, lineHeight: 18 }}>
+                {currentBreak?.type?.toLowerCase().includes('rain')
+                  ? 'Have ground covers been removed and umpires called players back onto the field to resume play?'
+                  : `Are both teams and officials ready to conclude the ${currentBreak?.type || 'break'} and resume live scoring?`}
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  paddingVertical: 11,
+                  borderRadius: 8,
+                  backgroundColor: '#f1f5f9',
+                  alignItems: 'center'
+                }}
+                onPress={() => setShowResumeConfirmModal(false)}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#475569' }}>
+                  {currentBreak?.type?.toLowerCase().includes('rain') ? 'Still Raining / Wait' : 'Stay on Break'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{
+                  flex: 1,
+                  paddingVertical: 11,
+                  borderRadius: 8,
+                  backgroundColor: '#16a34a',
+                  alignItems: 'center'
+                }}
+                onPress={async () => {
+                  setShowResumeConfirmModal(false);
+                  await handleResumePlay();
+                }}
+              >
+                <Text style={{ fontSize: 12, fontWeight: '800', color: '#ffffff' }}>
+                  ▶ Restart Match Now
+                </Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -2182,35 +3517,71 @@ export default function LiveScoringScreen() {
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
               <View style={{ flex: 1 }}>
                 <Text style={styles.fieldSubLabel}>STARTS AT:</Text>
-                <TextInput
-                  style={styles.customNameInput}
-                  placeholder="e.g. 11:35 am"
-                  placeholderTextColor="#94a3b8"
-                  value={breakStartTime}
-                  onChangeText={setBreakStartTime}
-                />
+                <View style={styles.timeInputContainer}>
+                  <TextInput
+                    style={[styles.customNameInput, { paddingRight: 74 }]}
+                    placeholder="e.g. 11:35 am"
+                    placeholderTextColor="#94a3b8"
+                    value={breakStartTime}
+                    onChangeText={handleBreakStartTimeChange}
+                  />
+                  <TouchableOpacity
+                    style={styles.fieldClockBtn}
+                    onPress={() => {
+                      setClockPickerTarget('BREAK_START');
+                      setClockPickerVisible(true);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontSize: 13 }}>🕒</Text>
+                    <Text style={styles.fieldClockBtnText}>Clock</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.fieldSubLabel}>ENDS AT:</Text>
-                <TextInput
-                  style={styles.customNameInput}
-                  placeholder="e.g. 11:40 am"
-                  placeholderTextColor="#94a3b8"
-                  value={breakEndTime}
-                  onChangeText={setBreakEndTime}
-                />
+                <View style={styles.timeInputContainer}>
+                  <TextInput
+                    style={[styles.customNameInput, { paddingRight: 74 }]}
+                    placeholder="e.g. 11:40 am"
+                    placeholderTextColor="#94a3b8"
+                    value={breakEndTime}
+                    onChangeText={handleBreakEndTimeChange}
+                  />
+                  <TouchableOpacity
+                    style={styles.fieldClockBtn}
+                    onPress={() => {
+                      setClockPickerTarget('BREAK_END');
+                      setClockPickerVisible(true);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={{ fontSize: 13 }}>🕒</Text>
+                    <Text style={styles.fieldClockBtnText}>Clock</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
 
             <View style={{ marginTop: 8 }}>
-              <Text style={styles.fieldSubLabel}>DURATION (IN MINS):</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                <Text style={styles.fieldSubLabel}>DURATION (IN MINS):</Text>
+                {isDurationAutoCalculated && Boolean(breakDuration) ? (
+                  <View style={styles.autoCalcBadge}>
+                    <Text style={styles.autoCalcBadgeText}>⚡ AUTO-CALCULATED ({breakDuration} MINS)</Text>
+                  </View>
+                ) : null}
+              </View>
               <TextInput
                 style={styles.customNameInput}
                 keyboardType="numeric"
                 placeholder="e.g. 5"
                 placeholderTextColor="#94a3b8"
                 value={breakDuration}
-                onChangeText={setBreakDuration}
+                onChangeText={(val) => {
+                  setBreakDuration(val);
+                  setIsDurationAutoCalculated(false);
+                }}
               />
             </View>
 
@@ -2254,288 +3625,25 @@ export default function LiveScoringScreen() {
         </ScrollView>
       </Modal>
 
-      {/* 3. SESSIONS MODAL (Matches Manual Image 2) */}
-      <Modal
-        visible={showSessionsModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setShowSessionsModal(false);
-          setIsSessionTypeDropdownOpen(false);
-        }}
-      >
-        <ScrollView
-          contentContainerStyle={styles.modalScrollOverlay}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={true}
-        >
-          <View style={[styles.modalContent, { maxWidth: 460 }]}>
-            <View style={styles.revisedModalHeader}>
-              <Text style={styles.revisedModalTitle}>END SESSION / SESSIONS</Text>
-              <TouchableOpacity
-                style={styles.redCloseBtn}
-                onPress={() => {
-                  setShowSessionsModal(false);
-                  setIsSessionTypeDropdownOpen(false);
-                }}
-              >
-                <Text style={styles.redCloseBtnText}>✕</Text>
-              </TouchableOpacity>
-            </View>
 
-            <Text style={styles.revisedModalInfo}>
-              Session type to be added as Lunch, Tea, or End of Day respectively. Fill respective list items.
-            </Text>
+      {/* CLOCK PICKER MODAL (For Breaks & Sessions) */}
+      <ClockPickerModal
+        visible={clockPickerVisible}
+        title={
+          clockPickerTarget === 'BREAK_START'
+            ? 'Select Break Start Time'
+            : 'Select Break End Time'
+        }
+        initialTime={
+          clockPickerTarget === 'BREAK_START'
+            ? breakStartTime
+            : breakEndTime
+        }
+        referenceStartTime={clockPickerTarget === 'BREAK_END' ? breakStartTime : undefined}
+        onClose={() => setClockPickerVisible(false)}
+        onSelectTime={handleClockPickerSelect}
+      />
 
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldSubLabel}>DAY NO:</Text>
-                <TextInput
-                  style={styles.customNameInput}
-                  keyboardType="numeric"
-                  value={sessionDayNo}
-                  onChangeText={setSessionDayNo}
-                />
-              </View>
-            </View>
-
-            {/* Session Type Dropdown & Custom Input */}
-            <View style={{ marginTop: 10, zIndex: 10 }}>
-              <Text style={styles.fieldSubLabel}>SESSION TYPE:</Text>
-
-              {/* Dropdown Trigger */}
-              <TouchableOpacity
-                style={[
-                  styles.fielderDropdownTrigger,
-                  isSessionTypeDropdownOpen && styles.fielderDropdownTriggerOpen,
-                  { borderColor: '#005960', backgroundColor: '#f0fdf4' }
-                ]}
-                onPress={() => setIsSessionTypeDropdownOpen(!isSessionTypeDropdownOpen)}
-                activeOpacity={0.7}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                  <Text style={{ fontSize: 16, marginRight: 8 }}>
-                    {STANDARD_SESSION_OPTIONS.find((o) => o.label === sessionType)?.icon || '⏱️'}
-                  </Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.fielderDropdownTriggerText, { color: '#005960', fontWeight: 'bold' }]}>
-                      {sessionType || 'Select Session Type'}
-                    </Text>
-                  </View>
-                </View>
-                <Text style={[styles.fielderDropdownArrow, { color: '#005960' }]}>
-                  {isSessionTypeDropdownOpen ? '▲' : '▼'}
-                </Text>
-              </TouchableOpacity>
-
-              {/* Dropdown Menu List */}
-              {isSessionTypeDropdownOpen && (
-                <View style={[styles.fielderDropdownMenu, { borderColor: '#005960', maxHeight: 210, zIndex: 20 }]}>
-                  <ScrollView style={{ maxHeight: 190 }} nestedScrollEnabled showsVerticalScrollIndicator={true}>
-                    {STANDARD_SESSION_OPTIONS.map((opt) => {
-                      const isSelected = sessionType === opt.label && !customSessionTypeInput.trim();
-                      return (
-                        <TouchableOpacity
-                          key={opt.label}
-                          style={[
-                            styles.fielderDropdownItem,
-                            isSelected && { backgroundColor: '#e6f4f1' },
-                            { paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 0.5, borderBottomColor: '#f1f5f9' }
-                          ]}
-                          onPress={() => {
-                            setSessionType(opt.label);
-                            if (opt.label === 'Other / Custom Session') {
-                              // keep custom input
-                            } else {
-                              setCustomSessionTypeInput('');
-                            }
-                            setIsSessionTypeDropdownOpen(false);
-                          }}
-                          activeOpacity={0.7}
-                        >
-                          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
-                            <Text style={{ fontSize: 16, marginRight: 8 }}>{opt.icon}</Text>
-                            <View style={{ flex: 1 }}>
-                              <Text style={{ fontSize: 13, fontWeight: isSelected ? 'bold' : '600', color: isSelected ? '#005960' : '#1e293b' }}>
-                                {opt.label}
-                              </Text>
-                              <Text style={{ fontSize: 10, color: '#64748b' }}>{opt.sub}</Text>
-                            </View>
-                          </View>
-                          {isSelected && <Text style={{ color: '#005960', fontWeight: 'bold', fontSize: 14 }}>✓</Text>}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </View>
-              )}
-
-              {/* Custom Session Type Input (athula illathatha type panura mari) */}
-              <View style={{ marginTop: 10 }}>
-                <Text style={[styles.fieldSubLabel, { color: '#b45309' }]}>
-                  OR TYPE CUSTOM SESSION:
-                </Text>
-                <TextInput
-                  style={[
-                    styles.customNameInput,
-                    customSessionTypeInput.trim().length > 0 && { borderColor: '#005960', backgroundColor: '#f0fdf4' }
-                  ]}
-                  placeholder="Type custom session name (e.g. Morning extended session, Rain session...)"
-                  placeholderTextColor="#94a3b8"
-                  value={customSessionTypeInput}
-                  onChangeText={(val) => {
-                    setCustomSessionTypeInput(val);
-                    if (val.trim()) {
-                      setSessionType(val);
-                    }
-                  }}
-                />
-              </View>
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldSubLabel}>START OVER:</Text>
-                <TextInput
-                  style={styles.customNameInput}
-                  value={sessionStartOver}
-                  onChangeText={setSessionStartOver}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldSubLabel}>END OVER:</Text>
-                <TextInput
-                  style={styles.customNameInput}
-                  value={sessionEndOver}
-                  onChangeText={setSessionEndOver}
-                />
-              </View>
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, marginBottom: 14 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldSubLabel}>STARTS AT:</Text>
-                <TextInput
-                  style={styles.customNameInput}
-                  value={sessionStartTime}
-                  onChangeText={setSessionStartTime}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldSubLabel}>ENDS AT:</Text>
-                <TextInput
-                  style={styles.customNameInput}
-                  value={sessionEndTime}
-                  onChangeText={setSessionEndTime}
-                />
-              </View>
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => {
-                  setShowSessionsModal(false);
-                  setIsSessionTypeDropdownOpen(false);
-                }}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalConfirmBtn, { backgroundColor: '#d97706' }]}
-                disabled={isSubmittingSession}
-                onPress={handleAddSessionSubmit}
-              >
-                {isSubmittingSession ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.modalConfirmText}>DONE</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </ScrollView>
-      </Modal>
-
-      {/* 4. END DAY MODAL (Matches Manual Image 2) */}
-      <Modal
-        visible={showEndDayModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowEndDayModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 460 }]}>
-            <View style={styles.revisedModalHeader}>
-              <Text style={styles.revisedModalTitle}>END DAY</Text>
-              <TouchableOpacity style={styles.redCloseBtn} onPress={() => setShowEndDayModal(false)}>
-                <Text style={styles.redCloseBtnText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.revisedModalInfo}>
-              To end a Day, fill the respective list items (Day, overs, times, and comments) then submit to save.
-            </Text>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldSubLabel}>DAY NO:</Text>
-                <TextInput
-                  style={styles.customNameInput}
-                  keyboardType="numeric"
-                  value={endDayNo}
-                  onChangeText={setEndDayNo}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldSubLabel}>DAY END OVERS:</Text>
-                <TextInput
-                  style={styles.customNameInput}
-                  value={endDayOvers}
-                  onChangeText={setEndDayOvers}
-                />
-              </View>
-            </View>
-
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldSubLabel}>DAY START TIME:</Text>
-                <TextInput
-                  style={styles.customNameInput}
-                  value={endDayStartTime}
-                  onChangeText={setEndDayStartTime}
-                />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldSubLabel}>DAY END TIME:</Text>
-                <TextInput
-                  style={styles.customNameInput}
-                  value={endDayEndTime}
-                  onChangeText={setEndDayEndTime}
-                />
-              </View>
-            </View>
-
-            <View style={{ marginTop: 8, marginBottom: 14 }}>
-              <Text style={styles.fieldSubLabel}>COMMENTS:</Text>
-              <TextInput
-                style={styles.customNameInput}
-                value={endDayComments}
-                onChangeText={setEndDayComments}
-              />
-            </View>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowEndDayModal(false)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalConfirmBtn, { backgroundColor: '#d97706' }]}
-                disabled={isSubmittingEndDay}
-                onPress={handleAddEndDaySubmit}
-              >
-                {isSubmittingEndDay ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.modalConfirmText}>DONE</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
 
       {/* 5. DECLARE INNINGS MODAL (Matches Manual Image 4) */}
       <Modal
@@ -2600,6 +3708,7 @@ export default function LiveScoringScreen() {
                 { label: 'Other Wickets (Retired Hurt/Out, Timed Out)', icon: '🏏', action: () => { setShowMatchEventsModal(false); setShowOtherWicketModal(true); } },
                 { label: 'Change Ball (New / Old Ball)', icon: '⚾', action: () => { setShowMatchEventsModal(false); setShowChangeBallModal(true); } },
                 { label: 'Playing XI Edit', icon: '👥', action: () => { setShowMatchEventsModal(false); openPlayingXIModal(); } },
+                { label: 'Fielding Action / Highlight', icon: '🧤', action: () => { setShowMatchEventsModal(false); setShowFieldingModal(true); } },
                 { label: 'Revised Overs & Target (Rain / DLS)', icon: '🌧️', action: () => { setShowMatchEventsModal(false); setShowRevisedOversModal(true); } }
               ].map((ev, idx) => (
                 <TouchableOpacity
@@ -3420,6 +4529,32 @@ export default function LiveScoringScreen() {
               ) : ''}
             </Text>
 
+            {/* Quick Switch to DLS & VJD Calculator */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#0891b2',
+                borderRadius: 8,
+                paddingVertical: 10,
+                paddingHorizontal: 12,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                marginTop: 10,
+                marginBottom: 4,
+              }}
+              onPress={() => {
+                setShowRevisedOversModal(false);
+                setShowDlsModal(true);
+              }}
+              activeOpacity={0.8}
+            >
+              <Text style={{ fontSize: 16 }}>🧮</Text>
+              <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 12.5 }}>
+                OPEN DLS & VJD CALCULATOR (AUTO CALCULATE)
+              </Text>
+            </TouchableOpacity>
+
             <View style={{ marginTop: 12 }}>
               <Text style={styles.fieldSubLabel}>NUMBER OF OVERS:</Text>
               <TextInput
@@ -3889,21 +5024,43 @@ export default function LiveScoringScreen() {
               Click "Exit Screen" menu to exit from the scoring engine and give yes to exit. All recorded scores and deliveries are safely preserved in the database.
             </Text>
 
-            <View style={styles.modalActions}>
+            <View style={[styles.modalActions, { flexWrap: 'wrap', gap: 8 }]}>
               <TouchableOpacity
                 style={styles.modalCancelBtn}
                 onPress={() => setShowExitModal(false)}
               >
-                <Text style={styles.modalCancelText}>No, Stay</Text>
+                <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalConfirmBtn, { backgroundColor: '#dc2626' }]}
+                style={[styles.modalConfirmBtn, { backgroundColor: '#1e3a8a' }]}
                 onPress={() => {
                   setShowExitModal(false);
                   navigate('Dashboard');
                 }}
               >
-                <Text style={styles.modalConfirmText}>Yes, Exit</Text>
+                <Text style={styles.modalConfirmText}>📋 Match List</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, { backgroundColor: '#dc2626' }]}
+                onPress={() => {
+                  setShowExitModal(false);
+                  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+                    try {
+                      localStorage.setItem('cfvd_last_app_screen', 'Home');
+                      localStorage.removeItem('cfvd_last_scorer_match_id');
+                      localStorage.removeItem('cfvd_last_scorer_screen');
+                      window.location.href = '/';
+                      return;
+                    } catch (_e) { }
+                  }
+                  if (typeof onExit === 'function') {
+                    onExit('Home');
+                  } else {
+                    navigate('Dashboard');
+                  }
+                }}
+              >
+                <Text style={styles.modalConfirmText}>🌐 Exit to Website</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -4032,7 +5189,7 @@ export default function LiveScoringScreen() {
       })()}
 
 
-      {/* 15. MORE RUNS MODAL (Image 2 Slide 3) */}
+      {/* 15. MORE RUNS MODAL (Enhanced with Reason Selector & Custom Input) */}
       <Modal
         visible={showMoreRunsModal}
         transparent
@@ -4040,32 +5197,271 @@ export default function LiveScoringScreen() {
         onRequestClose={() => setShowMoreRunsModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 360 }]}>
+          <View style={[styles.modalContent, { maxWidth: 440, width: '92%', borderRadius: 16, borderWidth: 1.5, borderColor: '#3b82f6', padding: 18 }]}>
             <View style={styles.revisedModalHeader}>
-              <Text style={styles.revisedModalTitle}>MORE RUNS</Text>
-              <TouchableOpacity style={styles.redCloseBtn} onPress={() => setShowMoreRunsModal(false)}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 18 }}>🏃</Text>
+                <Text style={[styles.revisedModalTitle, { color: '#1e40af' }]}>MORE RUNS OFF DELIVERY</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.redCloseBtn}
+                onPress={() => {
+                  setMoreRunsReasonKey('');
+                  setMoreRunsReason('');
+                  setCustomMoreRunsReason('');
+                  setShowMoreRunsModal(false);
+                }}
+              >
                 <Text style={styles.redCloseBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.revisedModalInfo}>
-              Select higher run value to award off the delivery:
+
+            <Text style={{ fontSize: 12, color: '#64748b', marginBottom: 12, fontWeight: '500' }}>
+              Select run value and specific delivery reason (e.g. Wide + 4 boundary, overthrows, penalties):
             </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14, justifyContent: 'center' }}>
-              {[5, 7, 8, 9, 10, 11].map((r) => (
-                <TouchableOpacity
-                  key={`more-${r}`}
-                  style={[styles.scoreBtn, styles.scoreBtnNormal, { width: 90, height: 60, margin: 4 }]}
-                  onPress={() => handleMoreRunsSelect(r)}
-                >
-                  <Text style={[styles.scoreBtnText, styles.scoreBtnTextNormal]}>{r}</Text>
-                </TouchableOpacity>
-              ))}
+
+            {/* Quick Run Selection Buttons */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#1e293b', textTransform: 'uppercase', marginBottom: 6 }}>
+              1. SELECT RUNS TO AWARD:
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              {[5, 7, 8, 9, 10, 11].map((r) => {
+                const isSelected = moreRunsSelected === r;
+                return (
+                  <TouchableOpacity
+                    key={`more-${r}`}
+                    style={{
+                      width: 54,
+                      height: 42,
+                      borderRadius: 8,
+                      backgroundColor: isSelected ? '#2563eb' : '#f1f5f9',
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? '#1d4ed8' : '#cbd5e1',
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}
+                    onPress={() => handleMoreRunsSelect(r)}
+                  >
+                    <Text style={{ fontSize: 17, fontWeight: '900', color: isSelected ? '#ffffff' : '#1e293b' }}>{r}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Reason Selection Options */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#1e293b', textTransform: 'uppercase', marginBottom: 6 }}>
+              2. SELECT DELIVERY REASON:
+            </Text>
+            <View style={{ gap: 6, marginBottom: 12 }}>
+              {[
+                { key: 'WIDE', label: `Wide + ${moreRunsSelected - 1} (Overthrow/Boundary)` },
+                { key: 'NO_BALL', label: `No Ball + ${moreRunsSelected - 1} (Bat Boundary)` },
+                { key: 'OVERTHROW', label: `${moreRunsSelected} Overthrow Runs (All Extras)` },
+                { key: 'RUNNING', label: `${moreRunsSelected} Running Runs (Between Wickets)` },
+                { key: 'PENALTY', label: `Penalty 5 Runs (Law 28 - Helmet Hit)` }
+              ].map((reasonItem) => {
+                const isSelected = moreRunsReasonKey === reasonItem.key;
+                return (
+                  <TouchableOpacity
+                    key={`reason-opt-${reasonItem.key}`}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingVertical: 7,
+                      paddingHorizontal: 10,
+                      borderRadius: 8,
+                      backgroundColor: isSelected ? '#eff6ff' : '#f8fafc',
+                      borderWidth: 1.2,
+                      borderColor: isSelected ? '#3b82f6' : '#e2e8f0'
+                    }}
+                    onPress={() => {
+                      setMoreRunsReasonKey(reasonItem.key);
+                      setMoreRunsReason(reasonItem.label);
+                      setCustomMoreRunsReason('');
+                    }}
+                  >
+                    <View style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 8,
+                      borderWidth: 1.5,
+                      borderColor: isSelected ? '#2563eb' : '#94a3b8',
+                      backgroundColor: isSelected ? '#2563eb' : '#ffffff',
+                      marginRight: 8,
+                      justifyContent: 'center',
+                      alignItems: 'center'
+                    }}>
+                      {isSelected && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#ffffff' }} />}
+                    </View>
+                    <Text style={{ fontSize: 12, fontWeight: isSelected ? '800' : '600', color: isSelected ? '#1d4ed8' : '#334155' }}>
+                      {reasonItem.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {/* Custom Reason Input (Last entry) */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>
+              ✍️ OR TYPE CUSTOM REASON:
+            </Text>
+            <TextInput
+              style={{
+                backgroundColor: '#ffffff',
+                borderWidth: 1.2,
+                borderColor: customMoreRunsReason.trim() ? '#2563eb' : '#cbd5e1',
+                borderRadius: 8,
+                paddingHorizontal: 10,
+                paddingVertical: 8,
+                fontSize: 12.5,
+                color: '#0f172a',
+                marginBottom: 14
+              }}
+              placeholder="e.g. Overthrow + boundary 4, short run, misfield..."
+              placeholderTextColor="#94a3b8"
+              value={customMoreRunsReason}
+              onChangeText={(text) => {
+                setCustomMoreRunsReason(text);
+                if (text.trim()) {
+                  setMoreRunsReasonKey('');
+                  setMoreRunsReason('');
+                }
+              }}
+            />
+
+            {/* Confirm Submit Button - Strictly Disabled until Reason is chosen or typed */}
+            {(() => {
+              const hasReason = Boolean(customMoreRunsReason.trim() || moreRunsReasonKey || moreRunsReason);
+              return (
+                <View>
+                  <TouchableOpacity
+                    disabled={!hasReason}
+                    style={{
+                      backgroundColor: hasReason ? '#2563eb' : '#94a3b8',
+                      borderRadius: 10,
+                      paddingVertical: 12,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: hasReason ? 1 : 0.65
+                    }}
+                    onPress={handleAwardMoreRuns}
+                    activeOpacity={hasReason ? 0.85 : 1}
+                  >
+                    <Text style={{ color: '#ffffff', fontSize: 13.5, fontWeight: '900', letterSpacing: 0.5 }}>
+                      {hasReason ? `Award ${moreRunsSelected} Runs ✓` : `Select or Type a Reason to Award ${moreRunsSelected} Runs`}
+                    </Text>
+                  </TouchableOpacity>
+                  {!hasReason && (
+                    <Text style={{ fontSize: 11, color: '#ef4444', textAlign: 'center', marginTop: 6, fontWeight: '600' }}>
+                      * Please select a reason above or type a custom reason to enable run awarding.
+                    </Text>
+                  )}
+                </View>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
+
+      {/* BOWLER SUBSTITUTED DEDICATED VISUAL MODAL (MCC LAW 2.3 & 17.8) */}
+      <Modal
+        visible={showBowlerSubstitutedModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBowlerSubstitutedModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 440, width: '92%', padding: 0, overflow: 'hidden', borderRadius: 16, borderWidth: 1.5, borderColor: '#f59e0b' }]}>
+            {/* 16:9 Banner Image */}
+            <View style={{ width: '100%', height: 180, position: 'relative', backgroundColor: '#0f172a' }}>
+              <Image
+                source={require('../../../assets/popups/popup_bowled.jpg')}
+                style={{ width: '100%', height: '100%' }}
+                resizeMode="cover"
+              />
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.45)' }} />
+              
+              {/* Top Left Badge */}
+              <View style={{ position: 'absolute', top: 12, left: 12, backgroundColor: '#dc2626', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#fca5a5' }}>
+                <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '900', letterSpacing: 0.5 }}>MCC LAW 2.3 & 17.8</Text>
+              </View>
+
+              {/* Close Button */}
+              <TouchableOpacity
+                style={{ position: 'absolute', top: 10, right: 10, width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' }}
+                onPress={() => setShowBowlerSubstitutedModal(false)}
+              >
+                <Text style={{ color: '#ffffff', fontSize: 13, fontWeight: 'bold' }}>✕</Text>
+              </TouchableOpacity>
+
+              {/* Banner Floating Title */}
+              <View style={{ position: 'absolute', bottom: 12, left: 14, right: 14 }}>
+                <View style={{ backgroundColor: '#f59e0b', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 4, alignSelf: 'flex-start', marginBottom: 4 }}>
+                  <Text style={{ color: '#1e293b', fontSize: 10, fontWeight: '900' }}>⚡ {bowlerSubstitutedData?.reason || 'BOWLER INJURED'}</Text>
+                </View>
+                <Text style={{ color: '#ffffff', fontSize: 18, fontWeight: '900', textShadowColor: '#000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 }}>
+                  BOWLER SUBSTITUTED
+                </Text>
+              </View>
+            </View>
+
+            {/* Modal Body with Old Bowler & New Bowler Cards */}
+            <View style={{ padding: 16 }}>
+              <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+                {/* Old Bowler Card */}
+                <View style={{ flex: 1, backgroundColor: '#fef2f2', borderColor: '#fecaca', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#b91c1c', marginBottom: 4 }}>OUTGOING BOWLER</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '900', color: '#1e293b', marginBottom: 6 }} numberOfLines={1}>
+                    {bowlerSubstitutedData?.oldBowlerName}
+                  </Text>
+                  <View style={{ gap: 2 }}>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Ov Bowled: <Text style={{ fontWeight: '800', color: '#0f172a' }}>{bowlerSubstitutedData?.oversBowledByOldBowler} Ov</Text>
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Over {bowlerSubstitutedData?.currentOverNumber}: <Text style={{ fontWeight: '800', color: '#dc2626' }}>{bowlerSubstitutedData?.ballsBowledByOldBowler} balls bowled</Text>
+                    </Text>
+                  </View>
+                </View>
+
+                {/* New Bowler Card */}
+                <View style={{ flex: 1, backgroundColor: '#f0fdf4', borderColor: '#bbf7d0', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#15803d', marginBottom: 4 }}>INCOMING BOWLER</Text>
+                  <Text style={{ fontSize: 13, fontWeight: '900', color: '#1e293b', marginBottom: 6 }} numberOfLines={1}>
+                    {bowlerSubstitutedData?.newBowlerName}
+                  </Text>
+                  <View style={{ gap: 2 }}>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Next Ball: <Text style={{ fontWeight: '800', color: '#16a34a' }}>Ball {bowlerSubstitutedData?.ballToBowlNext} of Ov {bowlerSubstitutedData?.currentOverNumber}</Text>
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#64748b', fontWeight: '600' }}>
+                      Remaining: <Text style={{ fontWeight: '800', color: '#0f172a' }}>{bowlerSubstitutedData?.remainingBallsInOver} balls to bowl</Text>
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+              {/* Cricket Rule Explanatory Banner */}
+              <View style={{ backgroundColor: '#fffbeb', borderColor: '#fef3c7', borderWidth: 1, borderRadius: 8, padding: 9, marginBottom: 14 }}>
+                <Text style={{ fontSize: 11, color: '#92400e', lineHeight: 15, fontWeight: '500' }}>
+                  ⚖️ <Text style={{ fontWeight: '800' }}>Law 2.3 & 17.8:</Text> If a bowler is injured/unable to bowl, the substitute completes the over. Neither bowler may bowl the next consecutive over.
+                </Text>
+              </View>
+
+              {/* Confirm OK Button */}
+              <TouchableOpacity
+                style={{ backgroundColor: '#f59e0b', borderRadius: 10, paddingVertical: 12, alignItems: 'center', justifyContent: 'center' }}
+                onPress={() => setShowBowlerSubstitutedModal(false)}
+                activeOpacity={0.85}
+              >
+                <Text style={{ color: '#1e293b', fontSize: 13.5, fontWeight: '900', letterSpacing: 0.5 }}>Understood / Continue Scoring ✓</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
 
-      {/* 16. OVER THROW RUNS MODAL (1 to 5 buttons + Custom Input for 6+) */}
+      {/* 16. OVER THROW RUNS MODAL (1 to 5 buttons + Custom Input for 6+ with Multi-Fielder Checkbox Selector) */}
       <Modal
         visible={showOverThrowModal}
         transparent
@@ -4073,101 +5469,494 @@ export default function LiveScoringScreen() {
         onRequestClose={() => {
           setShowOverThrowModal(false);
           setCustomOverthrowInput('');
+          setIsOverthrowFielderDropdownOpen(false);
         }}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 400 }]}>
+          <View style={[styles.modalContent, { maxWidth: 460, width: '94%', maxHeight: '90%', borderRadius: 16, borderWidth: 1.5, borderColor: '#f59e0b', padding: 18 }]}>
             <View style={styles.revisedModalHeader}>
-              <Text style={styles.revisedModalTitle}>OVER THROW RUNS</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.revisedModalTitle}>OVER THROW RUNS</Text>
+                <Text style={[styles.revisedModalInfo, { marginTop: 2 }]}>
+                  Select extra runs completed or conceded on fielding overthrow:
+                </Text>
+              </View>
               <TouchableOpacity
                 style={styles.redCloseBtn}
                 onPress={() => {
                   setShowOverThrowModal(false);
                   setCustomOverthrowInput('');
+                  setIsOverthrowFielderDropdownOpen(false);
                 }}
               >
                 <Text style={styles.redCloseBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.revisedModalInfo}>
-              Select extra runs completed or conceded on fielding overthrow:
-            </Text>
 
-            {/* Quick 1 to 5 Buttons */}
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6, marginTop: 14 }}>
-              {[1, 2, 3, 4, 5].map((r) => (
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 10 }}>
+              {/* Overthrow Broadcast Illustration Card */}
+              <View style={{
+                marginTop: 10,
+                marginBottom: 12,
+                borderRadius: 12,
+                overflow: 'hidden',
+                backgroundColor: '#fffbeb',
+                borderWidth: 1.5,
+                borderColor: '#fde68a',
+                shadowColor: '#d97706',
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: 0.15,
+                shadowRadius: 6,
+                elevation: 3
+              }}>
+                <Image
+                  source={overthrowImage}
+                  style={{
+                    width: '100%',
+                    height: 140,
+                    resizeMode: 'cover'
+                  }}
+                />
+                <View style={{
+                  position: 'absolute',
+                  top: 8,
+                  left: 8,
+                  backgroundColor: 'rgba(217, 119, 6, 0.92)',
+                  paddingHorizontal: 8,
+                  paddingVertical: 3,
+                  borderRadius: 6
+                }}>
+                  <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 }}>
+                    ⚡ MCC LAW 19.8 • OVERTHROW
+                  </Text>
+                </View>
+                <View style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  backgroundColor: 'rgba(15, 23, 42, 0.78)',
+                  paddingVertical: 5,
+                  paddingHorizontal: 10
+                }}>
+                  <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700', textAlign: 'center' }}>
+                    🏃 Batters sprinting extra runs on missed throw to stumps / keeper
+                  </Text>
+                </View>
+              </View>
+
+              {/* OVERTHROW FIELDERS MULTI-SELECT DROPDOWN */}
+              <View style={{
+                marginBottom: 14,
+                backgroundColor: '#fffdf5',
+                borderColor: '#fef08a',
+                borderWidth: 1,
+                borderRadius: 12,
+                padding: 10
+              }}>
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '800', color: '#854d0e', textTransform: 'uppercase' }}>
+                    🎯 FIELDER(S) INVOLVED IN OVERTHROW:
+                  </Text>
+                  {selectedOverthrowFielders.length > 0 && (
+                    <TouchableOpacity onPress={() => setSelectedOverthrowFielders([])}>
+                      <Text style={{ fontSize: 10, fontWeight: '700', color: '#dc2626' }}>Clear all</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* Dropdown Toggle Pill */}
                 <TouchableOpacity
-                  key={`ot-${r}`}
-                  style={[
-                    styles.scoreBtn,
-                    {
-                      backgroundColor: '#fef3c7',
-                      borderColor: '#f59e0b',
-                      flex: 1,
-                      height: 52,
-                      marginHorizontal: 2,
-                      borderRadius: 8
-                    }
-                  ]}
-                  onPress={() => handleOverThrowSelect(r)}
-                  activeOpacity={0.75}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    backgroundColor: '#ffffff',
+                    borderColor: '#f59e0b',
+                    borderWidth: 1.5,
+                    borderRadius: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10
+                  }}
+                  onPress={() => setIsOverthrowFielderDropdownOpen(!isOverthrowFielderDropdownOpen)}
+                  activeOpacity={0.8}
                 >
-                  <Text style={[styles.scoreBtnText, { color: '#b45309', fontSize: 17, fontWeight: '900' }]}>+{r}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                    <Text style={{ fontSize: 15, marginRight: 6 }}>🧤</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: selectedOverthrowFielders.length > 0 ? '#92400e' : '#64748b' }} numberOfLines={1}>
+                      {selectedOverthrowFielders.length === 0
+                        ? 'Select fielder(s) who made the throw...'
+                        : `${selectedOverthrowFielders.length} Fielder${selectedOverthrowFielders.length > 1 ? 's' : ''} Selected`}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    {selectedOverthrowFielders.length > 0 && (
+                      <View style={{ backgroundColor: '#d97706', paddingHorizontal: 7, paddingVertical: 2, borderRadius: 10 }}>
+                        <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '900' }}>{selectedOverthrowFielders.length}</Text>
+                      </View>
+                    )}
+                    <Text style={{ fontSize: 13, color: '#b45309', fontWeight: 'bold' }}>
+                      {isOverthrowFielderDropdownOpen ? '▲' : '▼'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* Selected Fielders Chip Badges */}
+                {selectedOverthrowFielders.length > 0 && (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                    {selectedOverthrowFielders.map((fName) => (
+                      <TouchableOpacity
+                        key={`ot-chip-${fName}`}
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          backgroundColor: '#fef3c7',
+                          borderColor: '#f59e0b',
+                          borderWidth: 1,
+                          borderRadius: 14,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          gap: 5
+                        }}
+                        onPress={() => toggleOverthrowFielder(fName)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={{ fontSize: 11, fontWeight: '700', color: '#92400e' }}>🧤 {fName}</Text>
+                        <Text style={{ fontSize: 11, fontWeight: '900', color: '#dc2626' }}>✕</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                {/* Expanded Dropdown List of Fielders with Checkboxes */}
+                {isOverthrowFielderDropdownOpen && (
+                  <View style={{
+                    marginTop: 8,
+                    maxHeight: 180,
+                    backgroundColor: '#ffffff',
+                    borderColor: '#fcd34d',
+                    borderWidth: 1.5,
+                    borderRadius: 10,
+                    padding: 6,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.1,
+                    shadowRadius: 4,
+                    elevation: 3
+                  }}>
+                    <ScrollView nestedScrollEnabled showsVerticalScrollIndicator={true}>
+                      {((bowlingSquad && bowlingSquad.length > 0 ? bowlingSquad : (matchInfo?.teamBPlayers || matchInfo?.teamAPlayers || [])) as any[]).map((player: any) => {
+                        const playerName = player.name || player.player_name || `Player ${player.id || ''}`;
+                        const isSelected = selectedOverthrowFielders.includes(playerName);
+                        return (
+                          <TouchableOpacity
+                            key={`ot-fld-chk-${player.id || playerName}`}
+                            style={{
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              paddingVertical: 8,
+                              paddingHorizontal: 10,
+                              borderRadius: 6,
+                              backgroundColor: isSelected ? '#fef3c7' : 'transparent',
+                              borderBottomWidth: 0.5,
+                              borderBottomColor: '#f1f5f9'
+                            }}
+                            onPress={() => toggleOverthrowFielder(playerName)}
+                            activeOpacity={0.7}
+                          >
+                            {/* Checkbox Icon */}
+                            <View style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: 4,
+                              borderWidth: 1.8,
+                              borderColor: isSelected ? '#d97706' : '#94a3b8',
+                              backgroundColor: isSelected ? '#d97706' : '#ffffff',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              marginRight: 10
+                            }}>
+                              {isSelected && (
+                                <Text style={{ color: '#ffffff', fontSize: 12, fontWeight: '900', lineHeight: 14 }}>✓</Text>
+                              )}
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={{
+                                fontSize: 13,
+                                fontWeight: isSelected ? '800' : '600',
+                                color: isSelected ? '#92400e' : '#1e293b'
+                              }}>
+                                {playerName}
+                              </Text>
+                              {player.role && (
+                                <Text style={{ fontSize: 10, color: '#64748b' }}>
+                                  {player.role}
+                                </Text>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
+
+              {/* Quick 1 to 5 Buttons */}
+              <Text style={{ fontSize: 11, fontWeight: '800', color: '#854d0e', textTransform: 'uppercase', marginBottom: 6 }}>
+                QUICK OVERTHROW RUNS:
+              </Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 6 }}>
+                {[1, 2, 3, 4, 5].map((r) => (
+                  <TouchableOpacity
+                    key={`ot-${r}`}
+                    style={[
+                      styles.scoreBtn,
+                      {
+                        backgroundColor: '#fef3c7',
+                        borderColor: '#f59e0b',
+                        borderWidth: 1.5,
+                        flex: 1,
+                        height: 50,
+                        marginHorizontal: 2,
+                        borderRadius: 10,
+                        shadowColor: '#d97706',
+                        shadowOffset: { width: 0, height: 2 },
+                        shadowOpacity: 0.15,
+                        shadowRadius: 3,
+                        elevation: 2
+                      }
+                    ]}
+                    onPress={() => handleOverThrowSelect(r)}
+                    activeOpacity={0.75}
+                  >
+                    <Text style={[styles.scoreBtnText, { color: '#b45309', fontSize: 17, fontWeight: '900' }]}>+{r}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Custom Input Box for 6 or more runs */}
+              <View style={{ marginTop: 14, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 12 }}>
+                <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>
+                  Or Type Custom Overthrow Runs (6+ or more):
+                </Text>
+                <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                  <TextInput
+                    style={{
+                      flex: 1,
+                      height: 48,
+                      fontSize: 16,
+                      fontWeight: 'bold',
+                      textAlign: 'center',
+                      backgroundColor: '#ffffff',
+                      borderColor: customOverthrowInput ? '#d97706' : '#cbd5e1',
+                      borderWidth: 1.5,
+                      borderRadius: 8,
+                      paddingHorizontal: 10,
+                      color: '#0f172a'
+                    }}
+                    value={customOverthrowInput}
+                    onChangeText={(val) => setCustomOverthrowInput(val.replace(/\D/g, ''))}
+                    placeholder="Enter runs (e.g. 6)"
+                    keyboardType="number-pad"
+                    placeholderTextColor="#94a3b8"
+                    maxLength={2}
+                  />
+                  <TouchableOpacity
+                    style={{
+                      backgroundColor: customOverthrowInput.trim() ? '#d97706' : '#cbd5e1',
+                      paddingHorizontal: 18,
+                      height: 48,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      borderRadius: 8
+                    }}
+                    disabled={!customOverthrowInput.trim()}
+                    onPress={() => {
+                      const parsed = parseInt(customOverthrowInput.trim(), 10);
+                      if (!isNaN(parsed) && parsed > 0) {
+                        handleOverThrowSelect(parsed);
+                      }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>
+                      Add Runs ↵
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 16B. DEAD BALL MODAL (MCC LAW 20) with Broadcast Illustration Card */}
+      <Modal
+        visible={showDeadBallModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowDeadBallModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 440, width: '92%', borderRadius: 16, borderWidth: 1.5, borderColor: '#64748b', padding: 18 }]}>
+            <View style={styles.revisedModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.revisedModalTitle, { color: '#0f172a' }]}>DEAD BALL (MCC LAW 20)</Text>
+                <Text style={[styles.revisedModalInfo, { marginTop: 2, color: '#475569' }]}>
+                  Umpire Declares Dead Ball • Delivery Does Not Count
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.redCloseBtn}
+                onPress={() => setShowDeadBallModal(false)}
+              >
+                <Text style={styles.redCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Dead Ball Broadcast Illustration Card */}
+            <View style={{
+              marginTop: 10,
+              marginBottom: 12,
+              borderRadius: 12,
+              overflow: 'hidden',
+              backgroundColor: '#f8fafc',
+              borderWidth: 1.5,
+              borderColor: '#cbd5e1',
+              shadowColor: '#475569',
+              shadowOffset: { width: 0, height: 3 },
+              shadowOpacity: 0.15,
+              shadowRadius: 6,
+              elevation: 3
+            }}>
+              <Image
+                source={deadBallImage}
+                style={{
+                  width: '100%',
+                  height: 145,
+                  resizeMode: 'cover'
+                }}
+              />
+              <View style={{
+                position: 'absolute',
+                top: 8,
+                left: 8,
+                backgroundColor: 'rgba(15, 23, 42, 0.88)',
+                paddingHorizontal: 8,
+                paddingVertical: 3,
+                borderRadius: 6
+              }}>
+                <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 }}>
+                  🛑 MCC LAW 20 • DEAD BALL
+                </Text>
+              </View>
+              <View style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                backgroundColor: 'rgba(15, 23, 42, 0.78)',
+                paddingVertical: 5,
+                paddingHorizontal: 10
+              }}>
+                <Text style={{ color: '#ffffff', fontSize: 11, fontWeight: '700', textAlign: 'center' }}>
+                  🚫 Umpire crossed arms signal • Play ceased immediately
+                </Text>
+              </View>
+            </View>
+
+            {/* Context Info */}
+            <View style={{
+              backgroundColor: '#f1f5f9',
+              borderRadius: 10,
+              padding: 10,
+              marginBottom: 12,
+              borderLeftWidth: 4,
+              borderLeftColor: '#475569'
+            }}>
+              <Text style={{ fontSize: 13, fontWeight: '800', color: '#0f172a' }}>
+                🛑 Dead Ball Called by On-Field Umpire
+              </Text>
+              <Text style={{ fontSize: 11, color: '#475569', marginTop: 2 }}>
+                Bowler: <Text style={{ fontWeight: '700' }}>{bowler?.name || 'Bowler'}</Text> • Striker: <Text style={{ fontWeight: '700' }}>{striker?.name || 'Striker'}</Text>
+              </Text>
+              <Text style={{ fontSize: 11, color: '#334155', marginTop: 4, fontStyle: 'italic' }}>
+                Reason: {deadBallReason}
+              </Text>
+            </View>
+
+            {/* Quick Reason Selection */}
+            <Text style={{ fontSize: 11, fontWeight: '800', color: '#475569', textTransform: 'uppercase', marginBottom: 6 }}>
+              SELECT DEAD BALL REASON:
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+              {[
+                'Bowler aborted run-up',
+                'Batter not ready',
+                'Foreign object on pitch',
+                'Player injury delay',
+                'Umpire intervention'
+              ].map((reason) => (
+                <TouchableOpacity
+                  key={`db-${reason}`}
+                  style={{
+                    backgroundColor: deadBallReason === reason ? '#0f172a' : '#f8fafc',
+                    borderColor: deadBallReason === reason ? '#0f172a' : '#cbd5e1',
+                    borderWidth: 1,
+                    borderRadius: 16,
+                    paddingHorizontal: 10,
+                    paddingVertical: 5
+                  }}
+                  onPress={() => setDeadBallReason(reason)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={{
+                    fontSize: 11,
+                    fontWeight: deadBallReason === reason ? '800' : '600',
+                    color: deadBallReason === reason ? '#ffffff' : '#334155'
+                  }}>
+                    {reason}
+                  </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* Custom Input Box for 6 or more runs */}
-            <View style={{ marginTop: 16, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 14 }}>
-              <Text style={{ fontSize: 11, fontWeight: '800', color: '#64748b', textTransform: 'uppercase', marginBottom: 8 }}>
-                Or Type Custom Overthrow Runs (6+ or more):
+            {/* Official Rule Tip */}
+            <View style={{
+              backgroundColor: '#fef3c7',
+              borderColor: '#fde68a',
+              borderWidth: 1,
+              borderRadius: 8,
+              padding: 8,
+              marginBottom: 14
+            }}>
+              <Text style={{ fontSize: 11, color: '#92400e', lineHeight: 15 }}>
+                💡 <Text style={{ fontWeight: '800' }}>MCC Law 20 Rule:</Text> No runs can be scored, no wicket can fall, and this ball does NOT count toward the 6 legal balls of the over. The ball will be re-bowled.
               </Text>
-              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
-                <TextInput
-                  style={{
-                    flex: 1,
-                    height: 48,
-                    fontSize: 16,
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    backgroundColor: '#ffffff',
-                    borderColor: customOverthrowInput ? '#d97706' : '#cbd5e1',
-                    borderWidth: 1.5,
-                    borderRadius: 8,
-                    paddingHorizontal: 10,
-                    color: '#0f172a'
-                  }}
-                  value={customOverthrowInput}
-                  onChangeText={(val) => setCustomOverthrowInput(val.replace(/\D/g, ''))}
-                  placeholder="Enter runs (e.g. 6)"
-                  keyboardType="number-pad"
-                  placeholderTextColor="#94a3b8"
-                  maxLength={2}
-                />
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: customOverthrowInput.trim() ? '#d97706' : '#cbd5e1',
-                    paddingHorizontal: 18,
-                    height: 48,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    borderRadius: 8
-                  }}
-                  disabled={!customOverthrowInput.trim()}
-                  onPress={() => {
-                    const parsed = parseInt(customOverthrowInput.trim(), 10);
-                    if (!isNaN(parsed) && parsed > 0) {
-                      handleOverThrowSelect(parsed);
-                    }
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <Text style={{ color: '#ffffff', fontWeight: '800', fontSize: 13 }}>
-                    Add Runs ↵
-                  </Text>
-                </TouchableOpacity>
-              </View>
             </View>
+
+            {/* Primary Action Button */}
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#f59e0b',
+                borderRadius: 10,
+                paddingVertical: 13,
+                alignItems: 'center',
+                justifyContent: 'center',
+                shadowColor: '#d97706',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.2,
+                shadowRadius: 4,
+                elevation: 3
+              }}
+              onPress={() => setShowDeadBallModal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={{ color: '#ffffff', fontWeight: '900', fontSize: 14, letterSpacing: 0.5 }}>
+                ✓ OK, RE-BOWL DELIVERY
+              </Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -4180,40 +5969,54 @@ export default function LiveScoringScreen() {
         onRequestClose={() => setShowExtrasModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 440 }]}>
+          <View style={[styles.modalContent, { maxWidth: 480, width: '92%', maxHeight: '86%', padding: 18, display: 'flex', flexDirection: 'column' }]}>
             <View style={styles.revisedModalHeader}>
-              <Text style={styles.revisedModalTitle}>EXTRAS</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.revisedModalTitle}>EXTRAS & PENALTY SCORING</Text>
+                <Text style={styles.revisedModalInfo}>
+                  Select extra delivery category to record:
+                </Text>
+              </View>
               <TouchableOpacity style={styles.redCloseBtn} onPress={() => setShowExtrasModal(false)}>
                 <Text style={styles.redCloseBtnText}>✕</Text>
               </TouchableOpacity>
             </View>
-            <Text style={styles.revisedModalInfo}>
-              Select extra delivery category to record:
-            </Text>
-            <View style={{ marginTop: 10, gap: 6 }}>
+            <ScrollView
+              style={{ maxHeight: isDesktop ? 460 : 380, marginTop: 10 }}
+              contentContainerStyle={{ gap: 8, paddingBottom: 12, paddingHorizontal: 2 }}
+              showsVerticalScrollIndicator={true}
+              nestedScrollEnabled={true}
+            >
               {[
-                { key: 'WIDE', label: 'Wide', desc: '1 run to batting team, extra delivery' },
-                { key: 'NO_BALL', label: 'No Ball', desc: '1 run + Free hit (next delivery)' },
-                { key: 'BYE', label: 'Bye', desc: 'Runs taken without bat contact' },
-                { key: 'LEG_BYE', label: 'Leg Bye', desc: 'Runs taken off batter pads' },
-                { key: 'NO_BALL_BYE', label: 'No Ball + Bye', desc: '1 NB penalty + Byes' },
-                { key: 'NO_BALL_LEG_BYE', label: 'No Ball + Leg Bye', desc: '1 NB penalty + Leg Byes' },
-                { key: 'NO_BALL_RUNS', label: 'No Ball + Runs (Off Bat)', desc: '1 NB penalty + Batter runs' },
-                { key: 'PENALTY', label: 'Penalty Points (5 Runs)', desc: 'Award 5 penalty runs (Law 41/42)' }
+                { key: 'WIDE', label: 'Wide (WD)', desc: '+1 run to batting team, extra delivery re-bowled', icon: '↔️' },
+                { key: 'NO_BALL', label: 'No Ball (Crease / Overstep)', desc: '+1 penalty run + Free Hit on next delivery', icon: '🦶' },
+                { key: 'NO_BALL_BEAMER', label: 'No Ball (Dangerous Beamer)', desc: 'Waist-high full toss (Law 41.7 Warning/Suspension)', icon: '⚡' },
+                { key: 'NO_BALL_BOUNCER', label: 'No Ball (Bouncer Exceeded)', desc: '2nd bouncer in over above shoulder (Law 41.6)', icon: '🎯' },
+                { key: 'DEAD_BALL', label: 'Dead Ball (Cancel & Re-bowl)', desc: 'Umpire stops play (Law 20); ball does not count', icon: '🛑' },
+                { key: 'BYE', label: 'Bye (B)', desc: 'Runs taken without bat contact (0 bowler runs)', icon: '🏃' },
+                { key: 'LEG_BYE', label: 'Leg Bye (LB)', desc: 'Runs taken off batter pads / body (0 bowler runs)', icon: '🦵' },
+                { key: 'NO_BALL_BYE', label: 'No Ball + Bye', desc: '1 NB penalty + 1 Bye extra (2 team runs, Free Hit)', icon: '⚡' },
+                { key: 'NO_BALL_LEG_BYE', label: 'No Ball + Leg Bye', desc: '1 NB penalty + 1 Leg Bye extra (2 team runs, Free Hit)', icon: '⚡' },
+                { key: 'NO_BALL_RUNS', label: 'No Ball + Runs (Off Bat)', desc: '1 NB penalty + batter runs off bat (Free Hit)', icon: '🏏' },
+                { key: 'PENALTY', label: 'Penalty Points (5 Runs)', desc: 'Award 5 penalty runs to batting or fielding side (Law 41/42)', icon: '⚖️' }
               ].map((item) => (
                 <TouchableOpacity
                   key={item.key}
                   style={styles.extraModalItem}
                   onPress={() => handleExtrasSelect(item.key)}
+                  activeOpacity={0.7}
                 >
-                  <View style={{ flex: 1 }}>
+                  <View style={{ width: 34, height: 34, borderRadius: 8, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center' }}>
+                    <Text style={{ fontSize: 18 }}>{item.icon}</Text>
+                  </View>
+                  <View style={{ flex: 1, marginLeft: 10 }}>
                     <Text style={styles.extraModalItemTitle}>{item.label}</Text>
                     <Text style={styles.extraModalItemSub}>{item.desc}</Text>
                   </View>
                   <Text style={styles.drawerMenuChevron}>›</Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -4254,13 +6057,15 @@ export default function LiveScoringScreen() {
             <Text style={styles.fieldSubLabel}>FIELDING ACTION:</Text>
             <View style={{ marginTop: 6, gap: 6 }}>
               {[
-                'Slide and Miss',
-                'Misfield',
                 'Clean Collect',
                 'Pick and Throw',
                 'Relay Throw',
                 'Direct Hit',
-                'Dropped Catch'
+                'Boundary Save (4 Runs Saved)',
+                'Slide and Miss',
+                'Misfield',
+                'Dropped Catch',
+                'Overthrow Conceded'
               ].map((action) => (
                 <TouchableOpacity
                   key={action}
@@ -4284,97 +6089,42 @@ export default function LiveScoringScreen() {
         </View>
       </Modal>
 
-      {/* 19. WAGON WHEEL MODAL (Image 2 Slide 4) */}
-      <Modal
+      {/* 19. ADVANCED INTERACTIVE 3D WAGON WHEEL MODAL */}
+      <InteractiveWagonWheelModal
         visible={showWagonWheelModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setShowWagonWheelModal(false);
-          setPendingBoundaryRun(null);
+        runs={pendingBoundaryRun || 4}
+        batterName={striker?.name || 'Striker'}
+        initialBattingHand={striker?.battingHand || (striker?.batting_hand?.toUpperCase().includes('LEFT') ? 'LEFT' : 'RIGHT')}
+        onConfirm={handleWagonWheelConfirm}
+        onSkip={handleWagonWheelSkip}
+        onClose={handleWagonWheelSkip}
+      />
+
+      {/* 20. OFFICIAL UMPIRE SIGNAL BROADCAST OVERLAY */}
+      <UmpireSignalOverlay
+        event={activeUmpireSignal}
+        onDismiss={() => setActiveUmpireSignal(null)}
+      />
+
+      {/* 21. UMPIRE SIGNALS GALLERY MODAL */}
+      <UmpireSignalsGalleryModal
+        visible={showUmpireGallery}
+        onClose={() => setShowUmpireGallery(false)}
+        onSelectSignal={(sigType) => {
+          setActiveUmpireSignal({
+            type: sigType,
+            batterName: striker?.name || 'K. Balaji',
+            bowlerName: bowler?.name || 'Vijay',
+            overText: `Over ${getOvers(balls)}`
+          });
         }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 460 }]}>
-            <View style={styles.revisedModalHeader}>
-              <View>
-                <Text style={styles.revisedModalTitle}>WAGON WHEEL</Text>
-                {pendingBoundaryRun && (
-                  <Text style={{ fontSize: 11, color: '#059669', fontWeight: 'bold' }}>
-                    {pendingBoundaryRun === 4 ? 'BOUNDARY FOUR (4 RUNS)' : 'MAXIMUM SIX (6 RUNS)'}
-                  </Text>
-                )}
-              </View>
-              <TouchableOpacity
-                style={styles.redCloseBtn}
-                onPress={() => {
-                  setShowWagonWheelModal(false);
-                  if (pendingBoundaryRun !== null) {
-                    const r = pendingBoundaryRun;
-                    setPendingBoundaryRun(null);
-                    handleScore(r, 'normal');
-                  }
-                }}
-              >
-                <Text style={styles.redCloseBtnText}>✕</Text>
-              </TouchableOpacity>
-            </View>
+      />
 
-            <Text style={styles.revisedModalInfo}>
-              Tap the region / sector on the ground where the shot was hit:
-            </Text>
-
-            {/* Circular Cricket Ground Graphic */}
-            <View style={styles.wagonWheelContainer}>
-              <View style={styles.wagonGroundCircle}>
-                <View style={styles.wagonInnerCircle} />
-                <View style={styles.wagonPitchBox}>
-                  <Text style={{ fontSize: 8, color: '#fef3c7', fontWeight: 'bold' }}>PITCH</Text>
-                </View>
-              </View>
-            </View>
-
-            {/* Sectors Grid Selection */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, justifyContent: 'center', marginTop: 10 }}>
-              {[
-                'Straight',
-                'Long Off',
-                'Cover',
-                'Extra Cover',
-                'Point',
-                'Third Man',
-                'Fine Leg',
-                'Square Leg',
-                'Mid Wicket',
-                'Long On'
-              ].map((sector) => (
-                <TouchableOpacity
-                  key={sector}
-                  style={[
-                    styles.wagonSectorChip,
-                    selectedWagonSector === sector && styles.wagonSectorChipActive
-                  ]}
-                  onPress={() => handleWagonWheelSelect(sector)}
-                >
-                  <Text style={[
-                    styles.wagonSectorChipText,
-                    selectedWagonSector === sector && styles.wagonSectorChipTextActive
-                  ]}>
-                    📍 {sector}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <TouchableOpacity
-              style={[styles.modalConfirmBtn, { backgroundColor: '#059669', marginTop: 14, width: '100%' }]}
-              onPress={() => handleWagonWheelSelect(selectedWagonSector)}
-            >
-              <Text style={[styles.modalConfirmText, { textAlign: 'center' }]}>Confirm Direction ({selectedWagonSector})</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* 22. BROADCAST FIELDING EVENT ANIMATION OVERLAY */}
+      <FieldingEventOverlay
+        event={activeFieldingEvent}
+        onDismiss={() => setActiveFieldingEvent(null)}
+      />
 
       {/* 20. PITCH MAP MODAL */}
       <Modal
@@ -4485,24 +6235,38 @@ export default function LiveScoringScreen() {
             </TouchableOpacity>
           )}
 
+          {/* Quick Back to Matches Dashboard Button */}
+          <TouchableOpacity
+            onPress={() => navigate('Dashboard')}
+            style={styles.headerMatchesBtn}
+            accessibilityLabel="Back to Matches Dashboard"
+            activeOpacity={0.8}
+          >
+            <Text style={styles.headerMatchesBtnText}>← Matches</Text>
+          </TouchableOpacity>
+
           <Image source={IMG_LOGO} style={styles.headerLogo} resizeMode="contain" />
-          <View style={{ marginLeft: 10 }}>
+          <View style={{ marginLeft: 8, flex: 1, minWidth: 0 }}>
             <Text style={styles.headerTitleMain} numberOfLines={1}>
               {isDesktop ? 'CRICKET FEDERATION OF VIRUDHUNAGAR DISTRICT' : 'CRICKET ASSOCIATION'}
             </Text>
-            <Text style={styles.headerTitleSub} numberOfLines={1}>
-              {matchInfo ? `${matchInfo.teamA} vs ${matchInfo.teamB} • Official Scorer Portal` : 'Official Scorer Portal • Career & Match Operations'}
-            </Text>
+            {isDesktop && (
+              <Text style={styles.headerTitleSub} numberOfLines={1}>
+                {matchInfo ? `${matchInfo.teamA} vs ${matchInfo.teamB} • Official Scorer Portal` : 'Official Scorer Portal • Career & Match Operations'}
+              </Text>
+            )}
           </View>
         </View>
 
         <View style={styles.headerRight}>
-          {/* User Email Pill (Matches Image 1 & 2) */}
-          <View style={styles.userBadgePill}>
-            <Text style={styles.userBadgePillText} numberOfLines={1}>
-              👤 {scorerEmail}
-            </Text>
-          </View>
+          {/* User Email Pill: Shown on desktop only (hidden on mobile to prevent overlapping) */}
+          {isDesktop && (
+            <View style={styles.userBadgePill}>
+              <Text style={styles.userBadgePillText} numberOfLines={1}>
+                👤 {scorerEmail}
+              </Text>
+            </View>
+          )}
 
           {/* Wi-Fi Indicator (Desktop only) */}
           {isDesktop && (
@@ -4515,14 +6279,25 @@ export default function LiveScoringScreen() {
             </View>
           )}
 
-          {/* Exit Scorer Button Pill (Red, Matches Image 1 & 2) */}
+          {/* Offline Sync Queue Pill (When network was dropped or deliveries are queued) */}
+          {offlineQueueCount > 0 && (
+            <TouchableOpacity
+              style={styles.offlineQueuePill}
+              onPress={handleSyncOfflineQueue}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.offlineQueuePillText}>🔄 {offlineQueueCount} Queued • Sync</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Exit Scorer Button Pill (Red) */}
           <TouchableOpacity
             style={styles.headerExitBtn}
             onPress={() => setShowExitModal(true)}
             activeOpacity={0.8}
             accessibilityLabel="Exit Scorer Portal"
           >
-            <Text style={styles.headerExitBtnText}>← Exit Scorer</Text>
+            <Text style={styles.headerExitBtnText}>{isDesktop ? '← Exit Scorer' : 'Exit'}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -4557,6 +6332,24 @@ export default function LiveScoringScreen() {
 
             {/* Navigation Items List */}
             <ScrollView style={styles.sidebarNavScroll} showsVerticalScrollIndicator={false}>
+              {/* 0. All Matches (Dashboard) */}
+              <TouchableOpacity
+                style={[
+                  styles.sidebarNavItem,
+                  isSidebarCollapsed && styles.sidebarNavItemCollapsed,
+                  { backgroundColor: '#ecfdf5', borderColor: '#10b981', marginBottom: 6 }
+                ]}
+                onPress={() => navigate('Dashboard')}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.sidebarNavIcon}>🏠</Text>
+                {!isSidebarCollapsed && (
+                  <Text style={[styles.sidebarNavText, { color: '#047857', fontWeight: 'bold' }]}>
+                    All Matches
+                  </Text>
+                )}
+              </TouchableOpacity>
+
               {/* 1. Live Scoring (Active Tab - Gold Yellow Background, Image 1 Style) */}
               <TouchableOpacity
                 style={[styles.sidebarNavItem, styles.sidebarNavItemActive, isSidebarCollapsed && styles.sidebarNavItemCollapsed]}
@@ -4585,20 +6378,27 @@ export default function LiveScoringScreen() {
                 )}
               </TouchableOpacity>
 
-              {/* 3. Wagon Wheel */}
+              {/* 3. 3D Milestones Showcase */}
               <TouchableOpacity
                 style={[styles.sidebarNavItem, isSidebarCollapsed && styles.sidebarNavItemCollapsed]}
-                onPress={() => setShowWagonWheelModal(true)}
+                onPress={() => navigate('MilestoneGallery')}
                 activeOpacity={0.7}
               >
-                <Text style={styles.sidebarNavIcon}>🎯</Text>
-                {!isSidebarCollapsed && <Text style={styles.sidebarNavText}>Wagon Wheel</Text>}
+                <Text style={styles.sidebarNavIcon}>🏆</Text>
+                {!isSidebarCollapsed && (
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={styles.sidebarNavText}>3D Milestones</Text>
+                    <View style={[styles.sidebarBadgeBlue, { backgroundColor: '#f59e0b' }]}>
+                      <Text style={styles.sidebarBadgeBlueText}>NEW</Text>
+                    </View>
+                  </View>
+                )}
               </TouchableOpacity>
 
               {/* 4. Breaks */}
               <TouchableOpacity
                 style={[styles.sidebarNavItem, isSidebarCollapsed && styles.sidebarNavItemCollapsed]}
-                onPress={() => setShowBreaksModal(true)}
+                onPress={() => handleOpenBreaksModal()}
                 activeOpacity={0.7}
               >
                 <Text style={styles.sidebarNavIcon}>☕</Text>
@@ -4614,34 +6414,7 @@ export default function LiveScoringScreen() {
                 )}
               </TouchableOpacity>
 
-              {/* 5. Sessions */}
-              <TouchableOpacity
-                style={[styles.sidebarNavItem, isSidebarCollapsed && styles.sidebarNavItemCollapsed]}
-                onPress={() => setShowSessionsModal(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.sidebarNavIcon}>⏱️</Text>
-                {!isSidebarCollapsed && (
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Text style={styles.sidebarNavText}>Sessions</Text>
-                    {sessionsList.length > 0 && (
-                      <View style={styles.sidebarBadgeBlue}>
-                        <Text style={styles.sidebarBadgeBlueText}>{sessionsList.length}</Text>
-                      </View>
-                    )}
-                  </View>
-                )}
-              </TouchableOpacity>
 
-              {/* 6. End Day */}
-              <TouchableOpacity
-                style={[styles.sidebarNavItem, isSidebarCollapsed && styles.sidebarNavItemCollapsed]}
-                onPress={() => setShowEndDayModal(true)}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.sidebarNavIcon}>🌙</Text>
-                {!isSidebarCollapsed && <Text style={styles.sidebarNavText}>End Day</Text>}
-              </TouchableOpacity>
 
               {/* 7. End Innings */}
               <TouchableOpacity
@@ -4687,6 +6460,27 @@ export default function LiveScoringScreen() {
               >
                 <Text style={styles.sidebarNavIcon}>⚖️</Text>
                 {!isSidebarCollapsed && <Text style={styles.sidebarNavText}>Umpire Assessment</Text>}
+              </TouchableOpacity>
+
+              {/* 11. DLS & VJD Rain Target Engine */}
+              <TouchableOpacity
+                style={[
+                  styles.sidebarNavItem,
+                  showDlsModal && styles.sidebarNavItemEditActive,
+                  isSidebarCollapsed && styles.sidebarNavItemCollapsed
+                ]}
+                onPress={() => setShowDlsModal(true)}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.sidebarNavIcon}>🧮</Text>
+                {!isSidebarCollapsed && (
+                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Text style={styles.sidebarNavText}>DLS / VJD Methods</Text>
+                    <View style={[styles.sidebarBadgeBlue, { backgroundColor: '#0e7490' }]}>
+                      <Text style={styles.sidebarBadgeBlueText}>RAIN</Text>
+                    </View>
+                  </View>
+                )}
               </TouchableOpacity>
 
               {/* 11. Edit Mode */}
@@ -4747,719 +6541,954 @@ export default function LiveScoringScreen() {
         )}
 
         {/* Main Content Area (Wide, Yellow/Gold Stadium Theme) */}
-        <ScrollView style={styles.mainContentScroll} contentContainerStyle={styles.scroll}>
-        <View style={styles.mainLayout}>
-          {/* Innings Break Banner */}
-          {isInningsBreak && (() => {
-            const currentBattingTeam = (matchInfo?.currentInningsNumber === 2)
-              ? (matchInfo?.teamB || 'Team B')
-              : (matchInfo?.battingTeam || matchInfo?.teamA || 'Team A');
-            const currentBowlingTeam = (matchInfo?.currentInningsNumber === 2)
-              ? (matchInfo?.teamA || 'Team A')
-              : (matchInfo?.bowlingTeam || matchInfo?.teamB || 'Team B');
-            const targetToChase = (runs || 0) + 1;
-
-            return (
-              <View style={styles.inningsBreakBanner}>
-                <View style={styles.inningsBreakImgWrapper}>
-                  <Image
-                    source={IMG_END_INNINGS}
-                    style={styles.inningsBreakThumbnail}
-                    resizeMode="contain"
-                  />
+        <ScrollView
+          style={styles.mainContentScroll}
+          contentContainerStyle={styles.scroll}
+          scrollEnabled={isDesktop}
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          <View style={styles.mainLayout}>
+            {/* Active Break Banner (Tea / Lunch / Drinks / Rain Break) */}
+            {currentBreak && !isInningsBreak && !isMatchEnded && (() => {
+              const isRain = currentBreak.type?.toLowerCase().includes('rain') || currentBreak.comments?.toLowerCase().includes('rain');
+              return (
+                <View style={[
+                  styles.activeBreakBanner,
+                  isRain && styles.activeRainBanner
+                ]}>
+                  <View style={[
+                    styles.activeBreakIconBox,
+                    isRain && { backgroundColor: '#e0f2fe', borderColor: '#7dd3fc' }
+                  ]}>
+                    <Text style={styles.activeBreakEmoji}>
+                      {isRain
+                        ? '🌧️'
+                        : currentBreak.type?.toLowerCase().includes('tea')
+                          ? '☕'
+                          : currentBreak.type?.toLowerCase().includes('lunch')
+                            ? '🍽️'
+                            : currentBreak.type?.toLowerCase().includes('drinks')
+                              ? '🥤'
+                              : '⏸️'}
+                    </Text>
+                  </View>
+                  <View style={{ flex: 1, paddingHorizontal: 6 }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={[
+                        styles.activeBreakTitle,
+                        isRain && { color: '#0369a1' }
+                      ]}>
+                        {isRain ? '🌧️ MATCH DELAYED DUE TO RAIN' : `${currentBreak.type?.toUpperCase()} IN PROGRESS`}
+                      </Text>
+                      <View style={[
+                        styles.activeBreakLiveTag,
+                        isRain && { backgroundColor: '#0284c7' }
+                      ]}>
+                        <Text style={styles.activeBreakLiveTagText}>
+                          {isRain ? 'RAIN DELAY' : 'ON BREAK'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Text style={[
+                      styles.activeBreakDetails,
+                      isRain && { color: '#075985' }
+                    ]}>
+                      {currentBreak.duration ? `Duration: ${currentBreak.duration} mins` : ''}
+                      {currentBreak.startTime && currentBreak.endTime ? ` • ${currentBreak.startTime} - ${currentBreak.endTime}` : ''}
+                      {isRain ? ' • Covers on the ground' : (currentBreak.comments && currentBreak.comments !== currentBreak.type ? ` (${currentBreak.comments})` : '')}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={[
+                      styles.resumePlayBtn,
+                      isRain && { backgroundColor: '#0284c7', borderColor: '#0369a1' }
+                    ]}
+                    onPress={() => setShowResumeConfirmModal(true)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.resumePlayBtnText}>
+                      {isRain ? '▶ Rain Stopped (Resume)' : '▶ Resume Play'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <View style={{ flex: 1, paddingHorizontal: 4 }}>
-                  <Text style={styles.inningsBreakTitle}>⏸️ INNINGS BREAK IN PROGRESS</Text>
-                  <Text style={styles.inningsBreakTeam}>
-                    {currentBattingTeam}: {runs}/{wickets} ({getOvers(balls)} overs)
-                  </Text>
-                  <Text style={styles.inningsBreakSub}>
-                    {targetRuns || targetToChase ? `Target for ${currentBowlingTeam}: ${targetRuns || targetToChase} runs.` : 'First innings has concluded.'}
+              );
+            })()}
+
+            {/* Innings Break Banner */}
+            {isInningsBreak && (() => {
+              const currentBattingTeam = (matchInfo?.currentInningsNumber === 2)
+                ? (matchInfo?.teamB || 'Team B')
+                : (matchInfo?.battingTeam || matchInfo?.teamA || 'Team A');
+              const currentBowlingTeam = (matchInfo?.currentInningsNumber === 2)
+                ? (matchInfo?.teamA || 'Team A')
+                : (matchInfo?.bowlingTeam || matchInfo?.teamB || 'Team B');
+              const targetToChase = (runs || 0) + 1;
+
+              return (
+                <View style={styles.inningsBreakBanner}>
+                  <View style={styles.inningsBreakImgWrapper}>
+                    <Image
+                      source={IMG_END_INNINGS}
+                      style={styles.inningsBreakThumbnail}
+                      resizeMode="contain"
+                    />
+                  </View>
+                  <View style={{ flex: 1, paddingHorizontal: 4 }}>
+                    <Text style={styles.inningsBreakTitle}>⏸️ INNINGS BREAK IN PROGRESS</Text>
+                    <Text style={styles.inningsBreakTeam}>
+                      {currentBattingTeam}: {runs}/{wickets} ({getOvers(balls)} overs)
+                    </Text>
+                    <Text style={styles.inningsBreakSub}>
+                      {targetRuns || targetToChase ? `Target for ${currentBowlingTeam}: ${targetRuns || targetToChase} runs.` : 'First innings has concluded.'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.startInningsBtn}
+                    disabled={isStartingNextInnings}
+                    onPress={handleStartNextInnings}
+                  >
+                    {isStartingNextInnings ? (
+                      <ActivityIndicator size="small" color="#FFF" />
+                    ) : (
+                      <Text style={styles.startInningsBtnText}>Start 2nd Innings ▶</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              );
+            })()}
+
+            {/* Match Completed Champions Celebration Card */}
+            {isMatchEnded && (() => {
+              const { winnerName, winMargin, fullSummary } = getWinnerInfo();
+              return (
+                <View style={[styles.championsCelebrationCard, { position: 'relative' }]}>
+                  {/* Dynamic Falling Confetti / Colour Papers */}
+                  <CricketConfetti active={confettiActive} count={85} />
+
+                  {/* Top Status Header with Fireworks Fanfare */}
+                  <View style={styles.championTopHeader}>
+                    <Text style={{ fontSize: 16 }}>🎆</Text>
+                    <View style={styles.championPulsingDot} />
+                    <Text style={styles.championTopHeaderText}>
+                      👑 OFFICIAL MATCH CONCLUDED • MATCH CHAMPIONS 👑
+                    </Text>
+                    <View style={styles.championPulsingDot} />
+                    <Text style={{ fontSize: 16 }}>🎇</Text>
+                  </View>
+
+                  {/* Main Card Content */}
+                  <View style={styles.championCardBody}>
+                    {/* The 3D Cricket Champions Collectible Figurine Statuette (Sketchfab 3D Style) */}
+                    <View style={styles.championArtworkWrapper}>
+                      <CricketFigurine3D
+                        imageSource={IMG_CHAMPIONS}
+                        playerName={winnerName || 'CHAMPIONS'}
+                        badgeText={winMargin || 'MATCH CHAMPIONS'}
+                        milestoneTitle="MATCH WINNER"
+                        height={200}
+                      />
+                    </View>
+
+                    {/* The Crown ('Kiritam') & Winner Details */}
+                    <View style={styles.championDetailsCol}>
+                      {/* Glowing Crown Badge */}
+                      <View style={styles.crownContainer}>
+                        <Text style={styles.crownGlow}>✨</Text>
+                        <View style={styles.crownCircle}>
+                          <Text style={styles.crownEmoji}>👑</Text>
+                        </View>
+                        <Text style={styles.crownGlow}>✨</Text>
+                      </View>
+
+                      <Text style={styles.championKiritamLabel}>OFFICIAL MATCH CHAMPION</Text>
+
+                      {/* Team Won Name */}
+                      <Text style={styles.championTeamName} numberOfLines={2}>
+                        {winnerName}
+                      </Text>
+
+                      {/* Win Margin Badge */}
+                      <View style={styles.winMarginChip}>
+                        <Text style={styles.winMarginTrophy}>🏆</Text>
+                        <Text style={styles.winMarginText}>{winMargin}</Text>
+                      </View>
+
+                      {/* Full Result Summary */}
+                      <Text style={styles.championFullSummary}>
+                        "{fullSummary}"
+                      </Text>
+
+                      {/* Tournament & Venue Details */}
+                      <View style={styles.championTournamentRow}>
+                        <Text style={styles.championTournamentText}>
+                          🏏 {matchInfo.tournament || 'Virudhunagar District Cricket'} • {matchInfo.venue || 'CFVD Ground'}
+                        </Text>
+                      </View>
+
+                      {/* OFFICIAL MAN OF THE MATCH PRESENTATION PODIUM */}
+                      <View style={styles.motmPresentationCard}>
+                        <View style={styles.motmRibbonHeader}>
+                          <Text style={styles.motmRibbonText}>🏆 OFFICIAL PLAYER OF THE MATCH 🏆</Text>
+                        </View>
+                        <View style={styles.motmCardContentRow}>
+                          <View style={styles.motmImageCircle}>
+                            <Image
+                              source={IMG_MAN_OF_THE_MATCH}
+                              style={styles.motmImage}
+                              resizeMode="contain"
+                            />
+                          </View>
+                          <View style={styles.motmInfoCol}>
+                            <Text style={styles.motmPlayerTitle}>
+                              {matchInfo?.playerOfTheMatch || playerOfMatchInput || 'N. Jagadeesan'}
+                            </Text>
+                            <Text style={styles.motmTeamSubtitle}>
+                              {winnerName || matchInfo?.teamA} • Match Winning Performance
+                            </Text>
+                            <View style={styles.motmPillBadge}>
+                              <Text style={styles.motmPillBadgeText}>⭐ MAN OF THE MATCH AWARD</Text>
+                            </View>
+                          </View>
+                        </View>
+                      </View>
+
+                      {/* Action buttons */}
+                      <View style={styles.championActionsRow}>
+                        {/* Blast Confetti / Colour Papers Button */}
+                        <TouchableOpacity
+                          style={styles.blastConfettiBtn}
+                          onPress={() => {
+                            setConfettiActive(false);
+                            setTimeout(() => {
+                              setConfettiActive(true);
+                              playVictoryFanfare();
+                            }, 50);
+                          }}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={styles.blastConfettiBtnText}>🎉 Blast Confetti (Colour Papers) 🎉</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.viewScorecardBtn}
+                          onPress={() => navigate('Scorecard', { matchId, returnTo: 'LiveScoring', status: 'COMPLETED' })}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={styles.viewScorecardBtnText}>📊 View Official Scorecard ▶</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.viewScorecardBtn, { backgroundColor: '#059669', shadowColor: '#059669' }]}
+                          onPress={() => navigate('Dashboard')}
+                          activeOpacity={0.85}
+                        >
+                          <Text style={styles.viewScorecardBtnText}>🏠 Back to Scorer Dashboard</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              );
+            })()}
+
+            {/* Over Complete Banner (Only if LIVE and not in Innings Break) */}
+            {isOverComplete && matchStatus === 'LIVE' && !isInningsBreak && !isMatchEnded && (
+              <View style={styles.overCompleteBanner}>
+                <Text style={styles.overCompleteText}>
+                  ⚠️ Over Complete! Six legal deliveries bowled. Please appoint the next bowler.
+                </Text>
+                <TouchableOpacity style={styles.openBowlerBtn} onPress={() => setShowBowlerModal(true)}>
+                  <Text style={styles.openBowlerBtnText}>Select Bowler</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* EDIT MODE STICKY BANNER */}
+            {isEditMode && (
+              <View style={styles.editModeBanner}>
+                <View style={{ flex: 1, marginRight: 8 }}>
+                  <Text style={styles.editModeBannerTitle}>✏️ EDIT MODE ACTIVE</Text>
+                  <Text style={styles.editModeBannerSub}>
+                    Scorer correction mode is ON. Tap 'Undo Ball' or tap any past ball below in "Recent Deliveries" to retroactively edit runs, extras, or wickets!
                   </Text>
                 </View>
                 <TouchableOpacity
-                  style={styles.startInningsBtn}
-                  disabled={isStartingNextInnings}
-                  onPress={handleStartNextInnings}
+                  style={styles.editModeUndoBtn}
+                  onPress={handleUndoLastDelivery}
+                  disabled={isUndoingDelivery}
                 >
-                  {isStartingNextInnings ? (
-                    <ActivityIndicator size="small" color="#FFF" />
+                  {isUndoingDelivery ? (
+                    <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.startInningsBtnText}>Start 2nd Innings ▶</Text>
+                    <Text style={styles.editModeUndoBtnText}>↺ Undo Ball</Text>
                   )}
                 </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.editModeExitBtn}
+                  onPress={() => setIsEditMode(false)}
+                >
+                  <Text style={styles.editModeExitBtnText}>Exit Edit</Text>
+                </TouchableOpacity>
               </View>
-            );
-          })()}
+            )}
 
-          {/* Match Completed Champions Celebration Card */}
-          {isMatchEnded && (() => {
-            const { winnerName, winMargin, fullSummary } = getWinnerInfo();
-            return (
-              <View style={styles.championsCelebrationCard}>
-                {/* Top Status Header */}
-                <View style={styles.championTopHeader}>
-                  <View style={styles.championPulsingDot} />
-                  <Text style={styles.championTopHeaderText}>
-                    👑 OFFICIAL MATCH CONCLUDED • MATCH CHAMPIONS 👑
-                  </Text>
-                  <View style={styles.championPulsingDot} />
-                </View>
-
-                {/* Main Card Content */}
-                <View style={styles.championCardBody}>
-                  {/* The Cricket Champions Art Illustration */}
-                  <View style={styles.championArtworkWrapper}>
-                    <Image
-                      source={IMG_CHAMPIONS}
-                      style={styles.championImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-
-                  {/* The Crown ('Kiritam') & Winner Details */}
-                  <View style={styles.championDetailsCol}>
-                    {/* Glowing Crown Badge */}
-                    <View style={styles.crownContainer}>
-                      <Text style={styles.crownGlow}>✨</Text>
-                      <View style={styles.crownCircle}>
-                        <Text style={styles.crownEmoji}>👑</Text>
-                      </View>
-                      <Text style={styles.crownGlow}>✨</Text>
-                    </View>
-
-                    <Text style={styles.championKiritamLabel}>OFFICIAL MATCH CHAMPION</Text>
-
-                    {/* Team Won Name */}
-                    <Text style={styles.championTeamName} numberOfLines={2}>
-                      {winnerName}
+            {/* TOP SECTION: SCOREBOARD & PLAYERS */}
+            <View style={styles.topSection}>
+              <View style={styles.scoreBoardCard}>
+                {/* Previous Innings Overview Banner (Preserves & Displays Innings 1 score e.g. Virudhunagar Spartans 34/10) */}
+                {allInningsList && allInningsList.length > 1 && (
+                  <View style={styles.previousInningsBanner}>
+                    <Text style={styles.previousInningsText}>
+                      1st Inn: <Text style={styles.previousInningsBold}>{allInningsList[0].battingTeam} {allInningsList[0].score}</Text>
                     </Text>
-
-                    {/* Win Margin Badge */}
-                    <View style={styles.winMarginChip}>
-                      <Text style={styles.winMarginTrophy}>🏆</Text>
-                      <Text style={styles.winMarginText}>{winMargin}</Text>
-                    </View>
-
-                    {/* Full Result Summary */}
-                    <Text style={styles.championFullSummary}>
-                      "{fullSummary}"
-                    </Text>
-
-                    {/* Tournament & Venue Details */}
-                    <View style={styles.championTournamentRow}>
-                      <Text style={styles.championTournamentText}>
-                        🏏 {matchInfo.tournament || 'Virudhunagar District Cricket'} • {matchInfo.venue || 'CFVD Ground'}
-                      </Text>
-                    </View>
-
-                    {/* Action buttons */}
-                    <View style={styles.championActionsRow}>
-                      <TouchableOpacity
-                        style={styles.viewScorecardBtn}
-                        onPress={() => navigate('Scorecard', { matchId })}
-                        activeOpacity={0.85}
-                      >
-                        <Text style={styles.viewScorecardBtnText}>📊 View Official Scorecard ▶</Text>
-                      </TouchableOpacity>
-                    </View>
                   </View>
-                </View>
-              </View>
-            );
-          })()}
-
-          {/* Over Complete Banner (Only if LIVE and not in Innings Break) */}
-          {isOverComplete && matchStatus === 'LIVE' && !isInningsBreak && !isMatchEnded && (
-            <View style={styles.overCompleteBanner}>
-              <Text style={styles.overCompleteText}>
-                ⚠️ Over Complete! Six legal deliveries bowled. Please appoint the next bowler.
-              </Text>
-              <TouchableOpacity style={styles.openBowlerBtn} onPress={() => setShowBowlerModal(true)}>
-                <Text style={styles.openBowlerBtnText}>Select Bowler</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* EDIT MODE STICKY BANNER */}
-          {isEditMode && (
-            <View style={styles.editModeBanner}>
-              <View style={{ flex: 1, marginRight: 8 }}>
-                <Text style={styles.editModeBannerTitle}>✏️ EDIT MODE ACTIVE</Text>
-                <Text style={styles.editModeBannerSub}>
-                  Scorer correction mode is ON. Tap undo or tap balls below to edit.
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={styles.editModeUndoBtn}
-                onPress={handleUndoLastDelivery}
-                disabled={isUndoingDelivery}
-              >
-                {isUndoingDelivery ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.editModeUndoBtnText}>↺ Undo Ball</Text>
                 )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.editModeExitBtn}
-                onPress={() => setIsEditMode(false)}
-              >
-                <Text style={styles.editModeExitBtnText}>Exit Edit</Text>
-              </TouchableOpacity>
-            </View>
-          )}
+                {(() => {
+                  const isSecondInnings = Boolean((allInningsList && allInningsList.length > 1) || matchInfo?.currentInningsNumber === 2);
+                  const totalMatchOvers = matchInfo?.revisedOvers || matchInfo?.overs || 20;
+                  const totalMatchBalls = Math.round(totalMatchOvers * 6);
+                  const remainingBalls = Math.max(0, totalMatchBalls - balls);
+                  const remOvers = `${Math.floor(remainingBalls / 6)}.${remainingBalls % 6}`;
+                  const crr = balls > 0 ? ((runs / balls) * 6).toFixed(2) : '0.00';
+                  const runsNeeded = targetRuns ? Math.max(0, targetRuns - runs) : 0;
+                  const rrr = remainingBalls > 0 && targetRuns && runsNeeded > 0
+                    ? (((runsNeeded) / remainingBalls) * 6).toFixed(2)
+                    : null;
 
-          {/* TOP SECTION: SCOREBOARD & PLAYERS */}
-          <View style={styles.topSection}>
-            <View style={styles.scoreBoardCard}>
-              {/* Previous Innings Overview Banner (Preserves & Displays Innings 1 score e.g. Virudhunagar Spartans 34/10) */}
-              {allInningsList && allInningsList.length > 1 && (
-                <View style={styles.previousInningsBanner}>
-                  <Text style={styles.previousInningsText}>
-                    1st Inn: <Text style={styles.previousInningsBold}>{allInningsList[0].battingTeam} {allInningsList[0].score}</Text>
-                  </Text>
-                </View>
-              )}
-              <Text style={styles.battingTeam}>
-                {(matchInfo?.battingTeam || matchInfo?.teamA || 'BATTING TEAM').toUpperCase()}
-                {allInningsList && allInningsList.length > 1 ? ' (2ND INNINGS)' : ' (1ST INNINGS)'}
-              </Text>
-              <View style={styles.scoreRow}>
-                <Text style={styles.scoreText}>{runs}/{wickets}</Text>
-                <Text style={styles.oversText}>({getOvers(balls)})</Text>
+                  return (
+                    <>
+                      <Text style={styles.battingTeam}>
+                        {(matchInfo?.battingTeam || matchInfo?.teamA || 'BATTING TEAM').toUpperCase()}
+                        {isSecondInnings ? ' (2ND INNINGS)' : ' (1ST INNINGS)'}
+                      </Text>
+                      <View style={styles.scoreRow}>
+                        <Text style={styles.scoreText}>{runs}/{wickets}</Text>
+                        <Text style={styles.oversText}>
+                          ({getOvers(balls)} / {totalMatchOvers} Ov)
+                        </Text>
+                      </View>
+                      <Text style={styles.rrText}>
+                        CRR: {crr}
+                        {isSecondInnings && targetRuns ? (
+                          runs >= targetRuns ? (
+                            ` | Target: ${targetRuns} (Target Achieved!)`
+                          ) : (
+                            ` | Target: ${targetRuns} (Need ${runsNeeded} runs in ${remainingBalls} balls • RRR: ${rrr || '0.00'})`
+                          )
+                        ) : (
+                          ` • Remaining: ${remainingBalls} balls (${remOvers} Ov)`
+                        )}
+                      </Text>
+                    </>
+                  );
+                })()}
+                {lastDismissal ? (
+                  <View style={styles.lastWicketChip}>
+                    <Text style={styles.lastWicketTag}>⚡ LAST WICKET (Ov {lastDismissal.ball}):</Text>
+                    <Text style={styles.lastWicketText} numberOfLines={1}>
+                      {lastDismissal.batterName} ({lastDismissal.dismissalText || lastDismissal.dismissalType})
+                    </Text>
+                  </View>
+                ) : null}
               </View>
-              <Text style={styles.rrText}>
-                CRR: {balls > 0 ? ((runs / balls) * 6).toFixed(2) : '0.00'}
-                {targetRuns ? ` | Target: ${targetRuns} (Need ${Math.max(0, targetRuns - runs)} runs)` : ''}
-              </Text>
-              {lastDismissal ? (
-                <View style={styles.lastWicketChip}>
-                  <Text style={styles.lastWicketTag}>⚡ LAST WICKET (Ov {lastDismissal.ball}):</Text>
-                  <Text style={styles.lastWicketText} numberOfLines={1}>
-                    {lastDismissal.batterName} ({lastDismissal.dismissalText || lastDismissal.dismissalType})
-                  </Text>
-                </View>
-              ) : null}
-            </View>
 
-            <View style={styles.playersContainer}>
-              <View style={styles.playerCard}>
-                <View style={styles.battersCardHeader}>
-                  <Text style={styles.playerRole}>BATTERS</Text>
+              <View style={styles.playersContainer}>
+                <View style={styles.playerCard}>
+                  <View style={styles.battersCardHeader}>
+                    <Text style={styles.playerRole}>BATTERS</Text>
+                    <TouchableOpacity
+                      style={styles.swapStrikeBtn}
+                      onPress={handleSwapStrike}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.swapStrikeBtnText}>⇄ Swap Strike</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Striker Row - Tappable to change player */}
                   <TouchableOpacity
-                    style={styles.swapStrikeBtn}
-                    onPress={handleSwapStrike}
+                    style={[styles.playerRow, styles.playerRowTappable]}
+                    onPress={() => handleOpenChangeBatter('striker')}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.swapStrikeBtnText}>⇄ Swap Strike</Text>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={[styles.playerName, styles.striker]} numberOfLines={1}>
+                        * {striker ? striker.name : 'Striker TBA'}
+                      </Text>
+                      <View style={styles.changeBatterBadge}>
+                        <Text style={styles.changeBatterBadgeText}>Change ✎</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.playerStats}>
+                      {striker ? `${striker.runs} (${striker.balls})` : '0 (0)'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* Non-Striker Row - Tappable to change player */}
+                  <TouchableOpacity
+                    style={[styles.playerRow, styles.playerRowTappable]}
+                    onPress={() => handleOpenChangeBatter('nonStriker')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                      <Text style={styles.playerName} numberOfLines={1}>
+                        {nonStriker ? nonStriker.name : 'Non-Striker TBA'}
+                      </Text>
+                      <View style={styles.changeBatterBadge}>
+                        <Text style={styles.changeBatterBadgeText}>Change ✎</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.playerStats}>
+                      {nonStriker ? `${nonStriker.runs} (${nonStriker.balls})` : '0 (0)'}
+                    </Text>
                   </TouchableOpacity>
                 </View>
 
-                {/* Striker Row - Tappable to change player */}
-                <TouchableOpacity
-                  style={[styles.playerRow, styles.playerRowTappable]}
-                  onPress={() => handleOpenChangeBatter('striker')}
-                  activeOpacity={0.7}
-                >
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={[styles.playerName, styles.striker]} numberOfLines={1}>
-                      * {striker ? striker.name : 'Striker TBA'}
-                    </Text>
-                    <View style={styles.changeBatterBadge}>
-                      <Text style={styles.changeBatterBadgeText}>Change ✎</Text>
-                    </View>
+                <View style={styles.playerCard}>
+                  <View style={styles.battersCardHeader}>
+                    <Text style={styles.playerRole}>CURRENT BOWLER</Text>
+                    <TouchableOpacity
+                      style={styles.injurySubPill}
+                      onPress={handleOpenInjuryBowlerChange}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.injurySubPillText}>🩹 Injury Sub</Text>
+                    </TouchableOpacity>
                   </View>
-                  <Text style={styles.playerStats}>
-                    {striker ? `${striker.runs} (${striker.balls})` : '0 (0)'}
-                  </Text>
-                </TouchableOpacity>
-
-                {/* Non-Striker Row - Tappable to change player */}
-                <TouchableOpacity
-                  style={[styles.playerRow, styles.playerRowTappable]}
-                  onPress={() => handleOpenChangeBatter('nonStriker')}
-                  activeOpacity={0.7}
-                >
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={styles.playerName} numberOfLines={1}>
-                      {nonStriker ? nonStriker.name : 'Non-Striker TBA'}
-                    </Text>
-                    <View style={styles.changeBatterBadge}>
-                      <Text style={styles.changeBatterBadgeText}>Change ✎</Text>
+                  <TouchableOpacity
+                    style={[styles.playerRow, styles.playerRowTappable]}
+                    onPress={handleOpenChangeBowler}
+                    activeOpacity={0.7}
+                  >
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                      <Text style={styles.playerName} numberOfLines={1}>
+                        🎳 {bowler ? bowler.name : 'Bowler TBA'}
+                      </Text>
+                      <View style={styles.changeBatterBadge}>
+                        <Text style={styles.changeBatterBadgeText}>Change ✎</Text>
+                      </View>
                     </View>
-                  </View>
-                  <Text style={styles.playerStats}>
-                    {nonStriker ? `${nonStriker.runs} (${nonStriker.balls})` : '0 (0)'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.playerCard}>
-                <View style={styles.battersCardHeader}>
-                  <Text style={styles.playerRole}>CURRENT BOWLER</Text>
+                    <Text style={styles.playerStats}>
+                      {bowler
+                        ? `${bowler.overs} ov | ${bowler.runs}/${bowler.wickets} | ER: ${bowler.economy}`
+                        : '0.0 ov | 0/0 | ER: 0'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <TouchableOpacity
-                  style={[styles.playerRow, styles.playerRowTappable]}
-                  onPress={handleOpenChangeBowler}
-                  activeOpacity={0.7}
-                >
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={styles.playerName} numberOfLines={1}>
-                      🎳 {bowler ? bowler.name : 'Bowler TBA'}
-                    </Text>
-                    <View style={styles.changeBatterBadge}>
-                      <Text style={styles.changeBatterBadgeText}>Change ✎</Text>
-                    </View>
-                  </View>
-                  <Text style={styles.playerStats}>
-                    {bowler
-                      ? `${bowler.overs} ov | ${bowler.runs}/${bowler.wickets} | ER: ${bowler.economy}`
-                      : '0.0 ov | 0/0 | ER: 0'}
-                  </Text>
-                </TouchableOpacity>
               </View>
             </View>
-          </View>
 
-          {/* BOTTOM SECTION: SCORING ENGINE CONTROLS & KEYPAD (Matches Manual Image 1 Slide 3 & 4 and Image 2) */}
-          <View style={styles.controlsSection}>
-            <View style={styles.controlPanel}>
-              {/* 1. Primary Action Row: START BALL / END BALL & START OVER / END OVER */}
-              <View style={styles.primaryEngineActionBar}>
-                <TouchableOpacity
-                  style={[
-                    styles.enginePrimaryBtn,
-                    isBallInProgress ? styles.engineEndBallBtn : styles.engineStartBallBtn,
-                    (matchStatus !== 'LIVE' || isInningsBreak || isMatchEnded) && styles.btnDisabled
-                  ]}
-                  disabled={matchStatus !== 'LIVE' || isInningsBreak || isMatchEnded}
-                  onPress={() => setIsBallInProgress(!isBallInProgress)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.enginePrimaryBtnText}>
-                    {isBallInProgress ? '● END BALL' : 'START BALL ▶'}
+            {/* Broadcast Live Kinetic Ball Action Telemetry */}
+            {(() => {
+              const latest = recentDeliveries && recentDeliveries[0];
+              const rBatter = latest
+                ? (typeof latest.runs === 'number'
+                    ? latest.runs
+                    : typeof latest.runsBatter === 'number'
+                      ? latest.runsBatter
+                      : typeof latest.runs_batter === 'number'
+                        ? latest.runs_batter
+                        : 0)
+                : 0;
+              const rExtras = latest
+                ? (typeof latest.runsExtras === 'number'
+                    ? latest.runsExtras
+                    : typeof latest.runs_extras === 'number'
+                      ? latest.runs_extras
+                      : 0)
+                : 0;
+              const rTotal = latest
+                ? (typeof latest.total_runs === 'number'
+                    ? latest.total_runs
+                    : typeof latest.totalRuns === 'number'
+                      ? latest.totalRuns
+                      : (rBatter + rExtras))
+                : 0;
+
+              const runsBat = pendingBoundaryRun !== null ? pendingBoundaryRun : rBatter;
+              const rawExtra = normalizeExtraType(latest?.extraType || latest?.extra_type || latest?.extra || (latest?.is_wide ? 'wide' : (latest?.is_no_ball ? 'noball' : null)));
+
+              // Resolve the exact batter who actually faced this delivery
+              const facedBatter = (latest?.strikerId
+                ? (striker?.id === latest.strikerId ? striker : (nonStriker?.id === latest.strikerId ? nonStriker : null))
+                : null) || (runsBat % 2 === 1 ? nonStriker : striker) || striker;
+
+              // Check if latest delivery is from initial page load / refresh (should NOT popup)
+              const latestId = latest ? String(latest.id || `${latest.ball || '0'}`) : null;
+              const isInitialLoadBall = !hasRecordedNewBallRef.current && (
+                !latest || (initialDeliveryIdRef.current !== null && latestId === initialDeliveryIdRef.current)
+              );
+
+              const ballEvents = (latest && !isInitialLoadBall) ? mapBallToEvents({
+                ballId: `${latest.id || recentDeliveries.length}-${runsBat}-${runs}-${wickets}`,
+                runsOffBat: runsBat,
+                extraType: rawExtra,
+                extraRuns: rExtras > 0 ? rExtras : undefined,
+                isWicket: Boolean(latest?.wicket),
+                dismissal: normalizeDismissal(latest?.wicket?.type || latest?.dismissal_type),
+                dismissedName: latest?.wicket?.batter || latest?.dismissed_name,
+                batterName: facedBatter?.name || striker?.name || 'Striker',
+                batterRunsAfter: facedBatter?.runs,
+                batterBallsAfter: facedBatter?.balls,
+                bowlerName: bowler?.name || 'Bowler',
+              }) : null;
+
+              return (
+                <View style={{ position: 'relative', minHeight: 48, marginVertical: 4 }}>
+                  <VPLEventBanner
+                    role="scorer"
+                    events={ballEvents}
+                    skipInitial={true}
+                    onMilestonePress={(event) => {
+                      const isHundred = event.kind === 'hundred';
+                      const targetBatter = (striker?.name === event.primary ? striker : (nonStriker?.name === event.primary ? nonStriker : null)) || facedBatter || striker;
+                      triggerMilestone({
+                        type: isHundred ? 'BATTER_100' : 'BATTER_50',
+                        title: isHundred ? 'MAGNIFICENT CENTURY!' : 'HALF-CENTURY!',
+                        badge: isHundred ? '👑 100 RUNS CENTURY 👑' : '⭐ 50 RUNS MILESTONE ⭐',
+                        subtitle: isHundred
+                          ? 'Outstanding masterclass ton! Raises the bat to a standing ovation.'
+                          : 'Splendid half-century under pressure! A crucial innings for the team.',
+                        playerName: event.primary || targetBatter?.name || 'Champion',
+                        teamName: matchInfo?.battingTeam || 'Batting Team',
+                        scoreText: `${targetBatter?.runs || 50}*`,
+                        ballsText: `${targetBatter?.balls || 0} Balls`,
+                        strikeRateText: targetBatter?.strikeRate || (targetBatter?.balls ? ((targetBatter.runs / targetBatter.balls) * 100).toFixed(1) : '0.0'),
+                        fours: targetBatter?.fours || 0,
+                        sixes: targetBatter?.sixes || 0
+                      });
+                    }}
+                    bottomOffset={0}
+                    style={{ position: 'relative', left: 0, right: 0, top: 0, bottom: 0 }}
+                  />
+                </View>
+              );
+            })()}
+            {/* THIS OVER & RECENT DELIVERIES INTERACTIVE STRIP (CricHeroes Retroactive Ball Correction) */}
+            <View style={[styles.recentDeliveriesCard, isEditMode && styles.recentDeliveriesCardEditMode]}>
+              <View style={styles.recentDeliveriesHeader}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Text style={styles.recentDeliveriesTitle}>
+                    {isEditMode ? '✏️ EDIT BALLS (CLICK ANY BALL TO MODIFY)' : '⚡ THIS OVER / RECENT DELIVERIES'}
                   </Text>
-                </TouchableOpacity>
+                  {isEditMode ? (
+                    <View style={styles.editModeTagPill}>
+                      <Text style={styles.editModeTagPillText}>DIRECT RETROACTIVE EDIT ON</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.recentDeliveriesSub}>
+                      {recentDeliveries && recentDeliveries.length > 0 ? `(${recentDeliveries.length} balls recorded)` : ''}
+                    </Text>
+                  )}
+                </View>
+                {isEditMode && (
+                  <Text style={styles.editModeTapHint}>
+                    Tap any ball chip below to directly fix runs, extras or wickets without undoing subsequent balls.
+                  </Text>
+                )}
+              </View>
 
-                <TouchableOpacity
-                  style={[
-                    styles.enginePrimaryBtn,
-                    styles.engineOverBtn,
-                    (matchStatus !== 'LIVE' || isInningsBreak || isMatchEnded) && styles.btnDisabled
-                  ]}
-                  disabled={matchStatus !== 'LIVE' || isInningsBreak || isMatchEnded}
-                  onPress={() => {
-                    if (isOverComplete || (balls % 6 === 0 && balls > 0)) {
-                      setShowBowlerModal(true);
-                    } else {
-                      const msg = `Current Over: ${getOvers(balls)} (${balls % 6} legal deliveries bowled). Confirm end over?`;
-                      Platform.OS === 'web'
-                        ? (window.confirm(msg) && setShowBowlerModal(true))
-                        : Alert.alert('End Over', msg, [
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentDeliveriesScroll}>
+                {recentDeliveries && recentDeliveries.length > 0 ? (
+                  recentDeliveries.map((del, idx) => {
+                    const isWicket = Boolean(del.wicket);
+                    const isFour = del.runs === 4 && !del.extra;
+                    const isSix = del.runs === 6 && !del.extra;
+                    const isExtra = Boolean(del.extra);
+                    const isDot = del.runs === 0 && !isExtra && !isWicket;
+
+                    const overIdx = typeof del.overNumber === 'number'
+                      ? del.overNumber
+                      : parseInt(String(del.ball || '0').split('.')[0], 10);
+
+                    const prevDel = idx > 0 ? recentDeliveries[idx - 1] : null;
+                    const prevOverIdx = prevDel
+                      ? (typeof prevDel.overNumber === 'number'
+                          ? prevDel.overNumber
+                          : parseInt(String(prevDel.ball || '0').split('.')[0], 10))
+                      : null;
+
+                    const isNewOverSection = idx === 0 || overIdx !== prevOverIdx;
+                    const theme = RECENT_OVER_THEMES[Math.abs(overIdx) % RECENT_OVER_THEMES.length];
+
+                    // Total runs scored in this over
+                    const overTotalRuns = recentDeliveries
+                      .filter(d => {
+                        const o = typeof d.overNumber === 'number'
+                          ? d.overNumber
+                          : parseInt(String(d.ball || '0').split('.')[0], 10);
+                        return o === overIdx;
+                      })
+                      .reduce((sum, d) => sum + (Number(d.runs) || 0) + (Number(d.runsExtras) || 0), 0);
+
+                    return (
+                      <React.Fragment key={`del-frag-${del.id || idx}`}>
+                        {isNewOverSection && (
+                          <View
+                            style={[
+                              styles.overDividerBadge,
+                              idx > 0 && { marginLeft: 10 },
+                              {
+                                backgroundColor: theme.badgeBg,
+                                borderColor: theme.badgeBorder,
+                              }
+                            ]}
+                          >
+                            <Text style={[styles.overDividerBadgeText, { color: theme.badgeText }]}>
+                              Ov {overIdx + 1}
+                            </Text>
+                            <Text style={[styles.overDividerRunsText, { color: theme.badgeText }]}>
+                              {overTotalRuns}r
+                            </Text>
+                          </View>
+                        )}
+
+                        <TouchableOpacity
+                          key={`del-${del.id || idx}`}
+                          style={[
+                            styles.ballChip,
+                            {
+                              backgroundColor: isWicket ? '#fef2f2' : isFour ? '#ecfdf5' : isSix ? '#eff6ff' : isExtra ? '#fffbeb' : theme.chipBg,
+                              borderColor: isWicket ? '#ef4444' : isFour ? '#10b981' : isSix ? '#3b82f6' : isExtra ? '#f59e0b' : theme.chipBorder,
+                            },
+                            isEditMode && styles.ballChipEditMode
+                          ]}
+                          onPress={() => {
+                            if (isEditMode) {
+                              handleOpenEditDelivery(del);
+                            } else {
+                              setInspectingDelivery(del);
+                            }
+                          }}
+                          activeOpacity={0.7}
+                        >
+                          {isEditMode && <Text style={styles.ballChipPencil}>✏️</Text>}
+                          <Text
+                            style={[
+                              styles.ballChipText,
+                              isWicket && styles.ballChipTextWicket,
+                              isFour && styles.ballChipTextFour,
+                              isSix && styles.ballChipTextSix,
+                              isExtra && styles.ballChipTextExtra,
+                              isDot && { color: theme.dotText },
+                              !isWicket && !isFour && !isSix && !isExtra && !isDot && { color: theme.dotText }
+                            ]}
+                          >
+                            {del.text}
+                          </Text>
+                          <Text style={[styles.ballChipOverText, { color: theme.subText }]}>{del.ball}</Text>
+                        </TouchableOpacity>
+                      </React.Fragment>
+                    );
+                  })
+                ) : (
+                  <View style={styles.emptyRecentBallsBox}>
+                    <Text style={styles.emptyRecentBallsText}>No deliveries recorded in this innings yet</Text>
+                  </View>
+                )}
+              </ScrollView>
+            </View>
+
+            {/* BOTTOM SECTION: SCORING ENGINE CONTROLS & KEYPAD (Matches Manual Image 1 Slide 3 & 4 and Image 2) */}
+            <View style={styles.controlsSection}>
+              <View style={styles.controlPanel}>
+                {/* 1. Primary Action Row: START BALL / END BALL & START OVER / END OVER */}
+                <View style={styles.primaryEngineActionBar}>
+                  <TouchableOpacity
+                    style={[
+                      styles.enginePrimaryBtn,
+                      isBallInProgress ? styles.engineEndBallBtn : styles.engineStartBallBtn,
+                      (matchStatus !== 'LIVE' || isInningsBreak || isMatchEnded) && styles.btnDisabled
+                    ]}
+                    disabled={matchStatus !== 'LIVE' || isInningsBreak || isMatchEnded}
+                    onPress={() => setIsBallInProgress(!isBallInProgress)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.enginePrimaryBtnText}>
+                      {isBallInProgress ? '● END BALL' : 'START BALL ▶'}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.enginePrimaryBtn,
+                      styles.engineOverBtn,
+                      (matchStatus !== 'LIVE' || isInningsBreak || isMatchEnded) && styles.btnDisabled
+                    ]}
+                    disabled={matchStatus !== 'LIVE' || isInningsBreak || isMatchEnded}
+                    onPress={() => {
+                      if (isOverComplete || (balls % 6 === 0 && balls > 0)) {
+                        setShowBowlerModal(true);
+                      } else {
+                        const msg = `Current Over: ${getOvers(balls)} (${balls % 6} legal deliveries bowled). Confirm end over?`;
+                        Platform.OS === 'web'
+                          ? (window.confirm(msg) && setShowBowlerModal(true))
+                          : Alert.alert('End Over', msg, [
                             { text: 'Cancel', style: 'cancel' },
                             { text: 'End Over Now', onPress: () => setShowBowlerModal(true) }
                           ]);
-                    }
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.enginePrimaryBtnText}>
-                    {isOverComplete ? 'START OVER' : `END OVER (${getOvers(balls)})`}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* 2. Mode & Shot Row (Matches Screenshot: MODE: AROUND/OVER THE WICKET, SHOT: DEFENSIVE) */}
-              <View style={styles.engineModeRow}>
-                <View style={styles.engineModeBox}>
-                  <Text style={styles.engineBarLabel}>MODE:</Text>
-                  <TouchableOpacity
-                    style={[
-                      styles.engineModeToggleBtn,
-                      bowlingMode === 'OVER_THE_WICKET' && styles.engineModeToggleBtnActive
-                    ]}
-                    onPress={() => setBowlingMode('OVER_THE_WICKET')}
-                  >
-                    <Text style={[
-                      styles.engineModeToggleText,
-                      bowlingMode === 'OVER_THE_WICKET' && styles.engineModeToggleTextActive
-                    ]}>
-                      OVER WICKET
-                    </Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[
-                      styles.engineModeToggleBtn,
-                      bowlingMode === 'AROUND_THE_WICKET' && styles.engineModeToggleBtnActive
-                    ]}
-                    onPress={() => setBowlingMode('AROUND_THE_WICKET')}
-                  >
-                    <Text style={[
-                      styles.engineModeToggleText,
-                      bowlingMode === 'AROUND_THE_WICKET' && styles.engineModeToggleTextActive
-                    ]}>
-                      AROUND WICKET
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-
-                <TouchableOpacity
-                  style={[styles.engineShotBox, isShotTypeDropdownOpen && styles.engineShotBoxActive]}
-                  onPress={() => {
-                    setIsShotTypeDropdownOpen(!isShotTypeDropdownOpen);
-                    setIsBallTypeDropdownOpen(false);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.engineBarLabel}>SHOT:</Text>
-                  <Text style={styles.engineShotValue} numberOfLines={1}>
-                    {selectedShotType.toUpperCase()} {isShotTypeDropdownOpen ? '▴' : '▾'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* 3. Ball Type & Shot Type Dropdowns */}
-              <View style={[styles.engineTypeRow, { zIndex: 100 }]}>
-                {/* BALL TYPE DROPDOWN */}
-                <View style={{ flex: 1, position: 'relative', zIndex: isBallTypeDropdownOpen ? 101 : 1 }}>
-                  <TouchableOpacity
-                    style={[styles.engineTypeBtn, isBallTypeDropdownOpen && styles.engineTypeBtnActive]}
-                    onPress={() => {
-                      setIsBallTypeDropdownOpen(!isBallTypeDropdownOpen);
-                      setIsShotTypeDropdownOpen(false);
+                      }
                     }}
-                    activeOpacity={0.75}
+                    activeOpacity={0.7}
                   >
-                    <Text style={styles.engineTypeBtnLabel}>BALL TYPE:</Text>
-                    <Text style={styles.engineTypeBtnVal} numberOfLines={1}>
-                      {selectedBallType} {isBallTypeDropdownOpen ? '▴' : '▾'}
+                    <Text style={styles.enginePrimaryBtnText}>
+                      {isOverComplete ? 'START OVER' : `END OVER (${getOvers(balls)})`}
                     </Text>
                   </TouchableOpacity>
-
-                  {isBallTypeDropdownOpen && (
-                    <View style={styles.engineDropdownMenu}>
-                      <View style={styles.engineDropdownHeader}>
-                        <Text style={styles.engineDropdownHeaderText}>SELECT BALL TYPE</Text>
-                        <TouchableOpacity onPress={() => setIsBallTypeDropdownOpen(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Text style={styles.engineDropdownCloseText}>✕</Text>
-                        </TouchableOpacity>
-                      </View>
-                      <ScrollView
-                        style={{ maxHeight: 220 }}
-                        nestedScrollEnabled
-                        showsVerticalScrollIndicator={true}
-                      >
-                        {BALL_TYPE_OPTIONS.map((bt) => {
-                          const isSelected = selectedBallType === bt;
-                          return (
-                            <TouchableOpacity
-                              key={bt}
-                              style={[styles.engineDropdownItem, isSelected && styles.engineDropdownItemActive]}
-                              onPress={() => {
-                                setSelectedBallType(bt);
-                                setIsBallTypeDropdownOpen(false);
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={[styles.engineDropdownItemText, isSelected && styles.engineDropdownItemTextActive]}>
-                                {bt}
-                              </Text>
-                              {isSelected && <Text style={styles.engineDropdownCheck}>✓</Text>}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </ScrollView>
-                    </View>
-                  )}
                 </View>
 
-                {/* SHOT TYPE DROPDOWN */}
-                <View style={{ flex: 1, position: 'relative', zIndex: isShotTypeDropdownOpen ? 101 : 1 }}>
+                {/* SMART RULES QUICK BAR & FREE HIT LIVE BANNER */}
+                {isFreeHitActive && (
+                  <View style={styles.freeHitLiveBanner}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                      <Text style={{ fontSize: 18 }}>⚡</Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.freeHitLiveTitle}>FREE HIT IN PROGRESS!</Text>
+                        <Text style={styles.freeHitLiveSub}>Immunity: Bowled, Caught, LBW, Stumped • RUN OUT ONLY</Text>
+                      </View>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.freeHitRulesBtn}
+                      onPress={() => {
+                        setActiveCricketRule('FREE_HIT');
+                        setCricketRuleContext({
+                          bowlerName: bowler?.name || 'Bowler',
+                          strikerName: striker?.name || 'Striker',
+                          nonStrikerName: nonStriker?.name || 'Non-Striker'
+                        });
+                        setShowCricketRulesModal(true);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.freeHitRulesBtnText}>⚖️ View Rule</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Cricket Rules, Umpire Signals & DLS/VJD Quick Navigation Buttons */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10, flexWrap: isDesktop ? 'nowrap' : 'wrap' }}>
                   <TouchableOpacity
-                    style={[styles.engineTypeBtn, isShotTypeDropdownOpen && styles.engineTypeBtnActive]}
+                    style={[styles.smartRulesNavBtn, { flex: isDesktop ? 1 : undefined, minWidth: isDesktop ? 0 : '48%', marginBottom: 0 }]}
                     onPress={() => {
-                      setIsShotTypeDropdownOpen(!isShotTypeDropdownOpen);
-                      setIsBallTypeDropdownOpen(false);
+                      setActiveCricketRule('FREE_HIT');
+                      setShowCricketRulesModal(true);
                     }}
-                    activeOpacity={0.75}
+                    activeOpacity={0.7}
                   >
-                    <Text style={styles.engineTypeBtnLabel}>SHOT TYPE:</Text>
-                    <Text style={styles.engineTypeBtnVal} numberOfLines={1}>
-                      {selectedShotType} {isShotTypeDropdownOpen ? '▴' : '▾'}
-                    </Text>
+                    <Text style={styles.smartRulesNavBtnText} numberOfLines={1}>⚖️ Smart Cricket Rules</Text>
                   </TouchableOpacity>
 
-                  {isShotTypeDropdownOpen && (
-                    <View style={styles.engineDropdownMenu}>
-                      <View style={styles.engineDropdownHeader}>
-                        <Text style={styles.engineDropdownHeaderText}>SELECT SHOT TYPE</Text>
-                        <TouchableOpacity onPress={() => setIsShotTypeDropdownOpen(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Text style={styles.engineDropdownCloseText}>✕</Text>
+                  <TouchableOpacity
+                    style={[styles.smartRulesNavBtn, { flex: isDesktop ? 1 : undefined, minWidth: isDesktop ? 0 : '48%', marginBottom: 0, backgroundColor: '#0284c7', borderColor: '#0ea5e9' }]}
+                    onPress={() => setShowUmpireGallery(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.smartRulesNavBtnText, { color: '#ffffff' }]} numberOfLines={1}>🏁 Umpire Hand Signals</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.smartRulesNavBtn, { flex: isDesktop ? 1 : undefined, minWidth: isDesktop ? 0 : '100%', marginBottom: 0, backgroundColor: '#0e7490', borderColor: '#0891b2' }]}
+                    onPress={() => setShowDlsModal(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.smartRulesNavBtnText, { color: '#ffffff' }]} numberOfLines={1}>🧮 DLS & VJD Methods</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Main Scoring Keypad Grid */}
+                <View style={styles.engineKeypadContainer}>
+                  {/* Row 1: 0, 1, 2 */}
+                  <View style={styles.engineKeypadRow}>
+                    {[0, 1, 2].map((run) => {
+                      const isDisabled =
+                        isOverComplete ||
+                        showBowlerModal ||
+                        isSubmittingDelivery ||
+                        matchStatus !== 'LIVE' ||
+                        isInningsBreak ||
+                        isMatchEnded;
+
+                      return (
+                        <TouchableOpacity
+                          key={`key-${run}`}
+                          disabled={isDisabled}
+                          style={[
+                            styles.engineKeypadBtn,
+                            run === 0 ? styles.scoreBtnDot : styles.scoreBtnNormal,
+                            isDisabled && styles.btnDisabled
+                          ]}
+                          onPress={() => handleScore(run, 'normal')}
+                          activeOpacity={0.7}
+                        >
+                          <Text
+                            style={[
+                              styles.engineKeypadText,
+                              run === 0 ? styles.scoreBtnTextDot : styles.scoreBtnTextNormal
+                            ]}
+                          >
+                            {run}
+                          </Text>
                         </TouchableOpacity>
-                      </View>
-                      <ScrollView
-                        style={{ maxHeight: 220 }}
-                        nestedScrollEnabled
-                        showsVerticalScrollIndicator={true}
-                      >
-                        {SHOT_TYPE_OPTIONS.map((st) => {
-                          const isSelected = selectedShotType === st;
-                          return (
-                            <TouchableOpacity
-                              key={st}
-                              style={[styles.engineDropdownItem, isSelected && styles.engineDropdownItemActive]}
-                              onPress={() => {
-                                setSelectedShotType(st);
-                                setIsShotTypeDropdownOpen(false);
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <Text style={[styles.engineDropdownItemText, isSelected && styles.engineDropdownItemTextActive]}>
-                                {st}
-                              </Text>
-                              {isSelected && <Text style={styles.engineDropdownCheck}>✓</Text>}
-                            </TouchableOpacity>
-                          );
-                        })}
-                      </ScrollView>
-                    </View>
-                  )}
+                      );
+                    })}
+                  </View>
+
+                  {/* Row 2: 3, 4, 6 */}
+                  <View style={styles.engineKeypadRow}>
+                    {[3, 4, 6].map((run) => {
+                      const isDisabled =
+                        isOverComplete ||
+                        showBowlerModal ||
+                        isSubmittingDelivery ||
+                        matchStatus !== 'LIVE' ||
+                        isInningsBreak ||
+                        isMatchEnded;
+
+                      let bStyle = styles.scoreBtnNormal;
+                      let tStyle: any = [styles.engineKeypadText, styles.scoreBtnTextNormal];
+                      if (run === 4) {
+                        bStyle = styles.scoreBtnFour;
+                        tStyle = [styles.engineKeypadText, styles.scoreBtnTextBoundary];
+                      }
+                      if (run === 6) {
+                        bStyle = styles.scoreBtnSix;
+                        tStyle = [styles.engineKeypadText, styles.scoreBtnTextSix];
+                      }
+
+                      return (
+                        <TouchableOpacity
+                          key={`key-${run}`}
+                          disabled={isDisabled}
+                          style={[styles.engineKeypadBtn, bStyle, isDisabled && styles.btnDisabled]}
+                          onPress={() => handleScore(run, 'normal')}
+                          activeOpacity={0.7}
+                        >
+                          <Text style={tStyle}>{run}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  {/* Row 3: MORE RUNS, OVER THROW, EXTRAS */}
+                  <View style={styles.engineKeypadRow}>
+                    <TouchableOpacity
+                      style={[styles.engineKeypadBtn, styles.engineAuxKeypadBtn]}
+                      onPress={() => {
+                        setMoreRunsReasonKey('');
+                        setMoreRunsReason('');
+                        setCustomMoreRunsReason('');
+                        setShowMoreRunsModal(true);
+                      }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.engineAuxKeypadText}>MORE RUNS</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.engineKeypadBtn, styles.engineAuxKeypadBtn]}
+                      onPress={() => setShowOverThrowModal(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.engineAuxKeypadText}>OVER THROW</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.engineKeypadBtn, styles.engineAuxKeypadBtn, { backgroundColor: '#005960', borderColor: '#0d9488' }]}
+                      onPress={() => setShowExtrasModal(true)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.engineAuxKeypadText, { color: '#fef08a' }]}>EXTRAS</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Row 4: WICKET */}
+                  <View style={styles.engineKeypadRow}>
+                    <TouchableOpacity
+                      disabled={
+                        isOverComplete ||
+                        showBowlerModal ||
+                        isSubmittingDelivery ||
+                        matchStatus !== 'LIVE' ||
+                        isInningsBreak ||
+                        isMatchEnded
+                      }
+                      style={[
+                        styles.engineKeypadBtn,
+                        styles.wicketBtn,
+                        { flex: 1 },
+                        (isOverComplete || isSubmittingDelivery || matchStatus !== 'LIVE' || isInningsBreak || isMatchEnded) && styles.btnDisabled
+                      ]}
+                      onPress={handleWicketClick}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.engineKeypadText, styles.wicketBtnText]}>🛑 WICKET</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
 
-              {/* 4. Auxiliary Action Buttons (Mark for Edit, Remarks, Pitch Map, Wagon Wheel) */}
-              <View style={styles.engineAuxRow}>
-                <TouchableOpacity
-                  style={[
-                    styles.engineAuxBtn,
-                    isMarkedForEdit && styles.engineAuxBtnActive
-                  ]}
-                  onPress={() => setIsMarkedForEdit(!isMarkedForEdit)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[
-                    styles.engineAuxBtnText,
-                    isMarkedForEdit && styles.engineAuxBtnTextActive
-                  ]}>
-                    {isMarkedForEdit ? '✓ MARKED FOR EDIT' : 'MARK FOR EDIT'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.engineAuxBtn}
-                  onPress={() => setShowRemarksModal(true)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.engineAuxBtnText}>
-                    {deliveryRemarks ? '📝 REMARKS ✓' : 'REMARKS'}
-                  </Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={styles.engineAuxBtn}
-                  onPress={() => setShowPitchMapModal(true)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.engineAuxBtnText}>PITCH MAP</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.engineAuxBtn, { borderColor: '#10b981' }]}
-                  onPress={() => {
-                    setPendingBoundaryRun(null);
-                    setShowWagonWheelModal(true);
-                  }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.engineAuxBtnText, { color: '#34d399' }]}>WAGON WHEEL</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* 5. Main Scoring Keypad Grid (Matches Image 1 Slide 3 & 4) */}
-              <View style={styles.engineKeypadContainer}>
-                {/* Row 1: 0, 1, 2 */}
-                <View style={styles.engineKeypadRow}>
-                  {[0, 1, 2].map((run) => {
-                    const isDisabled =
-                      isOverComplete ||
-                      showBowlerModal ||
-                      isSubmittingDelivery ||
-                      matchStatus !== 'LIVE' ||
-                      isInningsBreak ||
-                      isMatchEnded;
-
-                    return (
-                      <TouchableOpacity
-                        key={`key-${run}`}
-                        disabled={isDisabled}
-                        style={[
-                          styles.engineKeypadBtn,
-                          run === 0 ? styles.scoreBtnDot : styles.scoreBtnNormal,
-                          isDisabled && styles.btnDisabled
-                        ]}
-                        onPress={() => handleScore(run, 'normal')}
-                        activeOpacity={0.7}
-                      >
+              {/* Bottom Actions Bar */}
+              <View style={styles.actionPanel}>
+                {isMatchEnded ? (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, { backgroundColor: '#059669', borderColor: '#047857', flex: 1 }]}
+                      onPress={() => navigate('Dashboard')}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.actionBtnText, { color: '#ffffff', fontWeight: 'bold' }]}>
+                        🏠 Back to Scorer Dashboard
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.scorecardBtn, { flex: 1 }]}
+                      onPress={() => navigate('Scorecard', { matchId, returnTo: 'LiveScoring', status: 'COMPLETED' })}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.scorecardBtnText}>📊 View Full Scorecard</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.undoBtn]}
+                      onPress={handleUndoLastDelivery}
+                      disabled={isUndoingDelivery || balls === 0 || matchStatus !== 'LIVE'}
+                    >
+                      {isUndoingDelivery ? (
+                        <ActivityIndicator size="small" color="#FFF" />
+                      ) : (
                         <Text
                           style={[
-                            styles.engineKeypadText,
-                            run === 0 ? styles.scoreBtnTextDot : styles.scoreBtnTextNormal
+                            styles.actionBtnText,
+                            { color: balls === 0 || matchStatus !== 'LIVE' ? '#94a3b8' : '#FFF' }
                           ]}
                         >
-                          {run}
+                          ↺ Undo Last Ball
                         </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {/* Row 2: 3, 4, 6 */}
-                <View style={styles.engineKeypadRow}>
-                  {[3, 4, 6].map((run) => {
-                    const isDisabled =
-                      isOverComplete ||
-                      showBowlerModal ||
-                      isSubmittingDelivery ||
-                      matchStatus !== 'LIVE' ||
-                      isInningsBreak ||
-                      isMatchEnded;
-
-                    let bStyle = styles.scoreBtnNormal;
-                    let tStyle: any = [styles.engineKeypadText, styles.scoreBtnTextNormal];
-                    if (run === 4) {
-                      bStyle = styles.scoreBtnFour;
-                      tStyle = [styles.engineKeypadText, styles.scoreBtnTextBoundary];
-                    }
-                    if (run === 6) {
-                      bStyle = styles.scoreBtnSix;
-                      tStyle = [styles.engineKeypadText, styles.scoreBtnTextSix];
-                    }
-
-                    return (
-                      <TouchableOpacity
-                        key={`key-${run}`}
-                        disabled={isDisabled}
-                        style={[styles.engineKeypadBtn, bStyle, isDisabled && styles.btnDisabled]}
-                        onPress={() => handleScore(run, 'normal')}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={tStyle}>{run}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                {/* Row 3: MORE RUNS, OVER THROW, EXTRAS */}
-                <View style={styles.engineKeypadRow}>
-                  <TouchableOpacity
-                    style={[styles.engineKeypadBtn, styles.engineAuxKeypadBtn]}
-                    onPress={() => setShowMoreRunsModal(true)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.engineAuxKeypadText}>MORE RUNS</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.engineKeypadBtn, styles.engineAuxKeypadBtn]}
-                    onPress={() => setShowOverThrowModal(true)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.engineAuxKeypadText}>OVER THROW</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.engineKeypadBtn, styles.engineAuxKeypadBtn, { backgroundColor: '#005960', borderColor: '#0d9488' }]}
-                    onPress={() => setShowExtrasModal(true)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.engineAuxKeypadText, { color: '#fef08a' }]}>EXTRAS</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {/* Row 4: WICKET, FIELDING, WAGON WHEEL */}
-                <View style={styles.engineKeypadRow}>
-                  <TouchableOpacity
-                    disabled={
-                      isOverComplete ||
-                      showBowlerModal ||
-                      isSubmittingDelivery ||
-                      matchStatus !== 'LIVE' ||
-                      isInningsBreak ||
-                      isMatchEnded
-                    }
-                    style={[
-                      styles.engineKeypadBtn,
-                      styles.wicketBtn,
-                      (isOverComplete || isSubmittingDelivery || matchStatus !== 'LIVE' || isInningsBreak || isMatchEnded) && styles.btnDisabled
-                    ]}
-                    onPress={handleWicketClick}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.engineKeypadText, styles.wicketBtnText]}>WICKET</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.engineKeypadBtn, { backgroundColor: '#005960', borderColor: '#0d9488' }]}
-                    onPress={() => setShowFieldingModal(true)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.engineAuxKeypadText, { color: '#fef3c7' }]}>FIELDING</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.engineKeypadBtn, { backgroundColor: '#047857', borderColor: '#10b981' }]}
-                    onPress={() => {
-                      setPendingBoundaryRun(null);
-                      setShowWagonWheelModal(true);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.engineAuxKeypadText, { color: '#ffffff' }]}>WAGON WHEEL</Text>
-                  </TouchableOpacity>
-                </View>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.scorecardBtn]}
+                      onPress={() => navigate('Scorecard', { matchId, returnTo: 'LiveScoring', status: matchStatus })}
+                    >
+                      <Text style={styles.scorecardBtnText}>View Full Scorecard</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.endBtn]}
+                      disabled={isInningsBreak || isMatchEnded}
+                      onPress={confirmEndInnings}
+                    >
+                      <Text style={styles.endBtnText}>End Innings</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
             </View>
-
-            {/* Bottom Actions Bar */}
-            <View style={styles.actionPanel}>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.undoBtn]}
-                onPress={handleUndoLastDelivery}
-                disabled={isUndoingDelivery || balls === 0 || matchStatus !== 'LIVE'}
-              >
-                {isUndoingDelivery ? (
-                  <ActivityIndicator size="small" color="#FFF" />
-                ) : (
-                  <Text
-                    style={[
-                      styles.actionBtnText,
-                      { color: balls === 0 || matchStatus !== 'LIVE' ? '#94a3b8' : '#FFF' }
-                    ]}
-                  >
-                    ↺ Undo Last Ball
-                  </Text>
-                )}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.scorecardBtn]}
-                onPress={() => navigate('Scorecard', { matchId })}
-              >
-                <Text style={styles.scorecardBtnText}>View Full Scorecard</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.endBtn]}
-                disabled={isInningsBreak || isMatchEnded}
-                onPress={confirmEndInnings}
-              >
-                <Text style={styles.endBtnText}>End Innings</Text>
-              </TouchableOpacity>
-            </View>
           </View>
-        </View>
 
-        <SharedFooter />
-      </ScrollView>
+          {isDesktop && <SharedFooter />}
+        </ScrollView>
       </View>
 
       {/* AUTOMATIC NEXT BOWLER POPUP MODAL (Only when match is LIVE) */}
@@ -5467,7 +7496,7 @@ export default function LiveScoringScreen() {
         visible={showBowlerModal && matchStatus === 'LIVE' && !isInningsBreak && !isMatchEnded}
         transparent
         animationType="fade"
-        onRequestClose={() => {}}
+        onRequestClose={() => { }}
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxWidth: 500 }]}>
@@ -5585,8 +7614,9 @@ export default function LiveScoringScreen() {
         onRequestClose={() => setShowCustomModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 500 }]}>
-            <View style={styles.wicketModalHeader}>
+          <View style={[styles.modalContent, { maxWidth: 500, width: '92%', maxHeight: '88%', padding: 16, display: 'flex', flexDirection: 'column' }]}>
+            {/* Modal Header */}
+            <View style={[styles.wicketModalHeader, { marginBottom: 8 }]}>
               <View style={styles.modalTopHeaderRow}>
                 <Text style={styles.wicketModalTitle}>⚡ Custom Runs & Extras</Text>
                 <TouchableOpacity
@@ -5598,103 +7628,117 @@ export default function LiveScoringScreen() {
                   <Text style={styles.redCloseBtnText}>✕</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.wicketModalSub}>
+              <Text style={[styles.wicketModalSub, { fontSize: 11, marginTop: 2 }]}>
                 Record any number of runs (e.g. 5 runs, overthrows, penalties, or custom extras).
               </Text>
             </View>
 
-            <Text style={styles.selectLabel}>QUICK RUNS OR ENTER NUMBER:</Text>
-            <View style={styles.customRunChipsRow}>
-              {['1', '2', '3', '4', '5', '6', '7'].map((r) => (
-                <TouchableOpacity
-                  key={r}
-                  style={[styles.customRunChip, customRunsInput === r && styles.customRunChipActive]}
-                  onPress={() => setCustomRunsInput(r)}
-                >
-                  <Text style={[styles.customRunChipText, customRunsInput === r && styles.customRunChipTextActive]}>{r}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={{ marginTop: 8, marginBottom: 12 }}>
-              <Text style={styles.fieldSubLabel}>NUMBER OF RUNS:</Text>
-              <TextInput
-                style={styles.customNameInput}
-                keyboardType="numeric"
-                placeholder="e.g. 5"
-                placeholderTextColor="#94a3b8"
-                value={customRunsInput}
-                onChangeText={(val) => setCustomRunsInput(val)}
-              />
-            </View>
-
-            <Text style={styles.selectLabel}>DELIVERY CATEGORY:</Text>
-            <View style={styles.categoryGrid}>
-              {[
-                { key: 'normal', label: 'Off Bat (Normal)', desc: 'Bat & Team' },
-                { key: 'wide', label: 'Wide + Runs', desc: 'Conceded Extra' },
-                { key: 'noball_bat', label: 'No Ball + Bat', desc: '1 Extra + Bat' },
-                { key: 'noball_extra', label: 'No Ball + Bye', desc: 'Total Extras' },
-                { key: 'bye', label: 'Byes', desc: 'Legal Extra' },
-                { key: 'legbye', label: 'Leg Byes', desc: 'Legal Extra' },
-                { key: 'penalty', label: 'Penalty Runs', desc: 'Team Total' }
-              ].map((cat) => (
-                <TouchableOpacity
-                  key={cat.key}
-                  style={[styles.categoryOption, customCategory === cat.key && styles.categoryOptionActive]}
-                  onPress={() => setCustomCategory(cat.key)}
-                >
-                  <Text style={[styles.categoryOptionText, customCategory === cat.key && styles.categoryOptionTextActive]}>
-                    {cat.label}
-                  </Text>
-                  <Text style={styles.categoryOptionDesc}>{cat.desc}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {/* REASON / RUN NOTE (WHY GIVING RUNS?) */}
-            <View style={{ marginTop: 6, marginBottom: 8 }}>
-              <Text style={styles.selectLabel}>REASON / RUN NOTE (WHY GIVING RUNS?):</Text>
-              <TextInput
-                style={[styles.customNameInput, customRunsReason.trim() ? styles.customNameInputActive : null]}
-                placeholder="✍️ Type reason: e.g. Overthrow, Helmet penalty, Misfield, Short run..."
-                placeholderTextColor="#94a3b8"
-                value={customRunsReason}
-                onChangeText={(val) => setCustomRunsReason(val)}
-              />
-              {/* Quick suggestion chips */}
-              <View style={styles.quickReasonsRow}>
-                {['Overthrow', 'Helmet Hit (5 Penalty)', 'Misfield', 'Short Run', 'Boundary Overthrow', 'Obstruction'].map((tag) => (
+            {/* Scrollable Form Body */}
+            <ScrollView
+              showsVerticalScrollIndicator={true}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ paddingBottom: 10 }}
+            >
+              <Text style={styles.selectLabel}>QUICK RUNS OR ENTER NUMBER:</Text>
+              <View style={[styles.customRunChipsRow, { marginBottom: 6 }]}>
+                {['1', '2', '3', '4', '5', '6', '7'].map((r) => (
                   <TouchableOpacity
-                    key={tag}
-                    style={[
-                      styles.quickReasonChip,
-                      customRunsReason === tag && styles.quickReasonChipActive
-                    ]}
-                    onPress={() => setCustomRunsReason(customRunsReason === tag ? '' : tag)}
+                    key={r}
+                    style={[styles.customRunChip, customRunsInput === r && styles.customRunChipActive]}
+                    onPress={() => setCustomRunsInput(r)}
                   >
-                    <Text
-                      style={[
-                        styles.quickReasonChipText,
-                        customRunsReason === tag && styles.quickReasonChipTextActive
-                      ]}
-                    >
-                      {tag}
-                    </Text>
+                    <Text style={[styles.customRunChipText, customRunsInput === r && styles.customRunChipTextActive]}>{r}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
-            </View>
 
-            <View style={styles.previewBox}>
-              <Text style={styles.previewBoxLabel}>RECORDING PREVIEW:</Text>
-              <Text style={styles.previewBoxText}>
-                {customRunsInput || '0'} Runs &bull; {customCategory.toUpperCase()} vs {bowler?.name || 'Bowler'}
-                {customRunsReason.trim() ? ` • [${customRunsReason.trim()}]` : ''}
-              </Text>
-            </View>
+              <View style={{ marginTop: 4, marginBottom: 8 }}>
+                <Text style={styles.fieldSubLabel}>NUMBER OF RUNS:</Text>
+                <TextInput
+                  style={[styles.customNameInput, { height: 38, paddingVertical: 6 }]}
+                  keyboardType="numeric"
+                  placeholder="e.g. 5"
+                  placeholderTextColor="#94a3b8"
+                  value={customRunsInput}
+                  onChangeText={(val) => setCustomRunsInput(val)}
+                />
+              </View>
 
-            <View style={[styles.modalActions, { marginTop: 14 }]}>
+              <Text style={styles.selectLabel}>DELIVERY CATEGORY:</Text>
+              <View style={[styles.categoryGrid, { gap: 6, marginBottom: 8 }]}>
+                {[
+                  { key: 'normal', label: 'Off Bat (Normal)', desc: 'Bat & Team' },
+                  { key: 'wide', label: 'Wide + Runs', desc: 'Conceded Extra' },
+                  { key: 'noball_bat', label: 'No Ball + Bat', desc: '1 Extra + Bat' },
+                  { key: 'noball_extra', label: 'No Ball + Bye', desc: 'Total Extras' },
+                  { key: 'bye', label: 'Byes', desc: 'Legal Extra' },
+                  { key: 'legbye', label: 'Leg Byes', desc: 'Legal Extra' },
+                  { key: 'penalty', label: 'Penalty Runs', desc: 'Team Total' }
+                ].map((cat) => (
+                  <TouchableOpacity
+                    key={cat.key}
+                    style={[
+                      styles.categoryOption,
+                      { paddingVertical: 6, paddingHorizontal: 8 },
+                      customCategory === cat.key && styles.categoryOptionActive
+                    ]}
+                    onPress={() => setCustomCategory(cat.key)}
+                  >
+                    <Text style={[styles.categoryOptionText, { fontSize: 11.5 }, customCategory === cat.key && styles.categoryOptionTextActive]}>
+                      {cat.label}
+                    </Text>
+                    <Text style={[styles.categoryOptionDesc, { fontSize: 9.5 }]}>{cat.desc}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* REASON / RUN NOTE (WHY GIVING RUNS?) */}
+              <View style={{ marginTop: 2, marginBottom: 8 }}>
+                <Text style={styles.selectLabel}>REASON / RUN NOTE (WHY GIVING RUNS?):</Text>
+                <TextInput
+                  style={[styles.customNameInput, { height: 38, paddingVertical: 6 }, customRunsReason.trim() ? styles.customNameInputActive : null]}
+                  placeholder="✍️ Type reason: e.g. Overthrow, Helmet penalty, Misfield, Short run..."
+                  placeholderTextColor="#94a3b8"
+                  value={customRunsReason}
+                  onChangeText={(val) => setCustomRunsReason(val)}
+                />
+                {/* Quick suggestion chips */}
+                <View style={[styles.quickReasonsRow, { marginTop: 4, gap: 4 }]}>
+                  {['Overthrow', 'Helmet Hit (5 Penalty)', 'Misfield', 'Short Run', 'Boundary Overthrow', 'Obstruction'].map((tag) => (
+                    <TouchableOpacity
+                      key={tag}
+                      style={[
+                        styles.quickReasonChip,
+                        { paddingHorizontal: 7, paddingVertical: 3 },
+                        customRunsReason === tag && styles.quickReasonChipActive
+                      ]}
+                      onPress={() => setCustomRunsReason(customRunsReason === tag ? '' : tag)}
+                    >
+                      <Text
+                        style={[
+                          styles.quickReasonChipText,
+                          { fontSize: 10 },
+                          customRunsReason === tag && styles.quickReasonChipTextActive
+                        ]}
+                      >
+                        {tag}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              <View style={[styles.previewBox, { padding: 8, marginTop: 4 }]}>
+                <Text style={[styles.previewBoxLabel, { fontSize: 9.5 }]}>RECORDING PREVIEW:</Text>
+                <Text style={[styles.previewBoxText, { fontSize: 12 }]}>
+                  {customRunsInput || '0'} Runs • {customCategory.toUpperCase()} vs {bowler?.name || 'Bowler'}
+                  {customRunsReason.trim() ? ` • [${customRunsReason.trim()}]` : ''}
+                </Text>
+              </View>
+            </ScrollView>
+
+            {/* Modal Actions - Fixed at Bottom */}
+            <View style={[styles.modalActions, { marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9' }]}>
               <TouchableOpacity
                 style={styles.modalCancelBtn}
                 onPress={() => setShowCustomModal(false)}
@@ -5791,8 +7835,8 @@ export default function LiveScoringScreen() {
                   {customChangeBatterName.trim()
                     ? `Substitute: ${customChangeBatterName.trim()}`
                     : selectedChangeBatterObj
-                    ? `${selectedChangeBatterObj.name} (${selectedChangeBatterObj.role || 'BATTER'})`
-                    : '-- Select Squad Player --'}
+                      ? `${selectedChangeBatterObj.name} (${selectedChangeBatterObj.role || 'BATTER'})`
+                      : '-- Select Squad Player --'}
                 </Text>
               </View>
               <Text style={styles.fielderDropdownArrow}>{isChangeBatterDropdownOpen ? '▲' : '▼'}</Text>
@@ -5941,6 +7985,108 @@ export default function LiveScoringScreen() {
               </View>
             )}
 
+            {/* Mid-Over Clean Badge - Clean English notification */}
+            {balls % 6 > 0 && (
+              <View style={styles.midOverCleanBadge}>
+                <Text style={styles.midOverCleanBadgeIcon}>⚡</Text>
+                <Text style={styles.midOverCleanBadgeText}>
+                  Balls Remaining: <Text style={{ fontWeight: '800', color: '#b45309' }}>{6 - (balls % 6)} Balls Remaining</Text> ({balls % 6} ball(s) bowled in this over)
+                </Text>
+              </View>
+            )}
+
+            {/* Substitution Situation / Reason Selector (Dropdown + Custom Typing) */}
+            <View style={{ marginBottom: 12 }}>
+              <Text style={styles.selectLabel}>BOWLER SITUATION / REASON:</Text>
+              <TouchableOpacity
+                style={[
+                  styles.situationDropdownTrigger,
+                  isSituationDropdownOpen && styles.situationDropdownTriggerOpen
+                ]}
+                onPress={() => {
+                  setIsSituationDropdownOpen(!isSituationDropdownOpen);
+                  setIsChangeBowlerDropdownOpen(false);
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, marginRight: 8 }}>
+                  <Text style={{ fontSize: 13, marginRight: 6 }}>📋</Text>
+                  <Text style={styles.situationDropdownTriggerText} numberOfLines={1}>
+                    {bowlerSituation || 'Select Situation / Reason...'}
+                  </Text>
+                </View>
+                <Text style={styles.fielderDropdownArrow}>{isSituationDropdownOpen ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+
+              {isSituationDropdownOpen && (
+                <View style={styles.situationDropdownMenu}>
+                  {BOWLER_SITUATIONS.map(sit => {
+                    const isSelected = bowlerSituation === sit.text && sit.text !== '';
+                    return (
+                      <TouchableOpacity
+                        key={sit.id}
+                        style={[
+                          styles.situationDropdownItem,
+                          isSelected && styles.situationDropdownItemSelected
+                        ]}
+                        onPress={() => {
+                          if (sit.text) {
+                            setBowlerSituation(sit.text);
+                          } else {
+                            setBowlerSituation('');
+                          }
+                          setIsSituationDropdownOpen(false);
+
+                          if (sit.id === 'SUSPENDED') {
+                            setChangeBowlerReason('NO_BALL_SUSPENSION');
+                            setIsSuspendingCurrentBowler(true);
+                          } else if (sit.id === 'INJURY' || sit.id === 'CRAMPS' || sit.id === 'MEDICAL') {
+                            setChangeBowlerReason('INJURY');
+                            setIsSuspendingCurrentBowler(false);
+                          } else {
+                            setChangeBowlerReason('TACTICAL');
+                            setIsSuspendingCurrentBowler(false);
+                          }
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[
+                          styles.situationDropdownItemText,
+                          isSelected && styles.situationDropdownItemTextSelected
+                        ]}>
+                          {sit.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* Editable / Custom Situation Input */}
+              <View style={{ marginTop: 6 }}>
+                <TextInput
+                  style={styles.situationCustomInput}
+                  placeholder="Or type custom reason here..."
+                  placeholderTextColor="#94a3b8"
+                  value={bowlerSituation}
+                  onChangeText={(txt) => {
+                    setBowlerSituation(txt);
+                    const lower = txt.toLowerCase();
+                    if (lower.includes('no-ball') || lower.includes('beamer') || lower.includes('suspend')) {
+                      setChangeBowlerReason('NO_BALL_SUSPENSION');
+                      setIsSuspendingCurrentBowler(true);
+                    } else if (lower.includes('injur') || lower.includes('cramp') || lower.includes('blood') || lower.includes('medic')) {
+                      setChangeBowlerReason('INJURY');
+                      setIsSuspendingCurrentBowler(false);
+                    } else {
+                      setChangeBowlerReason('TACTICAL');
+                      setIsSuspendingCurrentBowler(false);
+                    }
+                  }}
+                />
+              </View>
+            </View>
+
             {/* Dropdown trigger */}
             <Text style={styles.selectLabel}>CHOOSE FROM BOWLING SQUAD:</Text>
             <TouchableOpacity
@@ -5949,7 +8095,10 @@ export default function LiveScoringScreen() {
                 isChangeBowlerDropdownOpen && styles.fielderDropdownTriggerOpen,
                 (selectedChangeBowlerObj || customChangeBowlerName.trim()) && styles.fielderDropdownTriggerCustom
               ]}
-              onPress={() => setIsChangeBowlerDropdownOpen(!isChangeBowlerDropdownOpen)}
+              onPress={() => {
+                setIsChangeBowlerDropdownOpen(!isChangeBowlerDropdownOpen);
+                setIsSituationDropdownOpen(false);
+              }}
               activeOpacity={0.7}
             >
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
@@ -5964,8 +8113,8 @@ export default function LiveScoringScreen() {
                   {customChangeBowlerName.trim()
                     ? `Substitute: ${customChangeBowlerName.trim()}`
                     : selectedChangeBowlerObj
-                    ? `${selectedChangeBowlerObj.name} (${selectedChangeBowlerObj.role || 'BOWLER'})`
-                    : '-- Select Bowler from Squad --'}
+                      ? `${selectedChangeBowlerObj.name} (${selectedChangeBowlerObj.role || 'BOWLER'})`
+                      : '-- Select Bowler from Squad --'}
                 </Text>
               </View>
               <Text style={styles.fielderDropdownArrow}>{isChangeBowlerDropdownOpen ? '▲' : '▼'}</Text>
@@ -6085,7 +8234,80 @@ export default function LiveScoringScreen() {
         </View>
       </Modal>
 
-      {/* COMPREHENSIVE WICKET FALL & DISMISSAL MODAL (2-STEP FLOW) */}
+      {/* 2 NO-BALLS DANGEROUS BOWLING ALERT MODAL (MCC LAW 41.7) */}
+      <Modal
+        visible={noBallAlert !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setNoBallAlert(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 440 }]}>
+            <View style={styles.wicketModalHeader}>
+              <View style={styles.modalTopHeaderRow}>
+                <View style={[styles.wicketBadgeTag, { backgroundColor: '#fee2e2', borderColor: '#fca5a5' }]}>
+                  <Text style={[styles.wicketBadgeTagText, { color: '#b91c1c' }]}>
+                    ⚠️ 2 NO-BALLS DANGEROUS BOWLING ALERT
+                  </Text>
+                </View>
+              </View>
+              <Text style={[styles.wicketModalTitle, { color: '#991b1b', marginTop: 6 }]}>
+                MCC Law 41.7 Violation
+              </Text>
+              <Text style={[styles.wicketModalSub, { color: '#475569', marginTop: 4 }]}>
+                Bowler <Text style={{ fontWeight: 'bold', color: '#0f172a' }}>{noBallAlert?.bowlerName}</Text> has bowled 2 No-Balls in this innings. Under cricket rules, the umpire directs the captain to take the bowler off immediately.
+              </Text>
+            </View>
+
+            <View style={{ backgroundColor: '#fff1f2', borderRadius: 8, padding: 12, marginVertical: 14, borderWidth: 1, borderColor: '#fecdd3' }}>
+              <Text style={{ fontSize: 12, color: '#9f1239', fontWeight: '700' }}>
+                ⚖️ Umpire Directive:
+              </Text>
+              <Text style={{ fontSize: 11.5, color: '#be123c', marginTop: 2, lineHeight: 16 }}>
+                Under Law 41.7, the bowler should be suspended from bowling for the remainder of the innings. Another bowler must complete this over.
+              </Text>
+            </View>
+
+            <View style={{ flexDirection: 'column', gap: 10 }}>
+              {/* Option 1: Suspend & Replace Bowler */}
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, { backgroundColor: '#dc2626', width: '100%', height: 44 }]}
+                onPress={() => {
+                  setNoBallAlert(null);
+                  setSelectedChangeBowlerId('');
+                  setCustomChangeBowlerName('');
+                  setIsChangeBowlerDropdownOpen(false);
+                  setChangeBowlerSearch('');
+                  setChangeBowlerReason('NO_BALL_SUSPENSION');
+                  setBowlerSituation('Umpire Suspended (2 No-Balls)');
+                  setIsSituationDropdownOpen(false);
+                  setIsSuspendingCurrentBowler(true);
+                  setShowChangeBowlerModal(true);
+                }}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.modalConfirmText}>🛑 Suspend & Replace Bowler</Text>
+              </TouchableOpacity>
+
+              {/* Option 2: Allow Bowler to Continue (Skip Warning) */}
+              <TouchableOpacity
+                style={[styles.modalCancelBtn, { width: '100%', height: 40, backgroundColor: '#f1f5f9', borderColor: '#cbd5e1', borderWidth: 1 }]}
+                onPress={() => {
+                  if (noBallAlert?.bowlerId) {
+                    setDismissedNoBallBowlers(prev => [...prev, noBallAlert.bowlerId]);
+                  }
+                  setNoBallAlert(null);
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalCancelText, { color: '#334155', fontWeight: '700' }]}>
+                  ▶️ Allow Bowler to Continue (Skip Warning)
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       <Modal
         visible={showWicketModal}
         transparent
@@ -6154,6 +8376,13 @@ export default function LiveScoringScreen() {
 
                   {/* 2. DISMISSAL TYPE (HOW OUT) */}
                   <Text style={styles.selectLabel}>2. HOW OUT? (TAP TO SELECT METHOD):</Text>
+                  {isFreeHitActive && (
+                    <View style={styles.freeHitModalNotice}>
+                      <Text style={styles.freeHitModalNoticeText}>
+                        ⚡ FREE HIT IN PROGRESS: Batter is immune to Bowled, Caught, LBW & Stumped. Only RUN OUT can dismiss the batter!
+                      </Text>
+                    </View>
+                  )}
                   <View style={styles.dismissalGrid}>
                     {[
                       { key: 'BOWLED', label: 'Bowled', desc: 'b Bowler' },
@@ -6164,25 +8393,59 @@ export default function LiveScoringScreen() {
                       { key: 'RUN_OUT', label: 'Run Out', desc: 'run out (Fielder)' },
                       { key: 'STUMPED', label: 'Stumped', desc: 'st †Keeper b Bowler' },
                       { key: 'HIT_WICKET', label: 'Hit Wicket', desc: 'hit wicket b Bowler' },
-                      { key: 'RETIRED_OUT', label: 'Retired Out', desc: 'retired out' }
-                    ].map((item) => (
-                      <TouchableOpacity
-                        key={item.key}
-                        style={[styles.dismissalChip, wicketType === item.key && styles.dismissalChipActive]}
-                        onPress={() => {
-                          setWicketType(item.key);
-                          setWicketStep(2);
-                        }}
-                      >
-                        <Text style={[styles.dismissalChipText, wicketType === item.key && styles.dismissalChipTextActive]}>
-                          {item.label}
-                        </Text>
-                        <Text style={[styles.dismissalChipSub, wicketType === item.key && styles.dismissalChipSubActive]}>
-                          {item.desc}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                      { key: 'RETIRED_HURT', label: 'Retired Hurt', desc: 'temporarily injured (not out)' },
+                      { key: 'RETIRED_OUT', label: 'Retired Out', desc: 'batter retired out' },
+                      { key: 'OBSTRUCTING_FIELD', label: 'Obstructing Field', desc: 'wilful interference (Law 37)' },
+                      { key: 'HIT_BALL_TWICE', label: 'Hit Ball Twice', desc: 'hit ball twice (Law 34)' },
+                      { key: 'TIMED_OUT', label: 'Timed Out', desc: 'exceeded time limit (Law 40)' }
+                    ].map((item) => {
+                      const isImmuneOnFreeHit = isFreeHitActive && !['RUN_OUT', 'RETIRED_OUT', 'RETIRED_HURT', 'OBSTRUCTING_FIELD', 'HIT_BALL_TWICE'].includes(item.key);
+                      return (
+                        <TouchableOpacity
+                          key={item.key}
+                          disabled={isImmuneOnFreeHit}
+                          style={[
+                            styles.dismissalChip,
+                            wicketType === item.key && styles.dismissalChipActive,
+                            isImmuneOnFreeHit && { opacity: 0.35, backgroundColor: '#f1f5f9' },
+                            item.key === 'RETIRED_HURT' && { borderColor: '#3b82f6' }
+                          ]}
+                          onPress={() => {
+                            if (isImmuneOnFreeHit) {
+                              const msg = 'Batter is immune on Free Hit (MCC Law 21.19). Only Run Out / Obstruction is allowed.';
+                              Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Free Hit Immunity', msg);
+                              return;
+                            }
+                            setWicketType(item.key);
+                            setWicketStep(2);
+                          }}
+                        >
+                          <Text style={[styles.dismissalChipText, wicketType === item.key && styles.dismissalChipTextActive, item.key === 'RETIRED_HURT' && { color: '#1d4ed8' }]}>
+                            {item.label}
+                          </Text>
+                          <Text style={[styles.dismissalChipSub, wicketType === item.key && styles.dismissalChipSubActive]}>
+                            {isImmuneOnFreeHit ? '❌ Immune on Free Hit' : item.desc}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
+
+                  {/* Run Out Crossing Visual Helper Button */}
+                  <TouchableOpacity
+                    style={styles.runOutHelperBtn}
+                    onPress={() => {
+                      setActiveCricketRule('RUN_OUT_CROSS');
+                      setCricketRuleContext({
+                        strikerName: striker?.name || 'Striker',
+                        nonStrikerName: nonStriker?.name || 'Non-Striker'
+                      });
+                      setShowCricketRulesModal(true);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.runOutHelperBtnText}>🏃 Open Run Out Crossing Visual Helper Diagram</Text>
+                  </TouchableOpacity>
 
                   <View style={[styles.modalActions, { marginTop: 14 }]}>
                     <TouchableOpacity
@@ -6241,6 +8504,54 @@ export default function LiveScoringScreen() {
                     </TouchableOpacity>
                   </View>
 
+                  {/* WICKETKEEPER DISMISSAL VISUAL CARD (Caught Behind / Stumped) */}
+                  {(wicketType === 'STUMPED' || wicketType === 'CAUGHT_BEHIND') && (
+                    <View style={styles.keeperDismissalCard}>
+                      <View style={styles.keeperImageContainer}>
+                        <Image
+                          source={keeperDismissalImage}
+                          style={styles.keeperArtwork}
+                          resizeMode="contain"
+                        />
+                      </View>
+                      <View style={styles.keeperTextCol}>
+                        <View style={styles.keeperTagBadge}>
+                          <Text style={styles.keeperTagBadgeText}>🧤 WICKETKEEPER DISMISSAL</Text>
+                        </View>
+                        <Text style={styles.keeperDismissalTitle}>
+                          {wicketType === 'STUMPED' ? 'Stumped (st Keeper b Bowler)' : 'Caught Behind (c Keeper b Bowler)'}
+                        </Text>
+                        <Text style={styles.keeperDismissalExplanation}>
+                          {wicketType === 'STUMPED'
+                            ? 'Batter stepped out of crease and wicketkeeper broke the stumps.'
+                            : 'Batter edged delivery and wicketkeeper caught cleanly behind.'}
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
+                  {/* RUN OUT DISMISSAL VISUAL CARD */}
+                  {wicketType === 'RUN_OUT' && (
+                    <View style={styles.runOutDismissalCard}>
+                      <View style={styles.runOutImageContainer}>
+                        <Image
+                          source={runOutMilestoneImage}
+                          style={styles.runOutArtwork}
+                          resizeMode="contain"
+                        />
+                      </View>
+                      <View style={styles.runOutTextCol}>
+                        <View style={[styles.keeperTagBadge, { backgroundColor: '#fee2e2', borderColor: '#ef4444' }]}>
+                          <Text style={[styles.keeperTagBadgeText, { color: '#dc2626' }]}>🎯 DIRECT HIT RUN OUT</Text>
+                        </View>
+                        <Text style={styles.runOutDismissalTitle}>Run Out (Fielder Direct Hit / Throw)</Text>
+                        <Text style={styles.runOutDismissalExplanation}>
+                          Fielder hit the stumps before the batter could ground their bat behind the crease line.
+                        </Text>
+                      </View>
+                    </View>
+                  )}
+
                   {/* 3. FIELDER SELECTION - ONLY SHOWN FOR CAUGHT, CAUGHT_BEHIND, RUN_OUT, STUMPED */}
                   {['CAUGHT', 'CAUGHT_BEHIND', 'RUN_OUT', 'STUMPED'].includes(wicketType) && (
                     <View style={{ marginTop: 4, marginBottom: 14 }}>
@@ -6275,8 +8586,8 @@ export default function LiveScoringScreen() {
                             {customFielderName.trim()
                               ? `Substitute: ${customFielderName.trim()}`
                               : selectedFielderObj
-                              ? `${selectedFielderObj.name} (${selectedFielderObj.role || 'FIELD'})`
-                              : '-- Choose Fielder from Dropdown --'}
+                                ? `${selectedFielderObj.name} (${selectedFielderObj.role || 'FIELD'})`
+                                : '-- Choose Fielder from Dropdown --'}
                           </Text>
                         </View>
                         <Text style={styles.fielderDropdownArrow}>{isFielderDropdownOpen ? '▲' : '▼'}</Text>
@@ -6440,8 +8751,8 @@ export default function LiveScoringScreen() {
                               {customBatterName.trim()
                                 ? `Substitute: ${customBatterName.trim()}`
                                 : selectedBatterObj
-                                ? `${selectedBatterObj.name} (${selectedBatterObj.role || 'BATTER'})`
-                                : '-- Choose Incoming Batter from Dropdown (Must Select) * --'}
+                                  ? `${selectedBatterObj.name} (${selectedBatterObj.role || 'BATTER'})`
+                                  : '-- Choose Incoming Batter from Dropdown (Must Select) * --'}
                             </Text>
                           </View>
                           <Text style={styles.fielderDropdownArrow}>{isBatterDropdownOpen ? '▲' : '▼'}</Text>
@@ -6557,7 +8868,11 @@ export default function LiveScoringScreen() {
                       {wicketType === 'RUN_OUT' && `run out (${customFielderName.trim() || bowlingSquad.find(f => f.id === selectedFielderId)?.name || 'Fielder'})`}
                       {wicketType === 'STUMPED' && `st †${customFielderName.trim() || bowlingSquad.find(f => f.id === selectedFielderId)?.name || 'Keeper'} b ${bowler?.name || 'Bowler'}`}
                       {wicketType === 'HIT_WICKET' && `hit wicket b ${bowler?.name || 'Bowler'}`}
+                      {wicketType === 'RETIRED_HURT' && 'retired hurt (not out)'}
                       {wicketType === 'RETIRED_OUT' && 'retired out'}
+                      {wicketType === 'OBSTRUCTING_FIELD' && 'obstructing the field'}
+                      {wicketType === 'HIT_BALL_TWICE' && 'hit the ball twice'}
+                      {wicketType === 'TIMED_OUT' && 'timed out'}
                     </Text>
                     {wickets + 1 < 10 && (
                       <Text style={styles.previewNextBatterText}>
@@ -6580,13 +8895,15 @@ export default function LiveScoringScreen() {
                     <TouchableOpacity
                       style={[
                         styles.modalConfirmBtn,
-                        { backgroundColor: '#dc2626' },
+                        { backgroundColor: wicketType === 'RETIRED_HURT' ? '#2563eb' : '#dc2626' },
                         (wickets + 1 < 10 && !selectedNextBatterId && !customBatterName.trim()) && styles.btnDisabled
                       ]}
                       disabled={wickets + 1 < 10 && !selectedNextBatterId && !customBatterName.trim()}
                       onPress={confirmNextBatter}
                     >
-                      <Text style={styles.modalConfirmText}>Confirm & Record Wicket</Text>
+                      <Text style={styles.modalConfirmText}>
+                        {wicketType === 'RETIRED_HURT' ? 'Confirm Retired Hurt (Not Out)' : 'Confirm & Record Wicket'}
+                      </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -6595,6 +8912,619 @@ export default function LiveScoringScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* DELIVERY INSPECTION & SHOT DETAILS MODAL (Ball Click Visual Breakdown) */}
+      {(() => {
+        if (!inspectingDelivery) return null;
+
+        // Calculate ground-truth score at the time of this delivery
+        let scoreAtBall = `${runs}/${wickets} (${getOvers(balls)} Ov)`;
+        const delIndex = recentDeliveries.findIndex(d => 
+          (d.id && inspectingDelivery.id && d.id === inspectingDelivery.id) || 
+          (d.ball === inspectingDelivery.ball && d.overNumber === inspectingDelivery.overNumber)
+        );
+        if (delIndex > 0) {
+          let laterRuns = 0;
+          let laterWkts = 0;
+          for (let i = 0; i < delIndex; i++) {
+            const d = recentDeliveries[i];
+            laterRuns += (Number(d.runsBatter ?? d.runs ?? 0) + Number(d.runsExtras ?? d.runs_extras ?? 0));
+            if (d.wicket && d.wicketType !== 'RETIRED_HURT') laterWkts += 1;
+          }
+          const ballRuns = Math.max(0, runs - laterRuns);
+          const ballWkts = Math.max(0, wickets - laterWkts);
+          const ballOv = inspectingDelivery.ball || (inspectingDelivery.overNumber !== undefined ? `${inspectingDelivery.overNumber}.${inspectingDelivery.ballNumber}` : getOvers(balls));
+          scoreAtBall = `${ballRuns}/${ballWkts} (${ballOv} Ov)`;
+        } else if (delIndex === 0) {
+          const ballOv = inspectingDelivery.ball || getOvers(balls);
+          scoreAtBall = `${runs}/${wickets} (${ballOv} Ov)`;
+        } else if (inspectingDelivery.scoreAtDelivery || inspectingDelivery.matchScore) {
+          scoreAtBall = inspectingDelivery.scoreAtDelivery || inspectingDelivery.matchScore;
+        }
+
+        return (
+          <DeliveryInspectionModal
+            visible={Boolean(inspectingDelivery)}
+            delivery={inspectingDelivery}
+            onClose={() => setInspectingDelivery(null)}
+            onEdit={(del) => {
+              setInspectingDelivery(null);
+              handleOpenEditDelivery(del);
+            }}
+            strikerName={inspectingDelivery?.strikerName || striker?.name}
+            nonStrikerName={inspectingDelivery?.nonStrikerName || nonStriker?.name}
+            bowlerName={inspectingDelivery?.bowlerName || bowler?.name}
+            fielderName={inspectingDelivery?.fielderName}
+            currentScore={scoreAtBall}
+            battingTeamName={matchInfo?.battingTeam || matchInfo?.teamA || 'Batting Team'}
+          />
+        );
+      })()}
+
+      {/* RETROACTIVE DELIVERY CORRECTION MODAL (Edit Mode Direct Ball Edit) */}
+      <Modal
+        visible={showEditDeliveryModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowEditDeliveryModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editDeliveryModalContainer}>
+            <View style={styles.editDeliveryModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.editDeliveryModalTitle}>✏️ Direct Ball Correction</Text>
+                <Text style={styles.editDeliveryModalSub}>
+                  Modify runs, extras, or wicket retroactively
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.redCloseBtn}
+                onPress={() => setShowEditDeliveryModal(false)}
+              >
+                <Text style={styles.redCloseBtnText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
+            {editingDelivery && (
+              <ScrollView style={styles.editDeliveryModalBody}>
+                <View style={styles.editDeliveryInfoBox}>
+                  <Text style={styles.editDeliveryInfoText}>
+                    Ball: <Text style={{ fontWeight: 'bold', color: '#b45309' }}>{editingDelivery.ball}</Text> • Current Recorded: <Text style={{ fontWeight: 'bold' }}>{editingDelivery.text}</Text>
+                  </Text>
+                  {editingDelivery.commentary ? (
+                    <Text style={styles.editDeliveryCommentaryText}>{editingDelivery.commentary}</Text>
+                  ) : null}
+                </View>
+
+                {/* RUNS PICKER */}
+                <Text style={styles.editSectionLabel}>Runs Scored by Batter:</Text>
+                <View style={styles.editRunsRow}>
+                  {[0, 1, 2, 3, 4, 5, 6].map((r) => (
+                    <TouchableOpacity
+                      key={`edit-run-${r}`}
+                      style={[
+                        styles.editRunChip,
+                        editRunsInput === r && styles.editRunChipActive
+                      ]}
+                      onPress={() => setEditRunsInput(r)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.editRunChipText,
+                          editRunsInput === r && styles.editRunChipTextActive
+                        ]}
+                      >
+                        {r}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* EXTRAS PICKER */}
+                <Text style={styles.editSectionLabel}>Extras Classification:</Text>
+                <View style={styles.editExtrasRow}>
+                  {[
+                    { id: 'NONE', label: 'None (Legal Ball)' },
+                    { id: 'WIDE', label: 'Wide (+1)' },
+                    { id: 'NO_BALL', label: 'No Ball (+1)' },
+                    { id: 'BYE', label: 'Bye' },
+                    { id: 'LEG_BYE', label: 'Leg Bye' }
+                  ].map((ext) => (
+                    <TouchableOpacity
+                      key={`edit-extra-${ext.id}`}
+                      style={[
+                        styles.editExtraChip,
+                        editExtraType === ext.id && styles.editExtraChipActive
+                      ]}
+                      onPress={() => setEditExtraType(ext.id as any)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.editExtraChipText,
+                          editExtraType === ext.id && styles.editExtraChipTextActive
+                        ]}
+                      >
+                        {ext.label}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* WAGON WHEEL / SHOT ZONE */}
+                <Text style={styles.editSectionLabel}>Wagon Wheel Shot Direction:</Text>
+                <View style={styles.editShotZoneGrid}>
+                  {['Cover', 'Extra Cover', 'Long-Off', 'Long-On', 'Mid-Wicket', 'Square Leg', 'Fine Leg', 'Third Man', 'Point'].map((zone) => (
+                    <TouchableOpacity
+                      key={`edit-zone-${zone}`}
+                      style={[
+                        styles.editShotZoneChip,
+                        editShotZone === zone && styles.editShotZoneChipActive
+                      ]}
+                      onPress={() => setEditShotZone(zone)}
+                      activeOpacity={0.7}
+                    >
+                      <Text
+                        style={[
+                          styles.editShotZoneChipText,
+                          editShotZone === zone && styles.editShotZoneChipTextActive
+                        ]}
+                      >
+                        {zone}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* WICKET TOGGLE */}
+                <Text style={styles.editSectionLabel}>Wicket / Dismissal Status:</Text>
+                <View style={styles.editWicketToggleRow}>
+                  <TouchableOpacity
+                    style={[styles.editWicketToggleBtn, !editWicket && styles.editWicketToggleBtnActive]}
+                    onPress={() => setEditWicket(false)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.editWicketToggleBtnText, !editWicket && styles.editWicketToggleBtnTextActive]}>
+                      ✓ Not Out (No Wicket)
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.editWicketToggleBtn, editWicket && styles.editWicketToggleBtnWicketActive]}
+                    onPress={() => setEditWicket(true)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.editWicketToggleBtnText, editWicket && styles.editWicketToggleBtnTextWicketActive]}>
+                      ⚡ Wicket Fallen
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {editWicket && (
+                  <>
+                    {/* DISMISSAL METHOD SELECTION */}
+                    <Text style={[styles.editSectionLabel, { marginTop: 6 }]}>How did the Wicket Fall?</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                      {[
+                        { id: 'BOWLED', label: 'Bowled', desc: 'b Bowler' },
+                        { id: 'CAUGHT', label: 'Caught', desc: 'c Fielder b Bowler' },
+                        { id: 'CAUGHT_BEHIND', label: 'Caught Behind', desc: 'c †Keeper b Bowler' },
+                        { id: 'CAUGHT_AND_BOWLED', label: 'Caught & Bowled', desc: 'c & b Bowler' },
+                        { id: 'LBW', label: 'LBW', desc: 'lbw b Bowler' },
+                        { id: 'RUN_OUT', label: 'Run Out', desc: 'run out (Fielder)' },
+                        { id: 'STUMPED', label: 'Stumped', desc: 'st †Keeper b Bowler' },
+                        { id: 'HIT_WICKET', label: 'Hit Wicket', desc: 'hit wicket b Bowler' },
+                        { id: 'RETIRED_HURT', label: 'Retired Hurt', desc: 'injury (not out)' },
+                        { id: 'RETIRED_OUT', label: 'Retired Out', desc: 'retired out' }
+                      ].map((wt) => {
+                        const isSelected = editWicketType === wt.id;
+                        return (
+                          <TouchableOpacity
+                            key={`wt-${wt.id}`}
+                            style={{
+                              flex: 1,
+                              minWidth: '47%',
+                              paddingVertical: 7,
+                              paddingHorizontal: 8,
+                              borderRadius: 8,
+                              backgroundColor: isSelected ? '#fee2e2' : '#f8fafc',
+                              borderWidth: 1.5,
+                              borderColor: isSelected ? '#dc2626' : '#e2e8f0'
+                            }}
+                            onPress={() => {
+                              setEditWicketType(wt.id);
+                              if (wt.id === 'CAUGHT_AND_BOWLED') {
+                                setEditFielderName(editingDelivery?.bowlerName || bowler?.name || '');
+                              }
+                            }}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={{ fontSize: 12, fontWeight: isSelected ? '900' : '700', color: isSelected ? '#b91c1c' : '#1e293b' }}>
+                              {wt.label}
+                            </Text>
+                            <Text style={{ fontSize: 10, color: isSelected ? '#dc2626' : '#64748b', fontWeight: '500' }}>
+                              {wt.desc}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+
+                    {/* DISMISSED BATTER SELECTION */}
+                    <Text style={[styles.editSectionLabel, { marginTop: 6 }]}>Dismissed Batter:</Text>
+                    <View style={styles.editWicketToggleRow}>
+                      <TouchableOpacity
+                        style={[styles.editWicketToggleBtn, editDismissedPlayer === 'STRIKER' && styles.editWicketToggleBtnActive]}
+                        onPress={() => setEditDismissedPlayer('STRIKER')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.editWicketToggleBtnText, editDismissedPlayer === 'STRIKER' && styles.editWicketToggleBtnTextActive]} numberOfLines={1}>
+                          🏏 {editingDelivery.strikerName || striker?.name || 'Striker'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.editWicketToggleBtn, editDismissedPlayer === 'NON_STRIKER' && styles.editWicketToggleBtnActive]}
+                        onPress={() => setEditDismissedPlayer('NON_STRIKER')}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.editWicketToggleBtnText, editDismissedPlayer === 'NON_STRIKER' && styles.editWicketToggleBtnTextActive]} numberOfLines={1}>
+                          🏃 {editingDelivery.nonStrikerName || nonStriker?.name || 'Non-Striker'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* FIELDER / CATCHER / KEEPER SELECTOR */}
+                    {['CAUGHT', 'CAUGHT_BEHIND', 'RUN_OUT', 'STUMPED'].includes(editWicketType) && (
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={[styles.editSectionLabel, { marginBottom: 6 }]}>
+                          {editWicketType.includes('CAUGHT') ? '🤲 Select Catcher from Fielding Squad:' : editWicketType === 'STUMPED' ? '🧤 Select Wicketkeeper:' : '⚡ Select Fielder (Run Out):'}
+                        </Text>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                          {((bowlingSquad && bowlingSquad.length > 0 ? bowlingSquad : (matchInfo?.teamBPlayers || matchInfo?.teamAPlayers || [])) as any[]).map((fld: any) => {
+                            const fldName = fld.name || fld.player_name || `Player ${fld.id}`;
+                            const isChosen = editFielderName.trim() === fldName.trim();
+                            return (
+                              <TouchableOpacity
+                                key={`edit-fld-${fld.id || fldName}`}
+                                style={{
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 5,
+                                  borderRadius: 14,
+                                  backgroundColor: isChosen ? '#dbeafe' : '#f1f5f9',
+                                  borderColor: isChosen ? '#2563eb' : '#cbd5e1',
+                                  borderWidth: 1.2
+                                }}
+                                onPress={() => setEditFielderName(fldName)}
+                              >
+                                <Text style={{ fontSize: 11, fontWeight: isChosen ? '900' : '600', color: isChosen ? '#1d4ed8' : '#334155' }}>
+                                  {isChosen ? '✓ ' : ''}{fldName}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                        <TextInput
+                          style={styles.editFielderInput}
+                          value={editFielderName}
+                          onChangeText={setEditFielderName}
+                          placeholder="Or type custom fielder name"
+                          placeholderTextColor="#94a3b8"
+                        />
+                      </View>
+                    )}
+                  </>
+                )}
+
+                {/* ACTIONS */}
+                <View style={styles.editDeliveryActionRow}>
+                  <TouchableOpacity
+                    style={styles.editDeliveryCancelBtn}
+                    onPress={() => setShowEditDeliveryModal(false)}
+                    disabled={isSubmittingEditDelivery}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.editDeliveryCancelBtnText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.editDeliverySaveBtn}
+                    onPress={handleSaveDeliveryEdit}
+                    disabled={isSubmittingEditDelivery}
+                    activeOpacity={0.8}
+                  >
+                    {isSubmittingEditDelivery ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.editDeliverySaveBtnText}>💾 Save Ball Correction</Text>
+                    )}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* CRICKET MILESTONE CELEBRATION MODAL (50s, 100s, 5-Wickets, Hat-Tricks) */}
+      <Modal
+        visible={showMilestoneModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMilestoneModal(false)}
+      >
+        <View style={styles.milestoneModalOverlay}>
+          {/* Falling 3D Confetti Ribbons / Colour Papers */}
+          <CricketConfetti active={showMilestoneModal} count={60} />
+
+          <View style={styles.milestoneCard}>
+            {/* Top Ribbon */}
+            <View style={styles.milestoneRibbon}>
+              <Text style={styles.milestoneRibbonText}>{activeMilestone?.badge || '🏆 MILESTONE REACHED 🏆'}</Text>
+            </View>
+
+            {/* 3D FIGURINE & METALLIC PEDESTAL (Drop-Down 3D Slam & Interactive Tilt) */}
+            <CricketFigurine3D
+              imageSource={
+                activeMilestone?.imageKey === 'MOTM' || activeMilestone?.type === 'MAN_OF_THE_MATCH'
+                  ? IMG_MAN_OF_THE_MATCH
+                  : activeMilestone?.imageKey === 'BOWLER' || activeMilestone?.type === 'BOWLER_3W' || activeMilestone?.type === 'BOWLER_5W'
+                    ? bestBowlerImage
+                    : activeMilestone?.imageKey === 'CATCH' || activeMilestone?.type === 'TOP_CATCHES'
+                      ? catchMilestoneImage
+                      : activeMilestone?.imageKey === 'RUN_OUT' || activeMilestone?.type === 'RUN_OUT'
+                        ? runOutMilestoneImage
+                        : activeMilestone?.imageKey === 'KEEPER' || activeMilestone?.type === 'KEEPER_OUT'
+                          ? keeperDismissalImage
+                          : activeMilestone?.type === 'BATTER_200'
+                            ? doubleCenturyImage
+                            : activeMilestone?.type === 'TEAM_50'
+                              ? team50Image
+                              : activeMilestone?.type === 'TEAM_100' || activeMilestone?.type === 'TEAM_200'
+                                ? team100Image
+                                : activeMilestone?.type === 'BATTER_100'
+                                  ? centuryBatsmanImage
+                                  : milestoneBatsmanImage
+              }
+              playerName={activeMilestone?.playerName || 'CHAMPION'}
+              badgeText={activeMilestone?.badge || activeMilestone?.title || '50 RUNS'}
+              teamName={activeMilestone?.teamName}
+              milestoneTitle={activeMilestone?.title}
+              scoreText={activeMilestone?.scoreText}
+              ballsText={activeMilestone?.ballsText}
+              strikeRateText={activeMilestone?.strikeRateText}
+              fours={activeMilestone?.fours}
+              sixes={activeMilestone?.sixes}
+            />
+
+            {/* Details Box */}
+            <View style={styles.milestoneContentBox}>
+              <Text style={styles.milestoneTitleText}>{activeMilestone?.title || 'HALF-CENTURY!'}</Text>
+              <Text style={styles.milestonePlayerName}>{activeMilestone?.playerName?.toUpperCase()}</Text>
+              <Text style={styles.milestoneTeamName}>{activeMilestone?.teamName?.toUpperCase()}</Text>
+
+              {/* Stat Pillars */}
+              <View style={styles.milestoneStatsBox}>
+                <View style={styles.milestoneStatItem}>
+                  <Text style={styles.milestoneStatValue}>{activeMilestone?.scoreText}</Text>
+                  <Text style={styles.milestoneStatLabel}>SCORE</Text>
+                </View>
+                <View style={styles.milestoneStatDivider} />
+                <View style={styles.milestoneStatItem}>
+                  <Text style={styles.milestoneStatValue}>{activeMilestone?.ballsText}</Text>
+                  <Text style={styles.milestoneStatLabel}>BALLS</Text>
+                </View>
+                {activeMilestone?.strikeRateText ? (
+                  <>
+                    <View style={styles.milestoneStatDivider} />
+                    <View style={styles.milestoneStatItem}>
+                      <Text style={styles.milestoneStatValue}>{activeMilestone?.strikeRateText}</Text>
+                      <Text style={styles.milestoneStatLabel}>STRIKE RATE</Text>
+                    </View>
+                  </>
+                ) : null}
+              </View>
+
+              {/* Boundary Pill (Fours & Sixes) */}
+              {(activeMilestone?.fours !== undefined || activeMilestone?.sixes !== undefined) && (
+                <View style={styles.milestoneBoundariesRow}>
+                  <View style={styles.milestoneBoundaryTag}>
+                    <Text style={styles.milestoneBoundaryTagText}>🏏 {activeMilestone?.fours || 0} Fours (4s)</Text>
+                  </View>
+                  <View style={[styles.milestoneBoundaryTag, styles.milestoneSixTag]}>
+                    <Text style={styles.milestoneBoundaryTagText}>🚀 {activeMilestone?.sixes || 0} Sixes (6s)</Text>
+                  </View>
+                </View>
+              )}
+
+              <Text style={styles.milestoneSubtitle}>{activeMilestone?.subtitle}</Text>
+            </View>
+
+            {/* Action Button */}
+            <TouchableOpacity
+              style={styles.milestoneDismissBtn}
+              onPress={() => setShowMilestoneModal(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.milestoneDismissBtnText}>CONTINUE LIVE SCORING ▶</Text>
+            </TouchableOpacity>
+
+            {/* Close Cross */}
+            <TouchableOpacity
+              style={styles.milestoneCloseCross}
+              onPress={() => setShowMilestoneModal(false)}
+            >
+              <Text style={styles.milestoneCloseCrossText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Smart Cricket Rule & Umpire Assistant Modal */}
+      <CricketRulesModal
+        visible={showCricketRulesModal}
+        activeRule={activeCricketRule}
+        matchId={matchId}
+        ruleContext={{
+          ...cricketRuleContext,
+          bowlerId: bowler?.id,
+          bowlerName: bowler?.name,
+          strikerName: striker?.name,
+          nonStrikerName: nonStriker?.name,
+          oversBowled: bowler ? `${bowler.overs}` : '0.0',
+          maxQuota: 4,
+          overNumber: Math.floor(balls / 6) + 1,
+          totalRuns: runs,
+          wickets: wickets,
+          currentFormat: matchInfo?.overs ? `T20 (${matchInfo.overs}.0 Overs)` : 'T20 (20.0 Overs)'
+        }}
+        onClose={() => setShowCricketRulesModal(false)}
+        onApplyRule={async (ruleType, payload) => {
+          if (ruleType === 'RUN_OUT' || ruleType === 'RUN_OUT_CROSS') {
+            if (payload?.victim) {
+              setDismissedTarget(payload.victim === 'NON_STRIKER' ? 'nonStriker' : 'striker');
+            }
+          }
+          await loadLiveState(false);
+          setShowCricketRulesModal(false);
+        }}
+      />
+
+      {/* DLS & VJD Rain Target Engine & Predictor Modal */}
+      <Modal
+        visible={showDlsModal && !dlsModalMinimized}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          setShowDlsModal(false);
+          setDlsModalMinimized(false);
+          setDlsModalMaximized(false);
+        }}
+      >
+        <View style={styles.dlsModalOverlay}>
+          <View style={[
+            styles.dlsModalCard,
+            isDesktop ? styles.dlsModalCardDesktop : styles.dlsModalCardMobile,
+            dlsModalMaximized && styles.dlsModalCardMaximized
+          ]}>
+            <View style={styles.dlsModalTopBar}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 }}>
+                <View style={styles.dlsModalHeaderIconBox}>
+                  <Text style={{ fontSize: 20 }}>🧮</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dlsModalTitle}>DLS & VJD Rain Target Engine</Text>
+                  <Text style={styles.dlsModalSub} numberOfLines={1}>
+                    Live Match Arbitrator • Duckworth-Lewis-Stern & V. Jayadevan Methods
+                  </Text>
+                </View>
+              </View>
+
+              {/* Window Controls: Minimize (-), Maximize (🗖), and Red Close (✕) */}
+              <View style={styles.dlsWindowControlsRow}>
+                {/* Minimize Button: Yellow Circle */}
+                <TouchableOpacity
+                  style={[styles.dlsWindowBtn, styles.dlsMinimizeBtn]}
+                  onPress={() => setDlsModalMinimized(true)}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Minimize DLS Engine"
+                >
+                  <Text style={styles.dlsMinimizeText}>—</Text>
+                </TouchableOpacity>
+
+                {/* Maximize / Restore Button: Blue Circle */}
+                <TouchableOpacity
+                  style={[styles.dlsWindowBtn, styles.dlsMaximizeBtn]}
+                  onPress={() => setDlsModalMaximized(prev => !prev)}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Maximize / Restore DLS Engine"
+                >
+                  <Text style={styles.dlsMaximizeText}>{dlsModalMaximized ? '🗗' : '🗖'}</Text>
+                </TouchableOpacity>
+
+                {/* Close Button: Red Circle */}
+                <TouchableOpacity
+                  style={[styles.dlsWindowBtn, styles.dlsCloseBtn]}
+                  onPress={() => {
+                    setShowDlsModal(false);
+                    setDlsModalMinimized(false);
+                    setDlsModalMaximized(false);
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Close DLS Engine"
+                >
+                  <Text style={styles.dlsCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <ScrollView
+              style={{ flex: 1, width: '100%' }}
+              contentContainerStyle={{ padding: isDesktop ? 18 : 10, paddingBottom: 40, flexGrow: 1 }}
+              showsVerticalScrollIndicator={true}
+            >
+              <CalculationSettingsManagement
+                initialTeam1Score={String(matchInfo?.target ? matchInfo.target - 1 : (matchInfo?.currentInningsNumber === 2 ? 178 : runs || 178))}
+                initialTeam1Overs={String(matchInfo?.overs || 20)}
+                initialTeam2TargetOvers={String(matchInfo?.revisedOvers || matchInfo?.overs || 20)}
+                initialCurrentOvers={`${Math.floor(balls / 6)}.${balls % 6}`}
+                initialCurrentWickets={wickets || 0}
+                initialCurrentScore={String(runs || 0)}
+                isModal={true}
+                onClose={() => {
+                  setShowDlsModal(false);
+                  setDlsModalMinimized(false);
+                  setDlsModalMaximized(false);
+                }}
+                onApplyRevisedTarget={async ({ revisedOvers, revisedTarget, method, reason }) => {
+                  try {
+                    await ScorerApi.setRevisedOvers(matchId, {
+                      totalOvers: revisedOvers,
+                      revisedTarget,
+                      comments: `${reason} [via ${method}]`
+                    });
+                    setShowDlsModal(false);
+                    setDlsModalMinimized(false);
+                    setDlsModalMaximized(false);
+                    await loadLiveState(false);
+                    const okMsg = `Successfully applied ${method} Revised Target: ${revisedTarget} runs in ${revisedOvers} overs!`;
+                    Platform.OS === 'web' ? window.alert(okMsg) : Alert.alert('Target Applied', okMsg);
+                  } catch (err: any) {
+                    const errMsg = 'Failed to apply revised target: ' + (err?.message || 'Unknown error');
+                    Platform.OS === 'web' ? window.alert(errMsg) : Alert.alert('Error', errMsg);
+                  }
+                }}
+              />
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Minimized Floating Dock Widget for DLS */}
+      {showDlsModal && dlsModalMinimized && (
+        <View style={styles.dlsMinimizedDock}>
+          <TouchableOpacity
+            style={styles.dlsMinimizedTouchArea}
+            onPress={() => setDlsModalMinimized(false)}
+            activeOpacity={0.85}
+          >
+            <View style={styles.dlsMinimizedPulseDot} />
+            <Text style={styles.dlsMinimizedTitle}>🧮 DLS Target Arbitrator</Text>
+            <View style={styles.dlsMinimizedBadge}>
+              <Text style={styles.dlsMinimizedBadgeText}>Active</Text>
+            </View>
+            <Text style={styles.dlsMinimizedRestoreText}>🗖 Restore</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.dlsMinimizedCloseBtn}
+            onPress={() => {
+              setShowDlsModal(false);
+              setDlsModalMinimized(false);
+              setDlsModalMaximized(false);
+            }}
+          >
+            <Text style={styles.dlsMinimizedCloseText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -6676,8 +9606,8 @@ const getStyles = (isDesktop: boolean) =>
     },
 
     header: {
-      paddingVertical: 10,
-      paddingHorizontal: isDesktop ? 20 : 12,
+      paddingVertical: isDesktop ? 10 : 6,
+      paddingHorizontal: isDesktop ? 20 : 8,
       backgroundColor: '#071026',
       borderBottomWidth: 2,
       borderBottomColor: '#d97706',
@@ -6688,16 +9618,19 @@ const getStyles = (isDesktop: boolean) =>
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.2,
       shadowRadius: 4,
-      elevation: 4
+      elevation: 4,
+      minHeight: isDesktop ? 54 : 42
     },
     headerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
-      flex: 1
+      flex: 1,
+      minWidth: 0,
+      marginRight: 6
     },
     headerLogo: {
-      width: 36,
-      height: 36
+      width: isDesktop ? 36 : 26,
+      height: isDesktop ? 36 : 26
     },
     headerTitleMain: {
       color: '#ffffff',
@@ -6712,20 +9645,34 @@ const getStyles = (isDesktop: boolean) =>
       fontWeight: '600'
     },
     hamburgerBtn: {
-      padding: 6,
-      marginRight: 8,
+      padding: isDesktop ? 6 : 4,
+      marginRight: 6,
       backgroundColor: 'rgba(255, 255, 255, 0.12)',
       borderRadius: 6
     },
     hamburgerIcon: {
       color: '#f59e0b',
-      fontSize: 18,
+      fontSize: isDesktop ? 18 : 16,
       fontWeight: 'bold'
+    },
+    headerMatchesBtn: {
+      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+      paddingHorizontal: isDesktop ? 10 : 8,
+      paddingVertical: isDesktop ? 6 : 4,
+      borderRadius: 6,
+      marginRight: 6,
+      borderWidth: 1,
+      borderColor: 'rgba(255, 255, 255, 0.25)'
+    },
+    headerMatchesBtnText: {
+      color: '#fef3c7',
+      fontSize: isDesktop ? 12 : 11,
+      fontWeight: '700'
     },
     headerRight: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8
+      gap: 6
     },
     userBadgePill: {
       backgroundColor: 'rgba(255, 255, 255, 0.08)',
@@ -6743,14 +9690,14 @@ const getStyles = (isDesktop: boolean) =>
     },
     headerExitBtn: {
       backgroundColor: '#dc2626',
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+      paddingHorizontal: isDesktop ? 12 : 8,
+      paddingVertical: isDesktop ? 6 : 3,
       borderRadius: 20,
       marginLeft: 4
     },
     headerExitBtnText: {
       color: '#ffffff',
-      fontSize: 11,
+      fontSize: isDesktop ? 11 : 10,
       fontWeight: '700'
     },
     backBtn: {
@@ -6998,7 +9945,7 @@ const getStyles = (isDesktop: boolean) =>
     mainLayout: {
       flex: 1,
       width: '100%',
-      padding: isDesktop ? 22 : 10,
+      padding: isDesktop ? 22 : 6,
       justifyContent: 'space-between'
     },
 
@@ -7084,11 +10031,11 @@ const getStyles = (isDesktop: boolean) =>
       gap: 20
     },
     championArtworkWrapper: {
-      width: isDesktop ? 240 : '100%',
-      height: isDesktop ? 195 : 190,
-      borderRadius: 12,
-      overflow: 'hidden',
-      backgroundColor: '#111e38',
+      width: isDesktop ? 280 : '100%',
+      minHeight: 220,
+      borderRadius: 16,
+      overflow: 'visible',
+      backgroundColor: 'rgba(15, 23, 42, 0.65)',
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1.5,
@@ -7199,7 +10146,9 @@ const getStyles = (isDesktop: boolean) =>
     },
     championActionsRow: {
       flexDirection: 'row',
-      gap: 10
+      gap: 10,
+      flexWrap: 'wrap',
+      justifyContent: 'center'
     },
     viewScorecardBtn: {
       backgroundColor: '#d97706',
@@ -7213,6 +10162,28 @@ const getStyles = (isDesktop: boolean) =>
       elevation: 3
     },
     viewScorecardBtnText: {
+      color: '#ffffff',
+      fontSize: 12,
+      fontWeight: '800'
+    },
+    blastConfettiBtn: {
+      backgroundColor: '#7c3aed',
+      paddingVertical: 9,
+      paddingHorizontal: 16,
+      borderRadius: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      borderWidth: 1.5,
+      borderColor: '#a78bfa',
+      shadowColor: '#8b5cf6',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.4,
+      shadowRadius: 4,
+      elevation: 3
+    },
+    blastConfettiBtnText: {
       color: '#ffffff',
       fontSize: 12,
       fontWeight: '800'
@@ -7272,21 +10243,21 @@ const getStyles = (isDesktop: boolean) =>
     // TOP SECTION
     topSection: {
       flexDirection: isDesktop ? 'row' : 'column',
-      gap: 16,
-      marginBottom: 16
+      gap: isDesktop ? 16 : 4,
+      marginBottom: isDesktop ? 16 : 4
     },
     previousInningsBanner: {
       backgroundColor: '#fef3c7',
       borderColor: '#fde68a',
       borderWidth: 1,
       borderRadius: 6,
-      paddingVertical: 3,
-      paddingHorizontal: 8,
-      marginBottom: 8,
+      paddingVertical: 2,
+      paddingHorizontal: 6,
+      marginBottom: isDesktop ? 8 : 2,
       alignSelf: 'center'
     },
     previousInningsText: {
-      fontSize: 12,
+      fontSize: isDesktop ? 12 : 10.5,
       color: '#92400e',
       fontWeight: '600'
     },
@@ -7297,8 +10268,8 @@ const getStyles = (isDesktop: boolean) =>
     scoreBoardCard: {
       flex: isDesktop ? 1 : undefined,
       backgroundColor: '#ffffff',
-      padding: 20,
-      borderRadius: 12,
+      padding: isDesktop ? 20 : 6,
+      borderRadius: isDesktop ? 12 : 8,
       borderWidth: 1.5,
       borderColor: '#fde68a',
       alignItems: 'center',
@@ -7311,33 +10282,33 @@ const getStyles = (isDesktop: boolean) =>
     },
     battingTeam: {
       color: '#005960',
-      fontSize: 13,
+      fontSize: isDesktop ? 13 : 10.5,
       fontWeight: 'bold',
-      marginBottom: 6,
+      marginBottom: isDesktop ? 6 : 2,
       textTransform: 'uppercase'
     },
     scoreRow: { flexDirection: 'row', alignItems: 'baseline' },
-    scoreText: { color: '#0f172a', fontSize: 48, fontWeight: 'bold' },
+    scoreText: { color: '#0f172a', fontSize: isDesktop ? 48 : 26, fontWeight: 'bold' },
     oversText: {
       color: '#64748b',
-      fontSize: 20,
-      marginLeft: 10,
+      fontSize: isDesktop ? 20 : 15,
+      marginLeft: 6,
       fontWeight: '600'
     },
-    rrText: { color: '#475569', fontSize: 13, marginTop: 6, fontWeight: '600' },
+    rrText: { color: '#475569', fontSize: isDesktop ? 13 : 10, marginTop: isDesktop ? 6 : 1, fontWeight: '600' },
 
     playersContainer: {
       flex: isDesktop ? 1.5 : undefined,
-      gap: 16,
+      gap: isDesktop ? 16 : 4,
       justifyContent: 'space-between'
     },
     playerCard: {
       backgroundColor: '#ffffff',
-      padding: 16,
-      borderRadius: 12,
+      padding: isDesktop ? 16 : 6,
+      borderRadius: isDesktop ? 12 : 8,
       borderWidth: 1.5,
       borderColor: '#fde68a',
-      flex: 1,
+      flex: isDesktop ? 1 : undefined,
       justifyContent: 'center',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
@@ -7347,31 +10318,126 @@ const getStyles = (isDesktop: boolean) =>
     },
     playerRole: {
       color: '#64748b',
-      fontSize: 11,
+      fontSize: isDesktop ? 11 : 9.5,
       fontWeight: 'bold',
-      marginBottom: 10,
+      marginBottom: isDesktop ? 10 : 2,
       letterSpacing: 1
     },
     playerRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      marginBottom: 6
+      marginBottom: isDesktop ? 6 : 2
     },
-    playerName: { color: '#1e293b', fontSize: 14, fontWeight: '600' },
+    playerName: { color: '#1e293b', fontSize: isDesktop ? 14 : 11.5, fontWeight: '600' },
     striker: { fontWeight: 'bold', color: '#b45309' },
-    playerStats: { color: '#1e293b', fontSize: 14, fontWeight: 'bold' },
+    playerStats: { color: '#1e293b', fontSize: isDesktop ? 14 : 11.5, fontWeight: 'bold' },
     changeBowlerHeaderBtn: {
       backgroundColor: '#e6f4f1',
       borderWidth: 1,
       borderColor: '#005960',
       borderRadius: 14,
-      paddingHorizontal: 10,
-      paddingVertical: 3
+      paddingHorizontal: 8,
+      paddingVertical: 2
     },
     changeBowlerHeaderBtnText: {
       color: '#005960',
-      fontSize: 10,
+      fontSize: 9.5,
       fontWeight: '800'
+    },
+    injurySubPill: {
+      backgroundColor: '#fef2f2',
+      borderWidth: 1,
+      borderColor: '#fca5a5',
+      borderRadius: 12,
+      paddingHorizontal: 7,
+      paddingVertical: 2
+    },
+    injurySubPillText: {
+      color: '#b91c1c',
+      fontSize: 9.5,
+      fontWeight: '800'
+    },
+    midOverCleanBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#fef3c7',
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: '#fde68a'
+    },
+    midOverCleanBadgeIcon: {
+      fontSize: 14,
+      marginRight: 6
+    },
+    midOverCleanBadgeText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#92400e'
+    },
+    situationDropdownTrigger: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: '#f8fafc',
+      borderWidth: 1,
+      borderColor: '#cbd5e1',
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 9
+    },
+    situationDropdownTriggerOpen: {
+      borderColor: '#005960',
+      backgroundColor: '#f0fdfa'
+    },
+    situationDropdownTriggerText: {
+      fontSize: 12.5,
+      fontWeight: '600',
+      color: '#1e293b'
+    },
+    situationDropdownMenu: {
+      backgroundColor: '#ffffff',
+      borderWidth: 1,
+      borderColor: '#e2e8f0',
+      borderRadius: 8,
+      marginTop: 4,
+      marginBottom: 6,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.1,
+      shadowRadius: 5,
+      elevation: 4,
+      zIndex: 100
+    },
+    situationDropdownItem: {
+      paddingHorizontal: 12,
+      paddingVertical: 9,
+      borderBottomWidth: 1,
+      borderBottomColor: '#f1f5f9'
+    },
+    situationDropdownItemSelected: {
+      backgroundColor: '#f0fdfa'
+    },
+    situationDropdownItemText: {
+      fontSize: 12,
+      color: '#334155',
+      fontWeight: '500'
+    },
+    situationDropdownItemTextSelected: {
+      color: '#005960',
+      fontWeight: '700'
+    },
+    situationCustomInput: {
+      backgroundColor: '#f8fafc',
+      borderWidth: 1,
+      borderColor: '#cbd5e1',
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      fontSize: 12,
+      color: '#0f172a'
     },
 
     // AI COMMENTARY CARD
@@ -7420,8 +10486,8 @@ const getStyles = (isDesktop: boolean) =>
     controlsSection: {
       flex: 1,
       backgroundColor: '#ffffff',
-      borderRadius: 12,
-      padding: isDesktop ? 20 : 12,
+      borderRadius: isDesktop ? 12 : 8,
+      padding: isDesktop ? 20 : 6,
       borderWidth: 1.5,
       borderColor: '#fde68a',
       justifyContent: 'space-between',
@@ -7553,20 +10619,20 @@ const getStyles = (isDesktop: boolean) =>
 
     actionPanel: {
       flexDirection: 'row',
-      gap: 10,
-      marginTop: 10,
-      flexWrap: 'wrap'
+      gap: isDesktop ? 10 : 5,
+      marginTop: isDesktop ? 10 : 4,
+      flexWrap: isDesktop ? 'wrap' : 'nowrap'
     },
     actionBtn: {
       flex: 1,
-      minWidth: 120,
-      height: 44,
+      minWidth: isDesktop ? 120 : 0,
+      height: isDesktop ? 44 : 32,
       borderRadius: 6,
       alignItems: 'center',
       justifyContent: 'center'
     },
     undoBtn: { backgroundColor: '#475569' },
-    actionBtnText: { fontSize: 13, fontWeight: 'bold' },
+    actionBtnText: { fontSize: isDesktop ? 13 : 10.5, fontWeight: 'bold' },
     scorecardBtn: {
       backgroundColor: '#f8fafc',
       borderWidth: 1,
@@ -9277,13 +12343,13 @@ const getStyles = (isDesktop: boolean) =>
     // --- PRIMARY ENGINE ACTION BAR & CONTROLS ---
     primaryEngineActionBar: {
       flexDirection: 'row',
-      gap: 10,
-      marginBottom: 10
+      gap: isDesktop ? 10 : 5,
+      marginBottom: isDesktop ? 10 : 3
     },
     enginePrimaryBtn: {
       flex: 1,
-      paddingVertical: 12,
-      borderRadius: 8,
+      paddingVertical: isDesktop ? 12 : 6,
+      borderRadius: isDesktop ? 8 : 6,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1.5,
@@ -9307,7 +12373,7 @@ const getStyles = (isDesktop: boolean) =>
     },
     enginePrimaryBtnText: {
       color: '#fff',
-      fontSize: 13,
+      fontSize: isDesktop ? 13 : 11,
       fontWeight: '900',
       letterSpacing: 0.8
     },
@@ -9510,17 +12576,17 @@ const getStyles = (isDesktop: boolean) =>
 
     // Engine Keypad Grid
     engineKeypadContainer: {
-      gap: 8,
-      marginTop: 4
+      gap: isDesktop ? 8 : 4,
+      marginTop: isDesktop ? 4 : 2
     },
     engineKeypadRow: {
       flexDirection: 'row',
-      gap: 8
+      gap: isDesktop ? 8 : 4
     },
     engineKeypadBtn: {
       flex: 1,
-      height: 54,
-      borderRadius: 10,
+      height: isDesktop ? 54 : 36,
+      borderRadius: isDesktop ? 10 : 6,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: '#ffffff',
@@ -9533,16 +12599,17 @@ const getStyles = (isDesktop: boolean) =>
       elevation: 2
     },
     engineKeypadText: {
-      fontSize: 22,
+      fontSize: isDesktop ? 22 : 18,
       fontWeight: '900',
       color: '#0f172a'
     },
     engineAuxKeypadBtn: {
       backgroundColor: '#005960',
-      borderColor: '#0d9488'
+      borderColor: '#0d9488',
+      height: isDesktop ? 54 : 32
     },
     engineAuxKeypadText: {
-      fontSize: 12,
+      fontSize: isDesktop ? 12 : 10,
       fontWeight: '800',
       color: '#ffffff',
       textAlign: 'center'
@@ -9631,5 +12698,1240 @@ const getStyles = (isDesktop: boolean) =>
     wagonSectorChipTextActive: {
       color: '#fff',
       fontWeight: 'bold'
+    },
+    boundaryBadgePill: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 12
+    },
+    boundaryBadgeFour: {
+      backgroundColor: '#0284c7'
+    },
+    boundaryBadgeSix: {
+      backgroundColor: '#7c3aed'
+    },
+    boundaryBadgePillText: {
+      fontSize: 10,
+      fontWeight: '900',
+      color: '#ffffff',
+      letterSpacing: 0.5
+    },
+    wagonSelectedBadge: {
+      position: 'absolute',
+      top: 24,
+      backgroundColor: 'rgba(15, 23, 42, 0.85)',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#38bdf8'
+    },
+    wagonSelectedBadgeText: {
+      fontSize: 9,
+      fontWeight: '800',
+      color: '#38bdf8'
+    },
+    wagonSkipBtn: {
+      backgroundColor: '#475569',
+      paddingVertical: 10,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 4,
+      width: '100%'
+    },
+    wagonSkipBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: '#f8fafc'
+    },
+    timeInputContainer: {
+      position: 'relative',
+      justifyContent: 'center'
+    },
+    fieldClockBtn: {
+      position: 'absolute',
+      right: 5,
+      top: 5,
+      bottom: 5,
+      backgroundColor: '#fef3c7',
+      borderColor: '#fde68a',
+      borderWidth: 1,
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4
+    },
+    fieldClockBtnText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#b45309'
+    },
+    autoCalcBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#dcfce7',
+      borderColor: '#bbf7d0',
+      borderWidth: 1,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4
+    },
+    autoCalcBadgeText: {
+      fontSize: 10,
+      color: '#15803d',
+      fontWeight: '800'
+    },
+    activeBreakBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#fffbeb',
+      borderColor: '#f59e0b',
+      borderWidth: 1.5,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 12,
+      shadowColor: '#d97706',
+      shadowOffset: { width: 0, height: 3 },
+      shadowOpacity: 0.15,
+      shadowRadius: 6,
+      elevation: 3
+    },
+    activeRainBanner: {
+      backgroundColor: '#f0f9ff',
+      borderColor: '#38bdf8',
+      shadowColor: '#0284c7'
+    },
+    activeBreakIconBox: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      backgroundColor: '#fef3c7',
+      borderWidth: 1,
+      borderColor: '#fde68a',
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 8
+    },
+    activeBreakEmoji: {
+      fontSize: 22
+    },
+    activeBreakTitle: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: '#92400e'
+    },
+    activeBreakLiveTag: {
+      backgroundColor: '#dc2626',
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      borderRadius: 4
+    },
+    activeBreakLiveTagText: {
+      fontSize: 9,
+      fontWeight: '900',
+      color: '#ffffff',
+      letterSpacing: 0.5
+    },
+    activeBreakDetails: {
+      fontSize: 12,
+      color: '#78350f',
+      marginTop: 2,
+      fontWeight: '600'
+    },
+    resumePlayBtn: {
+      backgroundColor: '#16a34a',
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#15803d'
+    },
+    resumePlayBtnText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: '#ffffff'
+    },
+    // Smart Rules & Free Hit Styles
+    freeHitLiveBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: '#fef2f2',
+      borderWidth: 1.5,
+      borderColor: '#ef4444',
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      marginVertical: 4
+    },
+    freeHitLiveTitle: {
+      fontSize: 13,
+      fontWeight: '900',
+      color: '#b91c1c'
+    },
+    freeHitLiveSub: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: '#991b1b',
+      marginTop: 1
+    },
+    freeHitRulesBtn: {
+      backgroundColor: '#dc2626',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 6
+    },
+    freeHitRulesBtnText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: '#ffffff'
+    },
+    smartRulesNavBtn: {
+      backgroundColor: '#ecfdf5',
+      borderWidth: 1,
+      borderColor: '#10b981',
+      borderRadius: 8,
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginVertical: 4
+    },
+    smartRulesNavBtnText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: '#065f46'
+    },
+    freeHitModalNotice: {
+      backgroundColor: '#fef2f2',
+      borderWidth: 1.5,
+      borderColor: '#f87171',
+      borderRadius: 8,
+      padding: 10,
+      marginBottom: 10
+    },
+    freeHitModalNoticeText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: '#b91c1c',
+      lineHeight: 16
+    },
+    runOutHelperBtn: {
+      backgroundColor: '#eff6ff',
+      borderWidth: 1.5,
+      borderColor: '#3b82f6',
+      borderRadius: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 8,
+      marginBottom: 4
+    },
+    runOutHelperBtnText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: '#1d4ed8'
+    },
+    quotaFullBadge: {
+      backgroundColor: '#fef3c7',
+      borderColor: '#f59e0b',
+      borderWidth: 1,
+      borderRadius: 4,
+      paddingHorizontal: 6,
+      paddingVertical: 2
+    },
+    quotaFullBadgeText: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: '#b45309'
+    },
+
+    // Offline Queue Header Pill
+    offlineQueuePill: {
+      backgroundColor: '#fef3c7',
+      borderColor: '#d97706',
+      borderWidth: 1.5,
+      borderRadius: 16,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      marginRight: 6
+    },
+    offlineQueuePillText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: '#b45309'
+    },
+
+    // Recent Deliveries Strip & Edit Mode Styling
+    recentDeliveriesCard: {
+      backgroundColor: '#ffffff',
+      borderRadius: 12,
+      padding: 12,
+      marginVertical: 8,
+      borderWidth: 1,
+      borderColor: '#e2e8f0',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      elevation: 2
+    },
+    recentDeliveriesCardEditMode: {
+      borderColor: '#d97706',
+      borderWidth: 2,
+      backgroundColor: '#fffdf5'
+    },
+    recentDeliveriesHeader: {
+      marginBottom: 8
+    },
+    recentDeliveriesTitle: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: '#1e293b',
+      letterSpacing: 0.5,
+      textTransform: 'uppercase'
+    },
+    recentDeliveriesSub: {
+      fontSize: 11,
+      color: '#64748b',
+      fontWeight: '600'
+    },
+    editModeTagPill: {
+      backgroundColor: '#fef3c7',
+      borderColor: '#d97706',
+      borderWidth: 1,
+      borderRadius: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 2
+    },
+    editModeTagPillText: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: '#b45309'
+    },
+    editModeTapHint: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: '#b45309',
+      marginTop: 3
+    },
+    recentDeliveriesScroll: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingVertical: 4
+    },
+    ballChip: {
+      width: 44,
+      height: 48,
+      borderRadius: 8,
+      backgroundColor: '#f1f5f9',
+      borderWidth: 1.5,
+      borderColor: '#cbd5e1',
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative'
+    },
+    ballChipDot: {
+      backgroundColor: '#f8fafc',
+      borderColor: '#cbd5e1'
+    },
+    ballChipFour: {
+      backgroundColor: '#ecfdf5',
+      borderColor: '#10b981'
+    },
+    ballChipSix: {
+      backgroundColor: '#eff6ff',
+      borderColor: '#3b82f6'
+    },
+    ballChipWicket: {
+      backgroundColor: '#fef2f2',
+      borderColor: '#ef4444'
+    },
+    ballChipExtra: {
+      backgroundColor: '#fffbeb',
+      borderColor: '#f59e0b'
+    },
+    ballChipEditMode: {
+      borderColor: '#d97706',
+      borderWidth: 2,
+      backgroundColor: '#fef9c3',
+      transform: [{ scale: 1.04 }]
+    },
+    ballChipPencil: {
+      position: 'absolute',
+      top: 1,
+      right: 2,
+      fontSize: 9
+    },
+    ballChipText: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: '#334155'
+    },
+    ballChipTextDot: {
+      color: '#64748b'
+    },
+    ballChipTextFour: {
+      color: '#047857'
+    },
+    ballChipTextSix: {
+      color: '#1d4ed8'
+    },
+    ballChipTextWicket: {
+      color: '#b91c1c'
+    },
+    ballChipTextExtra: {
+      color: '#b45309'
+    },
+    ballChipOverText: {
+      fontSize: 9,
+      color: '#94a3b8',
+      fontWeight: '700',
+      marginTop: 1
+    },
+    emptyRecentBallsBox: {
+      paddingVertical: 10,
+      paddingHorizontal: 8
+    },
+    emptyRecentBallsText: {
+      fontSize: 12,
+      color: '#94a3b8',
+      fontStyle: 'italic'
+    },
+    overDividerBadge: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 8,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: 46,
+      height: 48
+    },
+    overDividerBadgeText: {
+      fontSize: 11,
+      fontWeight: '900',
+      letterSpacing: 0.3
+    },
+    overDividerRunsText: {
+      fontSize: 9.5,
+      fontWeight: '800',
+      marginTop: 1
+    },
+
+    // Direct Delivery Edit Modal Styles
+    editDeliveryModalContainer: {
+      width: '92%',
+      maxWidth: 520,
+      backgroundColor: '#ffffff',
+      borderRadius: 16,
+      overflow: 'hidden',
+      maxHeight: '90%',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+      elevation: 8
+    },
+    editDeliveryModalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: '#fffbeb',
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderBottomWidth: 1.5,
+      borderBottomColor: '#fed7aa'
+    },
+    editDeliveryModalTitle: {
+      fontSize: 16,
+      fontWeight: '900',
+      color: '#b45309'
+    },
+    editDeliveryModalSub: {
+      fontSize: 11,
+      color: '#78350f',
+      fontWeight: '600',
+      marginTop: 2
+    },
+    editDeliveryModalBody: {
+      padding: 16
+    },
+    editDeliveryInfoBox: {
+      backgroundColor: '#f8fafc',
+      borderRadius: 8,
+      padding: 10,
+      borderWidth: 1,
+      borderColor: '#e2e8f0',
+      marginBottom: 14
+    },
+    editDeliveryInfoText: {
+      fontSize: 13,
+      color: '#334155'
+    },
+    editDeliveryCommentaryText: {
+      fontSize: 11,
+      color: '#64748b',
+      fontStyle: 'italic',
+      marginTop: 4
+    },
+    editSectionLabel: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: '#475569',
+      textTransform: 'uppercase',
+      letterSpacing: 0.3,
+      marginTop: 8,
+      marginBottom: 6
+    },
+    editRunsRow: {
+      flexDirection: 'row',
+      gap: 8,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    },
+    editRunChip: {
+      width: 44,
+      height: 44,
+      borderRadius: 8,
+      backgroundColor: '#f1f5f9',
+      borderWidth: 1.5,
+      borderColor: '#cbd5e1',
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    editRunChipActive: {
+      backgroundColor: '#d97706',
+      borderColor: '#b45309'
+    },
+    editRunChipText: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: '#334155'
+    },
+    editRunChipTextActive: {
+      color: '#ffffff'
+    },
+    editExtrasRow: {
+      flexDirection: 'row',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    },
+    editExtraChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      backgroundColor: '#f8fafc',
+      borderWidth: 1.5,
+      borderColor: '#cbd5e1'
+    },
+    editExtraChipActive: {
+      backgroundColor: '#f59e0b',
+      borderColor: '#d97706'
+    },
+    editExtraChipText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: '#475569'
+    },
+    editExtraChipTextActive: {
+      color: '#ffffff',
+      fontWeight: '800'
+    },
+    editWicketToggleRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 10
+    },
+    editWicketToggleBtn: {
+      flex: 1,
+      paddingVertical: 10,
+      borderRadius: 8,
+      backgroundColor: '#f1f5f9',
+      borderWidth: 1.5,
+      borderColor: '#cbd5e1',
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    editWicketToggleBtnActive: {
+      backgroundColor: '#ecfdf5',
+      borderColor: '#10b981'
+    },
+    editWicketToggleBtnWicketActive: {
+      backgroundColor: '#fef2f2',
+      borderColor: '#ef4444'
+    },
+    editWicketToggleBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: '#64748b'
+    },
+    editWicketToggleBtnTextActive: {
+      color: '#065f46',
+      fontWeight: '800'
+    },
+    editWicketToggleBtnTextWicketActive: {
+      color: '#b91c1c',
+      fontWeight: '800'
+    },
+    editWicketTypeGrid: {
+      flexDirection: 'row',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginBottom: 12,
+      backgroundColor: '#fff5f5',
+      padding: 10,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#fca5a5'
+    },
+    editWicketTypeChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 6,
+      backgroundColor: '#ffffff',
+      borderWidth: 1,
+      borderColor: '#f87171'
+    },
+    editWicketTypeChipActive: {
+      backgroundColor: '#dc2626',
+      borderColor: '#b91c1c'
+    },
+    editWicketTypeChipText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#b91c1c'
+    },
+    editWicketTypeChipTextActive: {
+      color: '#ffffff',
+      fontWeight: '800'
+    },
+    editShotZoneGrid: {
+      flexDirection: 'row',
+      gap: 6,
+      flexWrap: 'wrap',
+      marginBottom: 10
+    },
+    editShotZoneChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 6,
+      backgroundColor: '#f8fafc',
+      borderWidth: 1,
+      borderColor: '#cbd5e1'
+    },
+    editShotZoneChipActive: {
+      backgroundColor: '#059669',
+      borderColor: '#047857'
+    },
+    editShotZoneChipText: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#475569'
+    },
+    editShotZoneChipTextActive: {
+      color: '#ffffff',
+      fontWeight: '800'
+    },
+    editFielderInput: {
+      backgroundColor: '#ffffff',
+      borderWidth: 1.5,
+      borderColor: '#cbd5e1',
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      fontSize: 13,
+      color: '#0f172a',
+      marginTop: 4,
+      marginBottom: 8
+    },
+    editDeliveryActionRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 14,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: '#e2e8f0'
+    },
+    editDeliveryCancelBtn: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 8,
+      backgroundColor: '#f1f5f9',
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    editDeliveryCancelBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#64748b'
+    },
+    editDeliverySaveBtn: {
+      flex: 2,
+      paddingVertical: 12,
+      borderRadius: 8,
+      backgroundColor: '#16a34a',
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    editDeliverySaveBtnText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: '#ffffff'
+    },
+
+    // Cricket Milestone Celebration Styles
+    milestoneModalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.88)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 16
+    },
+    milestoneCard: {
+      width: '92%',
+      maxWidth: 460,
+      backgroundColor: '#ffffff',
+      borderRadius: 24,
+      borderWidth: 2.5,
+      borderColor: '#b8860b',
+      overflow: 'hidden',
+      alignItems: 'center',
+      paddingBottom: 22,
+      position: 'relative',
+      shadowColor: '#b8860b',
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.22,
+      shadowRadius: 16,
+      elevation: 8
+    },
+    milestoneRibbon: {
+      width: '100%',
+      backgroundColor: '#fffbeb',
+      borderBottomWidth: 2,
+      borderBottomColor: '#f59e0b',
+      paddingVertical: 8,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    milestoneRibbonText: {
+      color: '#b45309',
+      fontSize: 12,
+      fontWeight: '900',
+      letterSpacing: 1.2,
+      textTransform: 'uppercase'
+    },
+    milestoneImageContainer: {
+      width: 250,
+      height: 180,
+      marginTop: 10,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    milestoneHeroImage: {
+      width: '100%',
+      height: '100%'
+    },
+    milestoneContentBox: {
+      width: '100%',
+      paddingHorizontal: 20,
+      alignItems: 'center'
+    },
+    milestoneTitleText: {
+      fontSize: 22,
+      fontWeight: '900',
+      color: '#b45309',
+      letterSpacing: 0.8,
+      marginTop: 4,
+      textAlign: 'center'
+    },
+    milestonePlayerName: {
+      fontSize: 20,
+      fontWeight: '900',
+      color: '#0f172a',
+      letterSpacing: 0.5,
+      marginTop: 4,
+      textAlign: 'center'
+    },
+    milestoneTeamName: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: '#64748b',
+      letterSpacing: 0.5,
+      marginTop: 2,
+      textAlign: 'center'
+    },
+    milestoneStatsBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#fffbeb',
+      borderWidth: 1.5,
+      borderColor: '#fde68a',
+      borderRadius: 14,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      marginTop: 14,
+      width: '100%'
+    },
+    milestoneStatItem: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    milestoneStatValue: {
+      fontSize: 20,
+      fontWeight: '900',
+      color: '#0f172a'
+    },
+    milestoneStatLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: '#854d0e',
+      marginTop: 2,
+      letterSpacing: 0.5
+    },
+    milestoneStatDivider: {
+      width: 1,
+      height: 28,
+      backgroundColor: '#fde68a',
+      marginHorizontal: 8
+    },
+    milestoneBoundariesRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 12
+    },
+    milestoneBoundaryTag: {
+      backgroundColor: '#f0fdf4',
+      borderColor: '#22c55e',
+      borderWidth: 1,
+      borderRadius: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 5
+    },
+    milestoneSixTag: {
+      backgroundColor: '#fff1f2',
+      borderColor: '#f43f5e'
+    },
+    milestoneBoundaryTagText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: '#15803d'
+    },
+    milestoneSubtitle: {
+      fontSize: 12,
+      color: '#475569',
+      textAlign: 'center',
+      marginTop: 12,
+      fontStyle: 'italic',
+      lineHeight: 17
+    },
+    milestoneDismissBtn: {
+      backgroundColor: '#16a34a',
+      borderRadius: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 28,
+      marginTop: 16,
+      shadowColor: '#16a34a',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.4,
+      shadowRadius: 8,
+      elevation: 4
+    },
+    milestoneDismissBtnText: {
+      color: '#ffffff',
+      fontSize: 13,
+      fontWeight: '900',
+      letterSpacing: 0.5
+    },
+    milestoneCloseCross: {
+      position: 'absolute',
+      top: 6,
+      right: 10,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      backgroundColor: 'rgba(0, 0, 0, 0.4)',
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    milestoneCloseCrossText: {
+      color: '#ffffff',
+      fontSize: 14,
+      fontWeight: '900'
+    },
+
+    // MOTM Presentation Card Styles (End of Match)
+    motmPresentationCard: {
+      width: '100%',
+      backgroundColor: '#0f172a',
+      borderRadius: 16,
+      borderWidth: 2,
+      borderColor: '#f59e0b',
+      overflow: 'hidden',
+      marginTop: 14,
+      marginBottom: 14,
+      shadowColor: '#f59e0b',
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.35,
+      shadowRadius: 10,
+      elevation: 6
+    },
+    motmRibbonHeader: {
+      backgroundColor: '#f59e0b',
+      paddingVertical: 6,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    motmRibbonText: {
+      color: '#0f172a',
+      fontSize: 11,
+      fontWeight: '900',
+      letterSpacing: 1,
+      textTransform: 'uppercase'
+    },
+    motmCardContentRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      gap: 12
+    },
+    motmImageCircle: {
+      width: 70,
+      height: 70,
+      borderRadius: 35,
+      backgroundColor: '#ffffff',
+      borderWidth: 2,
+      borderColor: '#f59e0b',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden'
+    },
+    motmImage: {
+      width: '85%',
+      height: '85%'
+    },
+    motmInfoCol: {
+      flex: 1
+    },
+    motmPlayerTitle: {
+      fontSize: 18,
+      fontWeight: '900',
+      color: '#fde047',
+      letterSpacing: 0.5
+    },
+    motmTeamSubtitle: {
+      fontSize: 11,
+      color: '#cbd5e1',
+      fontWeight: '600',
+      marginTop: 2
+    },
+    motmPillBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: '#b45309',
+      borderRadius: 12,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      marginTop: 6
+    },
+    motmPillBadgeText: {
+      color: '#ffffff',
+      fontSize: 9,
+      fontWeight: '900',
+      letterSpacing: 0.5
+    },
+
+    // Wicketkeeper Dismissal Card Styles (Wicket Modal Step 2)
+    keeperDismissalCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#f0fdf4',
+      borderWidth: 1.5,
+      borderColor: '#22c55e',
+      borderRadius: 12,
+      padding: 10,
+      marginBottom: 12,
+      gap: 10
+    },
+    keeperImageContainer: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: '#ffffff',
+      borderWidth: 1.5,
+      borderColor: '#16a34a',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden'
+    },
+    keeperArtwork: {
+      width: '85%',
+      height: '85%'
+    },
+    keeperTextCol: {
+      flex: 1
+    },
+    keeperTagBadge: {
+      alignSelf: 'flex-start',
+      backgroundColor: '#dcfce7',
+      borderWidth: 1,
+      borderColor: '#86efac',
+      borderRadius: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      marginBottom: 3
+    },
+    keeperTagBadgeText: {
+      fontSize: 9,
+      fontWeight: '900',
+      color: '#15803d'
+    },
+    keeperDismissalTitle: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: '#14532d'
+    },
+    keeperDismissalExplanation: {
+      fontSize: 11,
+      color: '#166534',
+      marginTop: 2,
+      fontWeight: '500'
+    },
+
+    // Run Out Dismissal Card Styles
+    runOutDismissalCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#fff1f2',
+      borderWidth: 1.5,
+      borderColor: '#f43f5e',
+      borderRadius: 12,
+      padding: 10,
+      marginBottom: 12,
+      gap: 10
+    },
+    runOutImageContainer: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: '#ffffff',
+      borderWidth: 1.5,
+      borderColor: '#e11d48',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden'
+    },
+    runOutArtwork: {
+      width: '85%',
+      height: '85%'
+    },
+    runOutTextCol: {
+      flex: 1
+    },
+    runOutDismissalTitle: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: '#9f1239'
+    },
+    runOutDismissalExplanation: {
+      fontSize: 11,
+      color: '#881337',
+      marginTop: 2,
+      fontWeight: '500'
+    },
+
+    // Background color highlights for milestone modal
+    milestoneKeeperBg: {
+      backgroundColor: '#064e3b',
+      borderRadius: 16,
+      padding: 8
+    },
+    milestoneBowlerBg: {
+      backgroundColor: '#78350f',
+      borderRadius: 16,
+      padding: 8
+    },
+
+    // DLS & VJD Responsive Modal Styles
+    dlsModalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(15, 23, 42, 0.8)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: Platform.OS === 'web' ? (isDesktop ? 24 : 10) : 8
+    },
+    dlsModalCard: {
+      backgroundColor: '#f8fafc',
+      borderRadius: 16,
+      width: '100%',
+      maxHeight: isDesktop ? '90%' : '96%',
+      overflow: 'hidden',
+      shadowColor: '#000',
+      shadowOpacity: 0.4,
+      shadowRadius: 18,
+      elevation: 24,
+      borderWidth: 1,
+      borderColor: '#334155'
+    },
+    dlsModalCardDesktop: {
+      maxWidth: 1140,
+      height: '88%'
+    },
+    dlsModalCardMobile: {
+      maxWidth: '100%',
+      height: '96%'
+    },
+    dlsModalCardMaximized: {
+      maxWidth: '98%',
+      width: '98%',
+      height: '96%',
+      maxHeight: '96%'
+    },
+    dlsModalTopBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: '#0f172a',
+      borderBottomWidth: 1,
+      borderBottomColor: '#1e293b'
+    },
+    dlsModalHeaderIconBox: {
+      width: 34,
+      height: 34,
+      borderRadius: 8,
+      backgroundColor: '#1e293b',
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    dlsModalTitle: {
+      color: '#38bdf8',
+      fontSize: isDesktop ? 16 : 14,
+      fontWeight: '800'
+    },
+    dlsModalSub: {
+      color: '#94a3b8',
+      fontSize: isDesktop ? 11 : 10
+    },
+    dlsWindowControlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginLeft: 10
+    },
+    dlsWindowBtn: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    dlsMinimizeBtn: {
+      backgroundColor: '#eab308'
+    },
+    dlsMinimizeText: {
+      color: '#0f172a',
+      fontWeight: '900',
+      fontSize: 13,
+      lineHeight: 14
+    },
+    dlsMaximizeBtn: {
+      backgroundColor: '#3b82f6'
+    },
+    dlsMaximizeText: {
+      color: '#ffffff',
+      fontWeight: '800',
+      fontSize: 12
+    },
+    dlsCloseBtn: {
+      backgroundColor: '#ef4444'
+    },
+    dlsCloseText: {
+      color: '#ffffff',
+      fontWeight: '900',
+      fontSize: 13
+    },
+    dlsMinimizedDock: {
+      position: 'absolute',
+      bottom: 20,
+      right: 20,
+      backgroundColor: '#0f172a',
+      borderRadius: 24,
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      shadowColor: '#000',
+      shadowOpacity: 0.35,
+      shadowRadius: 10,
+      elevation: 20,
+      zIndex: 99999,
+      borderWidth: 1.5,
+      borderColor: '#38bdf8'
+    },
+    dlsMinimizedTouchArea: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8
+    },
+    dlsMinimizedPulseDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: '#10b981'
+    },
+    dlsMinimizedTitle: {
+      color: '#f8fafc',
+      fontWeight: '800',
+      fontSize: 12
+    },
+    dlsMinimizedBadge: {
+      backgroundColor: '#0369a1',
+      borderRadius: 10,
+      paddingHorizontal: 6,
+      paddingVertical: 1
+    },
+    dlsMinimizedBadgeText: {
+      color: '#e0f2fe',
+      fontWeight: '700',
+      fontSize: 10
+    },
+    dlsMinimizedRestoreText: {
+      color: '#38bdf8',
+      fontWeight: '700',
+      fontSize: 11
+    },
+    dlsMinimizedCloseBtn: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: '#ef4444',
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    dlsMinimizedCloseText: {
+      color: '#ffffff',
+      fontWeight: '900',
+      fontSize: 10
+    },
+    dlsModalCloseBtn: {
+      backgroundColor: '#ef4444',
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 8
+    },
+    dlsModalCloseText: {
+      color: '#ffffff',
+      fontWeight: '800',
+      fontSize: 12
     }
   });
