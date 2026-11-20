@@ -46,10 +46,19 @@ function sanitizeInput(req, res, next) {
 // General API Rate Limiter
 const generalRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 300 : 3000, // Limit each IP
+  max: process.env.NODE_ENV === 'production' ? 10000 : 20000, // Generous limit per client IP
   standardHeaders: true,
   legacyHeaders: false,
-  skip: (req) => req.method === 'OPTIONS',
+  skip: (req) => {
+    if (req.method === 'OPTIONS') return true;
+    const url = req.originalUrl || req.url || '';
+    return (
+      url === '/' ||
+      url === '/api/health' ||
+      url.startsWith('/api/master-settings') ||
+      url.startsWith('/uploads')
+    );
+  },
   message: {
     success: false,
     message: 'Too many requests from this IP address. Please try again after 15 minutes.'
@@ -59,7 +68,7 @@ const generalRateLimiter = rateLimit({
 // Strict Auth / Sensitive Endpoint Rate Limiter (Brute-force protection)
 const authRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 15 : 200, // Limit each IP
+  max: process.env.NODE_ENV === 'production' ? 100 : 500, // Allow sufficient verification & submission attempts
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => req.method === 'OPTIONS',

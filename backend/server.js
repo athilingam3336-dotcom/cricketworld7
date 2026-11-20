@@ -39,6 +39,9 @@ const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 
+// Enable reverse proxy support for Render, AWS, and Cloudflare (ensures correct client IP for rate limiting)
+app.set('trust proxy', 1);
+
 // Security 1: Hide express fingerprinting
 app.disable('x-powered-by');
 
