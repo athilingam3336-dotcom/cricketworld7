@@ -390,7 +390,7 @@ async function sendSuperAdminVerificationEmail({
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          sender: { name: 'Cricket Federation', email: process.env.BREVO_SENDER_EMAIL || '24ucs021@anjaconline.org' },
           to: [{ email: toEmail, name: userName || 'User' }],
           subject,
           htmlContent
@@ -581,7 +581,7 @@ async function sendAdminApprovalEmail({
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          sender: { name: 'Cricket Federation', email: process.env.BREVO_SENDER_EMAIL || '24ucs021@anjaconline.org' },
           to: [{ email: toEmail, name: userName || 'User' }],
           subject,
           htmlContent
@@ -687,7 +687,7 @@ async function sendOtpEmail({ toEmail, userName, otp }) {
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          sender: { name: 'Cricket Federation', email: process.env.BREVO_SENDER_EMAIL || '24ucs021@anjaconline.org' },
           to: [{ email: toEmail, name: userName || 'User' }],
           subject,
           htmlContent
@@ -785,7 +785,7 @@ async function sendPlayerTeamEmail({ toEmail, playerName, teamNames }) {
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          sender: { name: 'Cricket Federation', email: process.env.BREVO_SENDER_EMAIL || '24ucs021@anjaconline.org' },
           to: [{ email: toEmail, name: userName || 'User' }],
           subject,
           htmlContent
@@ -977,7 +977,7 @@ async function sendDualAdminApprovalEmail({
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          sender: { name: 'Cricket Federation', email: process.env.BREVO_SENDER_EMAIL || '24ucs021@anjaconline.org' },
           to: [{ email: toEmail, name: userName || 'User' }],
           subject,
           htmlContent
@@ -1093,7 +1093,7 @@ async function sendCandidateVerificationEmail({
           'Accept': 'application/json'
         },
         body: JSON.stringify({
-          sender: { name: 'Cricket Federation', email: process.env.SMTP_USER || 'cricketfederation21@gmail.com' },
+          sender: { name: 'Cricket Federation', email: process.env.BREVO_SENDER_EMAIL || '24ucs021@anjaconline.org' },
           to: [{ email: toEmail, name: userName || 'User' }],
           subject,
           htmlContent
