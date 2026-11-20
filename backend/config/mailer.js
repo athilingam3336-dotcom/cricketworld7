@@ -300,6 +300,37 @@ async function sendSuperAdminVerificationEmail({
 </html>
   `;
 
+  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (resendApiKey) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM || 'Cricket Federation <onboarding@resend.dev>',
+          to: [toEmail],
+          subject,
+          text: textContent,
+          html: htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.id) {
+        console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+      } else {
+        console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+      }
+    } catch (apiErr) {
+      console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+    }
+  }
+
+  // 2. Standard SMTP Dispatch (Works on local machine or Render paid plan)
   const trans = await getTransporter();
   if (trans) {
     try {
@@ -425,6 +456,37 @@ async function sendAdminApprovalEmail({
 </html>
   `;
 
+  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (resendApiKey) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM || 'Cricket Federation <onboarding@resend.dev>',
+          to: [toEmail],
+          subject,
+          text: textContent,
+          html: htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.id) {
+        console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+      } else {
+        console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+      }
+    } catch (apiErr) {
+      console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+    }
+  }
+
+  // 2. Standard SMTP Dispatch (Works on local machine or Render paid plan)
   const trans = await getTransporter();
   if (trans) {
     try {
@@ -465,6 +527,37 @@ async function sendOtpEmail({ toEmail, userName, otp }) {
     </div>
   `;
 
+  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (resendApiKey) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM || 'Cricket Federation <onboarding@resend.dev>',
+          to: [toEmail],
+          subject,
+          text: textContent,
+          html: htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.id) {
+        console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+      } else {
+        console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+      }
+    } catch (apiErr) {
+      console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+    }
+  }
+
+  // 2. Standard SMTP Dispatch (Works on local machine or Render paid plan)
   const trans = await getTransporter();
   if (trans) {
     try {
@@ -497,6 +590,37 @@ async function sendPlayerTeamEmail({ toEmail, playerName, teamNames }) {
   const subject = 'Cricket Association - Your Registered Team Details';
   const textContent = `Hello ${playerName || 'Player'},\n\nYour Registered Team Name:\n${teamListText}\n\nCricket Federation of Virudhunagar District`;
 
+  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (resendApiKey) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM || 'Cricket Federation <onboarding@resend.dev>',
+          to: [toEmail],
+          subject,
+          text: textContent,
+          html: htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.id) {
+        console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+      } else {
+        console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+      }
+    } catch (apiErr) {
+      console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+    }
+  }
+
+  // 2. Standard SMTP Dispatch (Works on local machine or Render paid plan)
   const trans = await getTransporter();
   if (trans) {
     try {
@@ -623,6 +747,37 @@ async function sendDualAdminApprovalEmail({
 </html>
   `;
 
+  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (resendApiKey) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM || 'Cricket Federation <onboarding@resend.dev>',
+          to: [toEmail],
+          subject,
+          text: textContent,
+          html: htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.id) {
+        console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+      } else {
+        console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+      }
+    } catch (apiErr) {
+      console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+    }
+  }
+
+  // 2. Standard SMTP Dispatch (Works on local machine or Render paid plan)
   const trans = await getTransporter();
   if (trans) {
     try {
@@ -673,6 +828,37 @@ async function sendCandidateVerificationEmail({
     </div>
   `;
 
+  // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (resendApiKey) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: process.env.RESEND_FROM || 'Cricket Federation <onboarding@resend.dev>',
+          to: [toEmail],
+          subject,
+          text: textContent,
+          html: htmlContent
+        })
+      });
+      const data = await res.json();
+      if (res.ok && data.id) {
+        console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+      } else {
+        console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+      }
+    } catch (apiErr) {
+      console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+    }
+  }
+
+  // 2. Standard SMTP Dispatch (Works on local machine or Render paid plan)
   const trans = await getTransporter();
   if (trans) {
     try {
