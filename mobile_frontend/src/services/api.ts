@@ -251,7 +251,7 @@ async function request(endpoint: string, options: RequestInit = {}) {
   };
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 12000);
+  const timeoutId = setTimeout(() => controller.abort(), 30000);
 
   try {
     const res = await fetch(url, {
@@ -292,7 +292,7 @@ async function request(endpoint: string, options: RequestInit = {}) {
     }
     if (err.name === 'AbortError' || err.message?.includes('aborted')) {
       const timeoutErr = new Error(
-        `Connection timed out (${getBackendHost()}:5000). Please check if your mobile and computer are on the same Wi-Fi network.`
+        `Connection timed out. Please check your internet connection or server status.`
       );
       (timeoutErr as any).isNetworkError = true;
       throw timeoutErr;
@@ -304,7 +304,7 @@ async function request(endpoint: string, options: RequestInit = {}) {
       err.message?.includes('ECONNREFUSED')
     ) {
       const friendly = new Error(
-        `Cannot connect to backend (${getBackendHost()}:5000). Ensure the backend server is running and your mobile is on the same Wi-Fi.`
+        `Cannot connect to server. Please check your network connection and try again.`
       );
       (friendly as any).isNetworkError = true;
       throw friendly;

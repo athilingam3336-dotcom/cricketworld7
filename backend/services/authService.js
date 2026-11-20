@@ -70,11 +70,12 @@ class AuthService {
       verified: false
     });
 
-    await sendOtpEmail({
+    // Send email non-blocking so client gets an immediate, reliable HTTP response
+    sendOtpEmail({
       toEmail: cleanEmail,
       userName: name || 'Applicant',
       otp: rawOtp
-    });
+    }).catch(err => console.warn('Background OTP email dispatch notice:', err.message));
 
     console.log(`\n📧 [REGISTRATION OTP SENT] Email: ${cleanEmail} | Role: ${role || 'USER'} | OTP: ${rawOtp}\n`);
 
