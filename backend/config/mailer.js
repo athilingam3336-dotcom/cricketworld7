@@ -122,6 +122,40 @@ function resetTransporter() {
  */
 async function verifySmtpConnection() {
   const cfg = getSmtpConfig();
+  const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
+  const resendKey = rawResend.replace(/^"|"$/g, '').trim();
+
+  let resendStatus = {
+    configured: Boolean(resendKey),
+    masked: resendKey ? `${resendKey.slice(0, 6)}****${resendKey.slice(-4)}` : null,
+    valid: false
+  };
+
+  if (resendKey) {
+    try {
+      const resCheck = await fetch('https://api.resend.com/api-keys', {
+        headers: { Authorization: `Bearer ${resendKey}` }
+      });
+      const data = await resCheck.json();
+      if (resCheck.ok) {
+        resendStatus.valid = true;
+        resendStatus.details = data;
+      } else {
+        resendStatus.error = data.message || JSON.stringify(data);
+      }
+    } catch (e) {
+      resendStatus.error = e.message;
+    }
+  }
+
+  if (resendStatus.valid) {
+    return {
+      connected: true,
+      provider: 'RESEND',
+      resend: resendStatus,
+      message: 'Resend HTTPS API (Port 443) connected & verified successfully!'
+    };
+  }
 
   if (!cfg.pass || cfg.pass.startsWith('#')) {
     return {
@@ -129,7 +163,8 @@ async function verifySmtpConnection() {
       configured: false,
       type: 'NONE',
       user: cfg.user,
-      error: 'SMTP_PASSWORD is missing or commented out in environment variables.'
+      resend: resendStatus,
+      error: 'Neither RESEND_API_KEY nor SMTP_PASSWORD is valid.'
     };
   }
 
@@ -144,6 +179,7 @@ async function verifySmtpConnection() {
       configured: false,
       type: 'NONE',
       user: cfg.user,
+      resend: resendStatus,
       error: 'Unable to initialize transporter'
     };
   }
@@ -159,9 +195,11 @@ async function verifySmtpConnection() {
       connected: true,
       configured: true,
       type: 'GMAIL',
+      provider: 'GMAIL_SMTP',
       user: cfg.user,
       passwordLength: cfg.pass.length,
       passwordMasked: masked,
+      resend: resendStatus,
       message: `Successfully connected and verified with Gmail SMTP for ${cfg.user}!`
     };
   } catch (err) {
@@ -169,9 +207,11 @@ async function verifySmtpConnection() {
       connected: false,
       configured: true,
       type: 'ERROR',
+      provider: 'GMAIL_SMTP',
       user: cfg.user,
       passwordLength: cfg.pass.length,
       passwordMasked: masked,
+      resend: resendStatus,
       error: err.message,
       code: err.code || err.responseCode
     };
@@ -301,13 +341,14 @@ async function sendSuperAdminVerificationEmail({
   `;
 
   // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
+  const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Authorization': `Bearer ${resendApiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -321,12 +362,14 @@ async function sendSuperAdminVerificationEmail({
       const data = await res.json();
       if (res.ok && data.id) {
         console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
-        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id, provider: 'RESEND' };
       } else {
         console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'RESEND', otp };
       }
     } catch (apiErr) {
       console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+      return { success: false, error: apiErr.message, provider: 'RESEND', otp };
     }
   }
 
@@ -457,13 +500,14 @@ async function sendAdminApprovalEmail({
   `;
 
   // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
+  const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Authorization': `Bearer ${resendApiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -477,12 +521,14 @@ async function sendAdminApprovalEmail({
       const data = await res.json();
       if (res.ok && data.id) {
         console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
-        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id, provider: 'RESEND' };
       } else {
         console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'RESEND', otp };
       }
     } catch (apiErr) {
       console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+      return { success: false, error: apiErr.message, provider: 'RESEND', otp };
     }
   }
 
@@ -528,13 +574,14 @@ async function sendOtpEmail({ toEmail, userName, otp }) {
   `;
 
   // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
+  const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Authorization': `Bearer ${resendApiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -548,12 +595,14 @@ async function sendOtpEmail({ toEmail, userName, otp }) {
       const data = await res.json();
       if (res.ok && data.id) {
         console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
-        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id, provider: 'RESEND' };
       } else {
         console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'RESEND', otp };
       }
     } catch (apiErr) {
       console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+      return { success: false, error: apiErr.message, provider: 'RESEND', otp };
     }
   }
 
@@ -591,13 +640,14 @@ async function sendPlayerTeamEmail({ toEmail, playerName, teamNames }) {
   const textContent = `Hello ${playerName || 'Player'},\n\nYour Registered Team Name:\n${teamListText}\n\nCricket Federation of Virudhunagar District`;
 
   // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
+  const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Authorization': `Bearer ${resendApiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -611,12 +661,14 @@ async function sendPlayerTeamEmail({ toEmail, playerName, teamNames }) {
       const data = await res.json();
       if (res.ok && data.id) {
         console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
-        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id, provider: 'RESEND' };
       } else {
         console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'RESEND', otp };
       }
     } catch (apiErr) {
       console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+      return { success: false, error: apiErr.message, provider: 'RESEND', otp };
     }
   }
 
@@ -748,13 +800,14 @@ async function sendDualAdminApprovalEmail({
   `;
 
   // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
+  const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Authorization': `Bearer ${resendApiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -768,12 +821,14 @@ async function sendDualAdminApprovalEmail({
       const data = await res.json();
       if (res.ok && data.id) {
         console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
-        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id, provider: 'RESEND' };
       } else {
         console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'RESEND', otp };
       }
     } catch (apiErr) {
       console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+      return { success: false, error: apiErr.message, provider: 'RESEND', otp };
     }
   }
 
@@ -829,13 +884,14 @@ async function sendCandidateVerificationEmail({
   `;
 
   // 1. Resend HTTPS API Dispatch (Port 443 - 100% bypasses Render Free Tier SMTP port blocks)
-  const resendApiKey = process.env.RESEND_API_KEY;
+  const rawResend = process.env.RESEND_API_KEY || process.env.RESEND_KEY || process.env.RESEND_TOKEN || '';
+  const resendApiKey = rawResend.replace(/^"|"$/g, '').trim();
   if (resendApiKey) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${resendApiKey.trim()}`,
+          'Authorization': `Bearer ${resendApiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
@@ -849,12 +905,14 @@ async function sendCandidateVerificationEmail({
       const data = await res.json();
       if (res.ok && data.id) {
         console.log(`✅ [RESEND EMAIL DELIVERED] To: ${toEmail} | Id: ${data.id}`);
-        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id };
+        return { success: true, message: `OTP sent to ${toEmail}`, messageId: data.id, provider: 'RESEND' };
       } else {
         console.warn(`⚠️ Resend API notice for ${toEmail}:`, data);
+        return { success: false, error: data.message || JSON.stringify(data), provider: 'RESEND', otp };
       }
     } catch (apiErr) {
       console.warn(`⚠️ Resend fetch error for ${toEmail}:`, apiErr.message);
+      return { success: false, error: apiErr.message, provider: 'RESEND', otp };
     }
   }
 
