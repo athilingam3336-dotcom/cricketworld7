@@ -39,17 +39,28 @@ function createPrimaryTransporter(portOverride = null, secureOverride = null) {
     return null;
   }
 
+  // Use Nodemailer's built-in 'gmail' service profile for Google accounts
+  // It automatically handles the exact hosts, ports, and TLS handshake reliably without timeout
+  if (cfg.host.includes('gmail.com')) {
+    return nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: cfg.user,
+        pass: cfg.pass
+      }
+    });
+  }
+
   const port = portOverride !== null ? portOverride : cfg.port;
   const secure = secureOverride !== null ? secureOverride : (port === 465);
 
   return nodemailer.createTransport({
-    host: cfg.host.includes('gmail.com') ? 'smtp.gmail.com' : cfg.host,
+    host: cfg.host,
     port,
     secure,
-    family: 4, // Prevent IPv6 DNS delays
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 10000,
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
     auth: {
       user: cfg.user,
       pass: cfg.pass
@@ -72,29 +83,19 @@ async function getTransporter() {
 
   const cfg = getSmtpConfig();
   if (cfg.user && cfg.pass && !cfg.pass.startsWith('#')) {
-    // Attempt primary port first (e.g. 465), then alternate (587) if network/port issue
-    const portsToTry = cfg.port === 465 ? [465, 587] : [587, 465];
-
-    for (const port of portsToTry) {
-      const isPort465 = port === 465;
-      const trans = createPrimaryTransporter(port, isPort465);
-      if (!trans) continue;
-
+    const trans = createPrimaryTransporter();
+    if (trans) {
       try {
         await Promise.race([
           trans.verify(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error(`SMTP verify timeout on port ${port}`)), 6000))
+          new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP verify timeout (12s)')), 12000))
         ]);
         activeTransporter = trans;
         transporterType = 'GMAIL';
-        console.log(`📧 Nodemailer: Verified Gmail SMTP for ${cfg.user} on port ${port} (IPv4 direct TLS)`);
+        console.log(`📧 Nodemailer: Verified Gmail SMTP for ${cfg.user}`);
         return activeTransporter;
       } catch (err) {
-        console.warn(`⚠️ SMTP attempt on port ${port} notice: ${err.message}`);
-        // If authentication failed directly, do not try other port
-        if (err.message && (err.message.includes('535') || err.message.includes('BadCredentials') || err.message.includes('Username and Password not accepted'))) {
-          break;
-        }
+        console.warn(`⚠️ SMTP verification notice for ${cfg.user}: ${err.message}`);
       }
     }
   }
@@ -136,52 +137,45 @@ async function verifySmtpConnection() {
     ? `${cfg.pass.slice(0, 2)}****${cfg.pass.slice(-2)}`
     : '****';
 
-  // Test port 465 first, then 587 if needed
-  const portsToTry = cfg.port === 465 ? [465, 587] : [587, 465];
-  let lastError = null;
-
-  for (const port of portsToTry) {
-    const isPort465 = port === 465;
-    const trans = createPrimaryTransporter(port, isPort465);
-    if (!trans) continue;
-
-    try {
-      await Promise.race([
-        trans.verify(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error(`SMTP verify timeout on port ${port}`)), 6000))
-      ]);
-      activeTransporter = trans;
-      transporterType = 'GMAIL';
-      return {
-        connected: true,
-        configured: true,
-        type: 'GMAIL',
-        user: cfg.user,
-        port,
-        secure: isPort465,
-        passwordLength: cfg.pass.length,
-        passwordMasked: masked,
-        message: `Successfully connected and verified with Gmail SMTP for ${cfg.user} on port ${port}.`
-      };
-    } catch (err) {
-      lastError = err;
-      if (err.message && (err.message.includes('535') || err.message.includes('BadCredentials') || err.message.includes('Username and Password not accepted'))) {
-        break;
-      }
-    }
+  const trans = createPrimaryTransporter();
+  if (!trans) {
+    return {
+      connected: false,
+      configured: false,
+      type: 'NONE',
+      user: cfg.user,
+      error: 'Unable to initialize transporter'
+    };
   }
 
-  return {
-    connected: false,
-    configured: true,
-    type: 'ERROR',
-    user: cfg.user,
-    port: cfg.port,
-    passwordLength: cfg.pass.length,
-    passwordMasked: masked,
-    error: lastError ? lastError.message : 'Failed to connect to SMTP server',
-    code: lastError ? (lastError.code || lastError.responseCode) : 'UNKNOWN'
-  };
+  try {
+    await Promise.race([
+      trans.verify(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP verify timeout (12s)')), 12000))
+    ]);
+    activeTransporter = trans;
+    transporterType = 'GMAIL';
+    return {
+      connected: true,
+      configured: true,
+      type: 'GMAIL',
+      user: cfg.user,
+      passwordLength: cfg.pass.length,
+      passwordMasked: masked,
+      message: `Successfully connected and verified with Gmail SMTP for ${cfg.user}!`
+    };
+  } catch (err) {
+    return {
+      connected: false,
+      configured: true,
+      type: 'ERROR',
+      user: cfg.user,
+      passwordLength: cfg.pass.length,
+      passwordMasked: masked,
+      error: err.message,
+      code: err.code || err.responseCode
+    };
+  }
 }
 
 /**
