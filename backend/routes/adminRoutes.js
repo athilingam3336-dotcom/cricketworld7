@@ -446,6 +446,24 @@ router.get('/smtp/status', async (req, res) => {
   }
 });
 
+// Test live email delivery diagnostic
+router.post('/smtp/test-send', async (req, res) => {
+  try {
+    const { to } = req.body;
+    const target = to || 'cricketfederation21@gmail.com';
+    const { sendOtpEmail } = require('../config/mailer');
+    const testOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    const result = await sendOtpEmail({
+      toEmail: target,
+      userName: 'CFVD Administrator',
+      otp: testOtp
+    });
+    res.json({ success: true, target, otp: testOtp, result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // List all administrators with Permanent Super Admin vs Dynamic status
 router.get('/administrators', async (req, res) => {
   try {

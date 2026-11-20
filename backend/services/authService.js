@@ -79,11 +79,12 @@ class AuthService {
 
     console.log(`\n📧 [REGISTRATION OTP SENT] Email: ${cleanEmail} | Role: ${role || 'USER'} | OTP: ${rawOtp}\n`);
 
+    const isProd = process.env.NODE_ENV === 'production';
     return {
       success: true,
-      message: `Verification code sent to ${cleanEmail}. Please enter the 6-digit OTP code.`,
+      message: `Verification code sent to ${cleanEmail}. Please enter the 6-digit OTP code sent to your email.`,
       email: cleanEmail,
-      otp: rawOtp
+      ...(!isProd ? { otp: rawOtp } : {})
     };
   }
 
