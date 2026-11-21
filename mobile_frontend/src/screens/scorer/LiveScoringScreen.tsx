@@ -546,6 +546,8 @@ export default function LiveScoringScreen() {
   const [showWagonWheelModal, setShowWagonWheelModal] = useState<boolean>(false);
   const [selectedWagonSector, setSelectedWagonSector] = useState<string>('Cover');
   const [pendingBoundaryRun, setPendingBoundaryRun] = useState<number | null>(null);
+  const [autoPromptWagonWheel, setAutoPromptWagonWheel] = useState<boolean>(false);
+  const lastScoreTapTimeRef = useRef<number>(0);
 
   // 7. Umpire Assessment Modal State
   const [showUmpireModal, setShowUmpireModal] = useState<boolean>(false);
@@ -1431,6 +1433,13 @@ export default function LiveScoringScreen() {
   };
 
   const handleScore = async (run: number, type: 'normal' | 'wide' | 'noball' | 'bye' | 'legbye', customOpts: any = {}) => {
+    // Prevent accidental physical bounce / double-tap under 160ms
+    const now = Date.now();
+    if (now - lastScoreTapTimeRef.current < 160) {
+      return;
+    }
+    lastScoreTapTimeRef.current = now;
+
     if (isOverComplete || showBowlerModal) {
       const msg = 'Over is complete! Please select the next bowler before scoring.';
       Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Over Complete', msg);
@@ -1444,16 +1453,12 @@ export default function LiveScoringScreen() {
       return;
     }
 
-    // Auto-prompt Wagon Wheel for boundaries (4s and 6s) if sector not already passed
-    if ((run === 4 || run === 6) && type === 'normal' && !customOpts.wagonSector) {
+    // Auto-prompt Wagon Wheel for boundaries (4s and 6s) ONLY IF enabled by user (otherwise instant scoring)
+    if (autoPromptWagonWheel && (run === 4 || run === 6) && type === 'normal' && !customOpts.wagonSector) {
       setPendingBoundaryRun(run);
       setShowWagonWheelModal(true);
       return;
     }
-
-    if (isSubmittingDelivery) return;
-
-    setIsSubmittingDelivery(true);
 
     const extraTypeMap: Record<string, string> = {
       normal: 'NONE',
@@ -1521,6 +1526,117 @@ export default function LiveScoringScreen() {
       remarks: customOpts.remarks || deliveryRemarks || undefined
     };
 
+    // =========================================================================
+    // LIGHTNING-FAST OPTIMISTIC UI ENGINE: INSTANT STATE UPDATE (< 1ms)
+    // =========================================================================
+    const snapshot = {
+      runs,
+      wickets,
+      balls,
+      striker: striker ? { ...striker } : null,
+      nonStriker: nonStriker ? { ...nonStriker } : null,
+      bowler: bowler ? { ...bowler } : null,
+      recentDeliveries: [...(recentDeliveries || [])],
+      isOverComplete
+    };
+
+    const isLegal = type !== 'wide' && type !== 'noball';
+    const totalDelRuns = runsBatter + runsExtras;
+
+    // 1. Instant update to total team runs
+    setRuns(prev => prev + totalDelRuns);
+
+    // 2. Instant update to legal balls
+    const newTotalBalls = isLegal ? balls + 1 : balls;
+    if (isLegal) {
+      setBalls(newTotalBalls);
+    }
+
+    // 3. Instant Striker update
+    let nextStrikerObj = striker ? { ...striker } : null;
+    let nextNonStrikerObj = nonStriker ? { ...nonStriker } : null;
+
+    if (nextStrikerObj) {
+      nextStrikerObj.runs = (nextStrikerObj.runs || 0) + runsBatter;
+      if (isLegal) {
+        nextStrikerObj.balls = (nextStrikerObj.balls || 0) + 1;
+      }
+      if (runsBatter === 4) {
+        nextStrikerObj.fours = (nextStrikerObj.fours || 0) + 1;
+      }
+      if (runsBatter === 6) {
+        nextStrikerObj.sixes = (nextStrikerObj.sixes || 0) + 1;
+      }
+    }
+
+    // 4. Instant Bowler update
+    if (bowler) {
+      const bowlerRunsConceded = (type === 'bye' || type === 'legbye') ? 0 : totalDelRuns;
+      let newBowlerOvers = bowler.overs;
+      if (isLegal) {
+        const curOv = parseFloat(String(bowler.overs || '0'));
+        const compOv = Math.floor(curOv);
+        const curBalls = Math.round((curOv - compOv) * 10);
+        const totalBowlerBalls = compOv * 6 + curBalls + 1;
+        newBowlerOvers = `${Math.floor(totalBowlerBalls / 6)}.${totalBowlerBalls % 6}`;
+      }
+      setBowler((prev: any) => prev ? {
+        ...prev,
+        runs: (prev.runs || 0) + bowlerRunsConceded,
+        overs: newBowlerOvers
+      } : prev);
+    }
+
+    // 5. Instant Strike Rotation (Odd runs swap ends, End of Over 6 legal balls swaps ends)
+    const isOverDone = isLegal && (newTotalBalls % 6 === 0) && newTotalBalls > 0;
+    const isOdd = runsBatter % 2 !== 0;
+
+    let updatedStriker = nextStrikerObj;
+    let updatedNonStriker = nextNonStrikerObj;
+
+    if (isOdd) {
+      const temp = updatedStriker;
+      updatedStriker = updatedNonStriker;
+      updatedNonStriker = temp;
+    }
+    if (isOverDone) {
+      const temp = updatedStriker;
+      updatedStriker = updatedNonStriker;
+      updatedNonStriker = temp;
+    }
+
+    setStriker(updatedStriker);
+    setNonStriker(updatedNonStriker);
+
+    // 6. Instant Recent Deliveries Chip
+    const ovNum = Math.floor(balls / 6);
+    const bNum = isLegal ? ((balls % 6) + 1) : (balls % 6);
+    let ballLabel = String(run);
+    if (type === 'wide') ballLabel = run > 0 ? `${1 + run}Wd` : 'Wd';
+    else if (type === 'noball') ballLabel = run > 0 ? `${1 + run}Nb` : 'Nb';
+    else if (type === 'bye') ballLabel = `${run}B`;
+    else if (type === 'legbye') ballLabel = `${run}Lb`;
+
+    const optimisticDel = {
+      id: `temp-${Date.now()}`,
+      ball: `${ovNum}.${bNum}`,
+      runs: totalDelRuns,
+      runsBatter,
+      runsExtras,
+      extra: type !== 'normal',
+      extraType: extraTypeMap[type] || 'NONE',
+      wicket: false,
+      text: ballLabel,
+      overNumber: ovNum
+    };
+    setRecentDeliveries(prev => [...(prev || []), optimisticDel]);
+    setIsBallInProgress(false);
+
+    // =========================================================================
+    // ASYNCHRONOUS BACKGROUND SYNC: DISPATCH TO SERVER WITHOUT BLOCKING UI
+    // =========================================================================
+    setIsSubmittingDelivery(true);
+
     try {
       const res = await ScorerApi.recordDelivery(matchId, payload);
       if (!res || !res.success) {
@@ -1528,7 +1644,6 @@ export default function LiveScoringScreen() {
       }
 
       hasRecordedNewBallRef.current = true;
-      setIsBallInProgress(false);
       if (res.commentary) {
         setAiCommentary(res.commentary);
       }
@@ -1536,8 +1651,16 @@ export default function LiveScoringScreen() {
         setCurrentBreak(null);
       }
 
-      // Seamless background update without full page refresh
-      await loadLiveState(false);
+      // Check for Over Complete
+      if (res.isOverComplete || res.data?.isOverComplete) {
+        setIsOverComplete(true);
+        if (res.matchStatus === 'LIVE' && !res.data?.isMatchCompleted) {
+          setShowBowlerModal(true);
+        }
+      }
+
+      // Silent background state sync without freezing UI
+      loadLiveState(false).catch(() => {});
 
       // Smart Rules Analysis: Free Hit status (Rule modal triggers ONCE per match)
       if (res.isFreeHit || res.data?.isFreeHit || type === 'noball') {
@@ -1678,9 +1801,18 @@ export default function LiveScoringScreen() {
         }
       }
     } catch (err: any) {
-      console.error('recordDelivery error:', err);
-      const msg = err.message || 'Error recording delivery. Score was not changed.';
-      Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
+      if (!err?.offlineQueued) {
+        console.error('recordDelivery error, rolling back:', err);
+        setRuns(snapshot.runs);
+        setBalls(snapshot.balls);
+        setStriker(snapshot.striker);
+        setNonStriker(snapshot.nonStriker);
+        setBowler(snapshot.bowler);
+        setRecentDeliveries(snapshot.recentDeliveries);
+        setIsOverComplete(snapshot.isOverComplete);
+        const msg = err.message || 'Error recording delivery. Score was restored.';
+        Platform.OS === 'web' ? window.alert(msg) : Alert.alert('Error', msg);
+      }
     } finally {
       setIsSubmittingDelivery(false);
     }
@@ -7574,6 +7706,22 @@ export default function LiveScoringScreen() {
                       {isOverComplete ? 'START OVER' : `END OVER (${getOvers(balls)})`}
                     </Text>
                   </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.enginePrimaryBtn,
+                      {
+                        backgroundColor: autoPromptWagonWheel ? '#0284c7' : '#047857',
+                        borderColor: autoPromptWagonWheel ? '#0369a1' : '#059669',
+                      }
+                    ]}
+                    onPress={() => setAutoPromptWagonWheel(!autoPromptWagonWheel)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.enginePrimaryBtnText}>
+                      {autoPromptWagonWheel ? '🎯 Wagon Wheel' : '⚡ Fast Mode'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
                 {/* SMART RULES QUICK BAR & FREE HIT LIVE BANNER */}
@@ -7642,7 +7790,6 @@ export default function LiveScoringScreen() {
                       const isDisabled =
                         isOverComplete ||
                         showBowlerModal ||
-                        isSubmittingDelivery ||
                         matchStatus !== 'LIVE' ||
                         isInningsBreak ||
                         isMatchEnded;
@@ -7651,13 +7798,14 @@ export default function LiveScoringScreen() {
                         <TouchableOpacity
                           key={`key-${run}`}
                           disabled={isDisabled}
+                          delayPressIn={0}
                           style={[
                             styles.engineKeypadBtn,
                             run === 0 ? styles.scoreBtnDot : styles.scoreBtnNormal,
                             isDisabled && styles.btnDisabled
                           ]}
                           onPress={() => handleScore(run, 'normal')}
-                          activeOpacity={0.7}
+                          activeOpacity={0.6}
                         >
                           <Text
                             style={[
@@ -7678,7 +7826,6 @@ export default function LiveScoringScreen() {
                       const isDisabled =
                         isOverComplete ||
                         showBowlerModal ||
-                        isSubmittingDelivery ||
                         matchStatus !== 'LIVE' ||
                         isInningsBreak ||
                         isMatchEnded;
@@ -7698,9 +7845,10 @@ export default function LiveScoringScreen() {
                         <TouchableOpacity
                           key={`key-${run}`}
                           disabled={isDisabled}
+                          delayPressIn={0}
                           style={[styles.engineKeypadBtn, bStyle, isDisabled && styles.btnDisabled]}
                           onPress={() => handleScore(run, 'normal')}
-                          activeOpacity={0.7}
+                          activeOpacity={0.6}
                         >
                           <Text style={tStyle}>{run}</Text>
                         </TouchableOpacity>
