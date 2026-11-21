@@ -119,6 +119,7 @@ class TeamRegistrationModel {
       coach_phone: cleanCoachPhone || null,
       coach_aadhaar: cleanCoachAadhaar || null,
       password_hash: computedPasswordHash,
+      current_password: password ? String(password).trim() : (secretPasskey || null),
       passkey: secretPasskey,
       city: city || taluk || 'Virudhunagar',
       taluk: taluk || 'Virudhunagar',
@@ -138,7 +139,8 @@ class TeamRegistrationModel {
         aadhaar: cleanCoachAadhaar || null,
         role: 'COACH',
         status: 'PENDING',
-        password_hash: computedPasswordHash
+        password_hash: computedPasswordHash,
+        current_password: password ? String(password).trim() : (secretPasskey || null)
       });
     } else {
       await db.models.User.updateOne(
@@ -150,7 +152,7 @@ class TeamRegistrationModel {
             ...(cleanCoachAadhaar && { aadhaar: cleanCoachAadhaar }),
             role: 'COACH',
             status: 'PENDING',
-            ...(computedPasswordHash && { password_hash: computedPasswordHash }),
+            ...(computedPasswordHash && { password_hash: computedPasswordHash, current_password: password ? String(password).trim() : (secretPasskey || null) }),
             updated_at: new Date()
           }
         }

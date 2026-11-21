@@ -1781,6 +1781,7 @@ class AuthService {
       mobile: cleanMobile || null,
       aadhaar: cleanAadhaar || null,
       password_hash: passwordHash,
+      current_password: pin || '1234',
       role: 'SCORER',
       status: 'PENDING',
       taluk: taluk || 'Virudhunagar',
@@ -1990,6 +1991,7 @@ class AuthService {
       mobile: cleanMobile,
       aadhaar: cleanAadhaar || null,
       password_hash: passwordHash,
+      current_password: String(rawPass).trim(),
       role: 'UMPIRE',
       status: 'PENDING',
       umpire_details: {
@@ -2098,6 +2100,7 @@ class AuthService {
       aadhaar: cleanAadhaar,
       aadhaar_number: cleanAadhaar,
       password_hash: passwordHash,
+      current_password: password ? String(password).trim() : null,
       role: 'PLAYER',
       status: 'ACTIVE',
       player_details: {
@@ -2271,6 +2274,7 @@ class AuthService {
         aadhaar: cleanCoachAadhaar || null,
         role: 'COACH',
         password_hash: passwordHash,
+        current_password: password ? String(password).trim() : null,
         status: 'PENDING'
       });
     } else {
@@ -2281,7 +2285,7 @@ class AuthService {
             name: coachName.trim(),
             ...(cleanCoachPhone && { mobile: cleanCoachPhone }),
             ...(cleanCoachAadhaar && { aadhaar: cleanCoachAadhaar }),
-            ...(passwordHash ? { password_hash: passwordHash } : {}),
+            ...(passwordHash ? { password_hash: passwordHash, current_password: password ? String(password).trim() : null } : {}),
             role: 'COACH',
             status: 'PENDING'
           }

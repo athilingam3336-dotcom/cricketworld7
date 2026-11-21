@@ -129,10 +129,10 @@ export default function VideoPreloader({ onComplete }: VideoPreloaderProps) {
   };
 
   useEffect(() => {
-    // Safety auto-dismiss fallback after 9.5 seconds
+    // Safety auto-dismiss fallback after 10.5 seconds
     const timer = setTimeout(() => {
       handleDismiss();
-    }, 9500);
+    }, 10500);
 
     // Try unmuted audio on web immediately, register gesture listeners if blocked
     if (Platform.OS === 'web' && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {

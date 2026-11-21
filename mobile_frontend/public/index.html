@@ -833,13 +833,13 @@
           }
         });
 
-        // Safety fallback timeout after 9.5s
+        // Safety fallback timeout after 10.5s
         setTimeout(function() {
           if (!transitionTriggered) {
             transitionTriggered = true;
             window.__dismissCfvdPreloader(false);
           }
-        }, 9500);
+        }, 10500);
       })();
     </script>
 
